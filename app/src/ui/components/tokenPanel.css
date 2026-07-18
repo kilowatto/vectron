@@ -14,6 +14,11 @@
   margin-inline: auto !important;
   bottom: max(clamp(16px, 4vw, 40px), env(safe-area-inset-bottom));
   width: min(720px, calc(100vw - 24px));
+  /* Con dos filas de tokens (GPT + BGE) más el disclaimer, esta barra
+     puede crecer más alto que la pantalla y tapar el cubo entero — el
+     tope + scroll interno de .tokens-zone deja siempre visible la
+     franja de arriba con el HUD y el cubo. */
+  max-height: min(58vh, calc(100vh - 140px));
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -30,6 +35,7 @@
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .input-wrap {
@@ -113,6 +119,7 @@ input:focus {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .example {
@@ -144,6 +151,22 @@ input:focus {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  /* Única parte que puede crecer sin límite (más tokens = más chips) —
+     .row y .examples se quedan a su tamaño natural, siempre visibles;
+     esta zona cede y hace scroll interno cuando no cabe. */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Sin esto, cuando el contenido no cabe el motor de flexbox ENCOGE
+   cada hijo (rowlabel/tokens/disclaimer) en vez de dejar que la zona
+   completa desborde y haga scroll — y como `.tokens` no recorta su
+   propio contenido, la fila de chips que le sobra a su caja encogida
+   se pinta fuera de ella, encima del siguiente hijo (bug real: la
+   etiqueta BGE terminaba con chips de GPT superpuestos). */
+.tokens-zone > * {
+  flex-shrink: 0;
 }
 
 .tokens {
