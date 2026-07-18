@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="description" content="Vectron — visualizador 3D de embeddings de LLM y RAG" />
+    <title>Vectron — prototipo de partículas</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="scene"></canvas>
+      <div id="hud">
+        <div id="hud-top">
+          <span class="brand">VECTRON</span>
+          <span class="dot">·</span>
+          <span class="tag" id="backend-tag">detectando GPU…</span>
+        </div>
+        <div id="hud-bottom">
+          <span id="fps">-- fps</span>
+          <span class="dot">·</span>
+          <span id="count">-- partículas</span>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

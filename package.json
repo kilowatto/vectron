@@ -1,0 +1,12 @@
+{
+  "name": "vectron",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Vectron — visualizador 3D publico de embeddings de LLM y RAG",
+  "license": "MIT",
+  "scripts": {
+    "dev": "pnpm --filter vectron-app dev",
+    "dev:worker": "pnpm --filter vectron-worker dev",
+    "build": "pnpm --filter vectron-app build"
+  }
+}

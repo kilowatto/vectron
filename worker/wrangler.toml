@@ -1,0 +1,28 @@
+name = "vectron-api"
+main = "src/index.ts"
+compatibility_date = "2026-07-17"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[observability]
+enabled = true
+
+[ai]
+binding = "AI"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "vectron-db"
+database_id = "7620e00f-6b46-46b5-989f-5c5d0e5c2d11"
+
+[[r2_buckets]]
+binding = "DATASET"
+bucket_name = "vectron-dataset"
+
+[[vectorize]]
+binding = "VECTORIZE"
+index_name = "vectron-concepts"
+
+[[routes]]
+pattern = "vectron.kilowatto.com"
+custom_domain = true
