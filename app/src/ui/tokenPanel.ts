@@ -1,7 +1,7 @@
 import { tokenizeBPE, tokenizeSimple, type Token } from "../tokenizer";
 
 const EXAMPLE_PHRASES = [
-  "El rinoceronte vuela sobre la ciudad",
+  "El Rinoceronte Naranja que viene de la sabana le gusta el café Frida Café",
   "Python es un lenguaje de programación",
   "La gravedad y la luz son física",
   "El agujero negro está en la vía láctea",
@@ -9,21 +9,35 @@ const EXAMPLE_PHRASES = [
 
 export type TokenizerMode = "bpe" | "simple";
 
+export interface TokenPanelOptions {
+  /** Principiante: sin toggle BPE/Simplificado, tokenizador simple fijo. */
+  showToggle?: boolean;
+  /** Principiante: los chips no muestran el ID numérico del token. */
+  showIds?: boolean;
+  placeholder?: string;
+}
+
 export interface TokenPanel {
   root: HTMLDivElement;
   onChange: (handler: (tokens: Token[], mode: TokenizerMode) => void) => void;
 }
 
-export function createTokenPanel(): TokenPanel {
+export function createTokenPanel(options: TokenPanelOptions = {}): TokenPanel {
+  const { showToggle = true, showIds = true } = options;
+
   const root = document.createElement("div");
   root.id = "token-panel";
   root.innerHTML = `
     <div class="row">
-      <input id="token-input" type="text" placeholder="Escribe una frase o elige un ejemplo…" autocomplete="off" spellcheck="false" />
-      <div class="toggle" id="tokenizer-toggle">
-        <button data-mode="bpe" class="active">BPE real</button>
-        <button data-mode="simple">Simplificado</button>
-      </div>
+      <input id="token-input" type="text" placeholder="${options.placeholder ?? "Escribe una frase o elige un ejemplo…"}" autocomplete="off" spellcheck="false" />
+      ${
+        showToggle
+          ? `<div class="toggle" id="tokenizer-toggle">
+               <button data-mode="bpe" class="active">BPE real</button>
+               <button data-mode="simple">Simplificado</button>
+             </div>`
+          : ""
+      }
     </div>
     <div class="examples" id="examples"></div>
     <div class="tokens" id="tokens"></div>
@@ -37,7 +51,7 @@ export function createTokenPanel(): TokenPanel {
     "#tokenizer-toggle button",
   );
 
-  let mode: TokenizerMode = "bpe";
+  let mode: TokenizerMode = showToggle ? "bpe" : "simple";
   let handler: ((tokens: Token[], mode: TokenizerMode) => void) | null = null;
   let requestSeq = 0;
 
@@ -54,7 +68,7 @@ export function createTokenPanel(): TokenPanel {
     tokensEl.innerHTML = tokens
       .map(
         (t) =>
-          `<span class="token"><b>${t.text.replace(/\s/g, "·")}</b><small>${t.id}</small></span>`,
+          `<span class="token"><b>${t.text.replace(/\s/g, "·")}</b>${showIds ? `<small>${t.id}</small>` : ""}</span>`,
       )
       .join("");
     handler?.(tokens, mode);

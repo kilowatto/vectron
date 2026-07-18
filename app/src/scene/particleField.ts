@@ -37,6 +37,10 @@ export interface ParticleField {
   concepts: Concept[];
   setPointerHighlight: (instanceId: number | null) => void;
   setSearchHighlights: (instanceIds: number[]) => void;
+  setSimilarityLines: (
+    sourceInstanceId: number | null,
+    neighborInstanceIds: number[],
+  ) => void;
 }
 
 /**
@@ -136,6 +140,39 @@ export function createParticleField(concepts: Concept[]): ParticleField {
     recomputeHighlights();
   }
 
+  let lines: THREE.LineSegments | null = null;
+  function setSimilarityLines(
+    sourceInstanceId: number | null,
+    neighborInstanceIds: number[],
+  ) {
+    if (lines) {
+      group.remove(lines);
+      lines.geometry.dispose();
+      (lines.material as THREE.Material).dispose();
+      lines = null;
+    }
+    if (sourceInstanceId === null || neighborInstanceIds.length === 0) return;
+
+    const src = concepts[sourceInstanceId].coords;
+    const positions: number[] = [];
+    for (const neighborId of neighborInstanceIds) {
+      const dst = concepts[neighborId].coords;
+      positions.push(src[0], src[1], src[2], dst[0], dst[1], dst[2]);
+    }
+
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    const mat = new THREE.LineBasicMaterial({
+      color: 0xd98a34,
+      transparent: true,
+      opacity: 0.5,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    lines = new THREE.LineSegments(geom, mat);
+    group.add(lines);
+  }
+
   return {
     mesh,
     group,
@@ -143,6 +180,7 @@ export function createParticleField(concepts: Concept[]): ParticleField {
     concepts,
     setPointerHighlight,
     setSearchHighlights,
+    setSimilarityLines,
   };
 }
 

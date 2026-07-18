@@ -54,6 +54,46 @@ async function handleConcepts(env: Env, request: Request): Promise<Response> {
   });
 }
 
+/** Similitud del coseno real (§07 paso 4): vecinos más cercanos vía Vectorize. */
+async function handleSimilar(env: Env, request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const id = url.searchParams.get("id");
+  const topK = Math.min(
+    Math.max(Number(url.searchParams.get("topK") ?? 6), 1),
+    20,
+  );
+
+  if (!id) {
+    return Response.json(
+      { ok: false, error: "falta el parámetro id" },
+      { status: 400, headers: corsHeaders(request) },
+    );
+  }
+
+  const stored = await env.VECTORIZE.getByIds([id]);
+  if (stored.length === 0 || !stored[0].values) {
+    return Response.json(
+      { ok: false, error: "concepto no encontrado en Vectorize" },
+      { status: 404, headers: corsHeaders(request) },
+    );
+  }
+
+  const result = await env.VECTORIZE.query(stored[0].values, {
+    topK: topK + 1, // incluye el propio nodo, se filtra abajo
+    returnMetadata: "none",
+  });
+
+  const neighbors = result.matches
+    .filter((m) => m.id !== id)
+    .slice(0, topK)
+    .map((m) => ({ id: Number(m.id), score: m.score }));
+
+  return Response.json(
+    { ok: true, id: Number(id), neighbors },
+    { headers: corsHeaders(request) },
+  );
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -68,6 +108,10 @@ export default {
 
     if (url.pathname === "/api/concepts") {
       return handleConcepts(env, request);
+    }
+
+    if (url.pathname === "/api/similar") {
+      return handleSimilar(env, request);
     }
 
     if (url.pathname.startsWith("/api/")) {

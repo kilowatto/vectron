@@ -5,9 +5,10 @@ import { bloom } from "three/addons/tsl/display/BloomNode.js";
 import { pass } from "three/tsl";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { createParticleField, spinField } from "./scene/particleField";
-import { fetchConcepts } from "./data/concepts";
-import { createConceptCard } from "./ui/conceptCard";
+import { fetchConcepts, fetchSimilar } from "./data/concepts";
+import { createConceptCard, type NeighborView } from "./ui/conceptCard";
 import { createTokenPanel } from "./ui/tokenPanel";
+import { getStoredMode, showModeSelect, createModeSwitcher } from "./ui/modeSelect";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#scene")!;
 const backendTag = document.querySelector<HTMLSpanElement>("#backend-tag")!;
@@ -15,6 +16,9 @@ const fpsLabel = document.querySelector<HTMLSpanElement>("#fps")!;
 const countLabel = document.querySelector<HTMLSpanElement>("#count")!;
 
 async function main() {
+  const mode = getStoredMode() ?? (await showModeSelect());
+  createModeSwitcher(mode);
+
   countLabel.textContent = "cargando conceptos…";
   const concepts = await fetchConcepts();
 
@@ -68,12 +72,18 @@ async function main() {
 
   countLabel.textContent = `${field.count.toLocaleString("es-MX")} conceptos`;
 
-  // --- Interacción: hover muestra tooltip, click fija la tarjeta ---
-  const card = createConceptCard();
+  // --- Interacción: hover muestra tooltip, click fija la tarjeta + vecinos ---
+  const card = createConceptCard({ detailed: mode !== "principiante" });
+  const defaultTopK = mode === "principiante" ? 5 : 6;
   const raycaster = new THREE.Raycaster();
   const pointerNdc = new THREE.Vector2();
   let hoveredId: number | null = null;
   let lastPointer = { x: 0, y: 0 };
+
+  // id de Vectorize/D1 (1-based, estable) -> índice de instancia en el
+  // InstancedMesh (0-based, orden de llegada del array).
+  const idToInstanceId = new Map<number, number>();
+  field.concepts.forEach((c, i) => idToInstanceId.set(c.id, i));
 
   function pickInstance(clientX: number, clientY: number): number | null {
     pointerNdc.x = (clientX / window.innerWidth) * 2 - 1;
@@ -81,6 +91,45 @@ async function main() {
     raycaster.setFromCamera(pointerNdc, camera);
     const hits = raycaster.intersectObject(field.mesh);
     return hits.length > 0 ? (hits[0].instanceId ?? null) : null;
+  }
+
+  let currentPinnedInstanceId: number | null = null;
+
+  async function loadNeighbors(instanceId: number, topK: number) {
+    const concept = field.concepts[instanceId];
+    const neighbors = await fetchSimilar(concept.id, topK);
+    if (currentPinnedInstanceId !== instanceId) return; // se cerró/cambió mientras cargaba
+
+    const neighborInstanceIds: number[] = [];
+    const views: NeighborView[] = [];
+    for (const n of neighbors) {
+      const nInstanceId = idToInstanceId.get(n.id);
+      if (nInstanceId === undefined) continue;
+      neighborInstanceIds.push(nInstanceId);
+      views.push({ concept: field.concepts[nInstanceId], score: n.score });
+    }
+    field.setSimilarityLines(instanceId, neighborInstanceIds);
+    field.setSearchHighlights(neighborInstanceIds);
+    card.showPinned(concept, views, topK, (newTopK) =>
+      loadNeighbors(instanceId, newTopK),
+    );
+  }
+
+  function pinInstance(instanceId: number) {
+    currentPinnedInstanceId = instanceId;
+    field.setPointerHighlight(instanceId);
+    card.showPinned(field.concepts[instanceId], [], defaultTopK, (topK) =>
+      loadNeighbors(instanceId, topK),
+    );
+    loadNeighbors(instanceId, defaultTopK);
+  }
+
+  function unpin() {
+    currentPinnedInstanceId = null;
+    card.hidePinned();
+    field.setPointerHighlight(null);
+    field.setSearchHighlights([]);
+    field.setSimilarityLines(null, []);
   }
 
   canvas.addEventListener("pointermove", (event) => {
@@ -102,24 +151,28 @@ async function main() {
   canvas.addEventListener("click", () => {
     const instanceId = pickInstance(lastPointer.x, lastPointer.y);
     if (instanceId !== null) {
-      field.setPointerHighlight(instanceId);
-      card.showPinned(field.concepts[instanceId]);
+      pinInstance(instanceId);
     } else if (card.isPinned()) {
-      card.hidePinned();
-      field.setPointerHighlight(null);
+      unpin();
     }
   });
 
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && card.isPinned()) {
-      card.hidePinned();
-      field.setPointerHighlight(null);
+      unpin();
     }
   });
 
   // --- Tokenización: resalta en el cubo las palabras del dataset que
   // aparecen en el texto escrito (§07 pasos 1 y 3 del plan) ---
-  const tokenPanel = createTokenPanel();
+  const tokenPanel = createTokenPanel({
+    showToggle: mode !== "principiante",
+    showIds: mode !== "principiante",
+    placeholder:
+      mode === "principiante"
+        ? "Escribe algo o toca un ejemplo…"
+        : undefined,
+  });
   const wordIndex = new Map<string, number[]>();
   field.concepts.forEach((concept, instanceId) => {
     for (const w of [concept.word.es, concept.word.en]) {
@@ -142,25 +195,29 @@ async function main() {
   });
 
   // --- Modo avanzado: grafo de tensores + matemáticas de atención,
-  // cargado sólo al abrirlo por primera vez (KaTeX no bloquea el bundle) ---
+  // parte integral de la experiencia "Avanzado" (no un extra oculto en
+  // los otros modos), cargado sólo al abrirlo (KaTeX no bloquea el bundle) ---
   let advancedPanelUpdate: ((n: number) => void) | null = null;
-  const advancedToggle = document.createElement("button");
-  advancedToggle.id = "advanced-toggle";
-  advancedToggle.textContent = "Σ modo avanzado";
-  document.body.appendChild(advancedToggle);
-
   let advancedRoot: HTMLDivElement | null = null;
-  advancedToggle.addEventListener("click", async () => {
-    if (!advancedRoot) {
-      const { createAdvancedPanelBody } = await import("./ui/advancedPanel");
-      const panel = createAdvancedPanelBody();
-      advancedRoot = panel.root;
-      advancedPanelUpdate = panel.update;
-    }
-    const visible = advancedRoot.style.display !== "none";
-    advancedRoot.style.display = visible ? "none" : "block";
-    advancedToggle.classList.toggle("active", !visible);
-  });
+
+  if (mode === "avanzado") {
+    const advancedToggle = document.createElement("button");
+    advancedToggle.id = "advanced-toggle";
+    advancedToggle.textContent = "Σ grafo de tensores";
+    document.body.appendChild(advancedToggle);
+
+    advancedToggle.addEventListener("click", async () => {
+      if (!advancedRoot) {
+        const { createAdvancedPanelBody } = await import("./ui/advancedPanel");
+        const panel = createAdvancedPanelBody();
+        advancedRoot = panel.root;
+        advancedPanelUpdate = panel.update;
+      }
+      const visible = advancedRoot.style.display !== "none";
+      advancedRoot.style.display = visible ? "none" : "block";
+      advancedToggle.classList.toggle("active", !visible);
+    });
+  }
 
   const scenePass = pass(scene, camera);
   const scenePassColor = scenePass.getTextureNode("output");

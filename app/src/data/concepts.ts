@@ -22,3 +22,21 @@ export async function fetchConcepts(): Promise<Concept[]> {
   }
   return res.json();
 }
+
+export interface Neighbor {
+  id: number;
+  score: number;
+}
+
+/** Vecinos más cercanos reales, vía Vectorize (similitud de coseno). */
+export async function fetchSimilar(
+  id: number,
+  topK = 6,
+): Promise<Neighbor[]> {
+  const res = await fetch(
+    `${API_BASE}/api/similar?id=${id}&topK=${topK}`,
+  );
+  if (!res.ok) return [];
+  const body = await res.json();
+  return body.ok ? body.neighbors : [];
+}
