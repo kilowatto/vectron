@@ -45,8 +45,12 @@ export async function createEngine(canvas: HTMLCanvasElement): Promise<Engine> {
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
   controls.dampingFactor = 0.06;
-  controls.minDistance = 1.8;
+  // Navegación fina entre partículas: acercamiento mucho mayor que el
+  // original (0.35 vs 1.8) y el zoom de la rueda va HACIA el cursor,
+  // no hacia el centro — es lo que hace posible "bucear" a un clúster.
+  controls.minDistance = 0.35;
   controls.maxDistance = 6.5;
+  controls.zoomToCursor = true;
 
   const scenePass = pass(scene, camera);
   const scenePassColor = scenePass.getTextureNode("output");

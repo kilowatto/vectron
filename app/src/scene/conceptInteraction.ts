@@ -11,6 +11,9 @@ export interface ConceptInteractionOptions {
   field: ParticleField;
   card: VxConceptCard;
   defaultTopK: number;
+  /** Posición mundial de la partícula fijada (para que la cámara vuele
+   * hacia ella) — `null` al soltar, para regresar al centro del cubo. */
+  onFocusPoint?: (worldPos: THREE.Vector3 | null) => void;
 }
 
 export interface ConceptInteraction {
@@ -99,6 +102,10 @@ export function setupConceptInteraction(options: ConceptInteractionOptions): Con
     field.setPinnedFocus(true);
     card.showPinned(field.concepts[instanceId], [], defaultTopK);
     loadNeighbors(instanceId, defaultTopK);
+    const c = field.concepts[instanceId].coords;
+    options.onFocusPoint?.(
+      new THREE.Vector3(c[0], c[1], c[2]).applyMatrix4(field.mesh.matrixWorld),
+    );
   }
 
   card.addEventListener("vx-topk-change", (event) => {
@@ -115,6 +122,7 @@ export function setupConceptInteraction(options: ConceptInteractionOptions): Con
     field.setSearchHighlights([]);
     field.setSimilarityLines(null, []);
     field.setChainLines([]);
+    options.onFocusPoint?.(null);
   }
 
   canvas.addEventListener("pointermove", (event) => {

@@ -37,6 +37,8 @@ export interface TokenModeOptions {
   card: VxConceptCard;
   /** Cuántos embeddings vivos hay (tokens + frase) — para el HUD. */
   onCountChange(liveCount: number): void;
+  /** Posición mundial del token fijado — la cámara vuela hacia él. */
+  onFocusPoint?: (worldPos: THREE.Vector3) => void;
 }
 
 export interface TokenMode {
@@ -386,6 +388,7 @@ export function setupTokenMode(options: TokenModeOptions): TokenMode {
     // (Vectorize con el vector crudo del token — misma búsqueda que las
     // partículas normales).
     card.showPinned(tokenToConcept(p), [], 6);
+    options.onFocusPoint?.(p.mesh.getWorldPosition(new THREE.Vector3()));
     const neighbors = await fetchSimilarByVector(p.vector, 6);
     if (!card.isPinned()) return;
 

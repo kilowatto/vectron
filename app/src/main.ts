@@ -112,12 +112,43 @@ async function main() {
   const card = document.createElement("vx-concept-card") as VxConceptCard;
   stageEl.appendChild(card);
 
+  // Vuelo suave de cámara hacia la partícula fijada (y de regreso al
+  // centro al soltar): mueve el target de OrbitControls Y la cámara
+  // conservando la dirección de vista actual — después del vuelo, orbitar
+  // y hacer zoom giran alrededor de la partícula, no del centro.
+  const flyState = { id: 0 };
+  function flyTo(worldPos: THREE.Vector3 | null) {
+    const id = ++flyState.id;
+    const controls = engine.controls;
+    const camera = engine.camera;
+    const dest = worldPos ?? new THREE.Vector3(0, 0, 0);
+    const currentDist = camera.position.distanceTo(controls.target);
+    // Acercarse al fijar; al volver al centro, quedarse a distancia de vista general.
+    const targetDist = worldPos ? Math.min(currentDist, 1.15) : Math.max(currentDist, 3.2);
+    const dir = camera.position.clone().sub(controls.target).normalize();
+    const fromT = controls.target.clone();
+    const fromC = camera.position.clone();
+    const toC = dest.clone().add(dir.multiplyScalar(targetDist));
+    const duration = 700;
+    const start = performance.now();
+    function tick() {
+      if (id !== flyState.id) return; // otro vuelo lo reemplazó
+      const t = Math.min((performance.now() - start) / duration, 1);
+      const e = 1 - Math.pow(1 - t, 3);
+      controls.target.lerpVectors(fromT, dest, e);
+      camera.position.lerpVectors(fromC, toC, e);
+      if (t < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
   const interaction = setupConceptInteraction({
     canvas,
     camera: engine.camera,
     field,
     card,
     defaultTopK: 6,
+    onFocusPoint: flyTo,
   });
 
   // HUD: base por modo + sufijo de tokens vivos (modo token, Avanzado).
@@ -137,6 +168,7 @@ async function main() {
       liveTokenCount = n;
       renderCountLabel();
     },
+    onFocusPoint: flyTo,
   });
 
   // Índice palabra/frase -> instancias del InstancedMesh, para resaltar
@@ -292,7 +324,12 @@ async function main() {
   appReady = true;
 
   engine.start(
-    (dt) => spinField(field, dt),
+    (dt) => {
+      // La rotación automática se pausa mientras algo está fijado o hay
+      // tokens vivos de tu frase — sin esto, atinarle con el cursor a
+      // una partícula específica es una cacería (se mueve ~4px/s).
+      if (!card.isPinned() && liveTokenCount === 0) spinField(field, dt);
+    },
     (fps) => {
       fpsLabel.textContent = `${fps} fps`;
     },
