@@ -135,6 +135,7 @@ async function main() {
   });
   engine.scene.add(field.group);
   field.revealProgressively(0); // arranca vacío — se puebla durante el resto del boot
+  countLabel.textContent = "0 embeddings";
 
   // El render arranca AQUÍ, no al final: así el cubo ya gira y se va
   // poblando de partículas detrás del splash mientras cargan
@@ -165,6 +166,8 @@ async function main() {
       const elapsed = Math.min((performance.now() - start) / durationMs, 1);
       field.revealProgressively(elapsed);
       splash.setProgress(65 + elapsed * 35, t(elapsed < 0.6 ? "bootTokenizers" : "bootWarm", lang));
+      const shown = Math.round(elapsed * concepts.length);
+      countLabel.textContent = `${shown.toLocaleString(lang === "en" ? "en-US" : "es-MX")} embeddings`;
       if (elapsed < 1) requestAnimationFrame(step);
       else resolve();
     }
