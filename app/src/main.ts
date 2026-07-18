@@ -7,10 +7,12 @@ import { fetchConcepts } from "./data/concepts";
 import { getStoredMode, type Mode } from "./ui/components/modeStorage";
 import "./ui/components/modeSelect";
 import "./ui/components/modeSwitcher";
+import "./ui/components/langSwitcher";
 import type { VxConceptCard } from "./ui/components/conceptCard";
 import "./ui/components/conceptCard";
 import { composeModeUI } from "./ui/modeComposition";
 import type { ModePickDetail } from "./ui/components/modeSelect";
+import { getStoredLang, t } from "./i18n";
 
 const appEl = document.querySelector<HTMLDivElement>("#app")!;
 const canvas = document.querySelector<HTMLCanvasElement>("#scene")!;
@@ -34,23 +36,27 @@ function pickMode(): Promise<Mode> {
 
 async function main() {
   const mode = getStoredMode() ?? (await pickMode());
+  const lang = getStoredLang();
 
   const switcher = document.createElement("vx-mode-switcher");
   switcher.setAttribute("current", mode);
   document.body.appendChild(switcher);
+  document.body.appendChild(document.createElement("vx-lang-switcher"));
 
   // El HUD también habla el idioma de cada modo: Principiante no dice
   // "vector", Avanzado sí y hasta con la notación ℝ del panel de tensores.
   const countUnit =
-    mode === "principiante" ? "palabras" : mode === "intermedio" ? "embeddings" : "embeddings · ℝ⁷⁶⁸";
+    mode === "principiante"
+      ? t("hudUnitPrincipiante", lang)
+      : mode === "intermedio"
+        ? t("hudUnitIntermedio", lang)
+        : t("hudUnitAvanzado", lang);
 
-  countLabel.textContent = "cargando…";
+  countLabel.textContent = t("hudLoading", lang);
   const concepts = await fetchConcepts();
 
   const engine = await createEngine(canvas);
-  backendTag.textContent = engine.usingWebGPU
-    ? "WebGPU · compute activo"
-    : "WebGL · modo compatible";
+  backendTag.textContent = engine.usingWebGPU ? t("hudWebgpu", lang) : t("hudWebgl", lang);
 
   const field = createParticleField(concepts);
   engine.scene.add(field.group);
@@ -65,7 +71,7 @@ async function main() {
   );
   engine.scene.add(cubeEdges);
 
-  countLabel.textContent = `${field.count.toLocaleString("es-MX")} ${countUnit}`;
+  countLabel.textContent = `${field.count.toLocaleString(lang === "en" ? "en-US" : "es-MX")} ${countUnit}`;
 
   const card = document.createElement("vx-concept-card") as VxConceptCard;
   if (mode === "principiante") {
@@ -93,7 +99,7 @@ async function main() {
 }
 
 main().catch((err) => {
-  backendTag.textContent = "error al iniciar el motor 3D";
+  backendTag.textContent = t("hudError", getStoredLang());
   countLabel.textContent = "—";
   console.error(err);
 });

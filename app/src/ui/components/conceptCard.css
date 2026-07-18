@@ -62,12 +62,12 @@
   gap: 8px;
 }
 
-.es {
+.primary {
   font-size: 14px;
   font-weight: 600;
 }
 
-.en {
+.secondary {
   color: var(--dim);
   font-style: italic;
 }

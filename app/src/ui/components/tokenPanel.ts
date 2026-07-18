@@ -1,5 +1,6 @@
 import { tokenizeBPE, tokenizeSimple, type Token } from "../../tokenizer";
 import { attachShadow } from "./shadow";
+import { getStoredLang, t } from "../../i18n";
 import css from "./tokenPanel.css?inline";
 
 export type TokenizerMode = "bpe" | "simple";
@@ -8,13 +9,6 @@ export interface TokensChangeDetail {
   tokens: Token[];
   mode: TokenizerMode;
 }
-
-const EXAMPLE_PHRASES = [
-  "El Rinoceronte Naranja que viene de la sabana le gusta el café Frida Café",
-  "Python es un lenguaje de programación",
-  "La gravedad y la luz son física",
-  "El agujero negro está en la vía láctea",
-];
 
 /**
  * `<vx-token-panel>` — entrada de texto + tokenización en vivo (BPE real
@@ -69,18 +63,19 @@ export class VxTokenPanel extends HTMLElement {
     this.#hideToggle = this.hasAttribute("hide-toggle");
     this.#hideIds = this.hasAttribute("hide-ids");
     this.#mode = this.#hideToggle ? "simple" : "bpe";
+    const lang = getStoredLang();
 
     const root = attachShadow(this, css);
     root.innerHTML = `
-      <h3 class="title">1 · Tokenización</h3>
+      <h3 class="title">${t("tokenPanelTitle", lang)}</h3>
       <div class="row">
         <input type="text" autocomplete="off" spellcheck="false" />
         ${
           this.#hideToggle
             ? ""
             : `<div class="toggle">
-                 <button type="button" data-mode="bpe" class="active">BPE real</button>
-                 <button type="button" data-mode="simple">Simplificado</button>
+                 <button type="button" data-mode="bpe" class="active">${t("tokenPanelToggleBpe", lang)}</button>
+                 <button type="button" data-mode="simple">${t("tokenPanelToggleSimple", lang)}</button>
                </div>`
         }
       </div>
@@ -94,9 +89,15 @@ export class VxTokenPanel extends HTMLElement {
     this.#toggleButtons = Array.from(root.querySelectorAll(".toggle button"));
 
     this.#input.placeholder =
-      this.getAttribute("placeholder") ?? "Escribe una frase o elige un ejemplo…";
+      this.getAttribute("placeholder") ?? t("tokenPanelPlaceholderDefault", lang);
 
-    EXAMPLE_PHRASES.forEach((phrase) => {
+    const examplePhrases = [
+      t("examplePhrase1", lang),
+      t("examplePhrase2", lang),
+      t("examplePhrase3", lang),
+      t("examplePhrase4", lang),
+    ];
+    examplePhrases.forEach((phrase) => {
       const chip = document.createElement("button");
       chip.type = "button";
       chip.className = "example";

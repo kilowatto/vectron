@@ -8,6 +8,9 @@
   background: radial-gradient(circle at 50% 30%, #10151b 0%, #05070a 70%);
 }
 
+/* <vx-lang-switcher> se posiciona fijo por sí mismo (mismo componente
+   que en la app principal), no necesita un wrapper aquí. */
+
 .inner {
   display: flex;
   flex-direction: column;

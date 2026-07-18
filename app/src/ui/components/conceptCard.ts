@@ -2,18 +2,19 @@ import type { Concept } from "../../data/concepts";
 import { DOMAIN_HUES } from "../../scene/particleField";
 import { fadeIn, fadeOut } from "../motion";
 import { attachShadow } from "./shadow";
+import { getStoredLang, t, type Lang, type StringKey } from "../../i18n";
 import css from "./conceptCard.css?inline";
 
-const DOMAIN_LABELS: Record<string, string> = {
-  matematicas: "Matemáticas",
-  fisica: "Física",
-  programacion: "Programación",
-  biologia_animal: "Biología · animal",
-  biologia_vegetal: "Biología · vegetal",
-  materiales: "Materiales",
-  geografia: "Geografía",
-  astronomia: "Astronomía",
-  sociedad: "Sociedad",
+const DOMAIN_LABEL_KEYS: Record<string, StringKey> = {
+  matematicas: "domainMatematicas",
+  fisica: "domainFisica",
+  programacion: "domainProgramacion",
+  biologia_animal: "domainBiologiaAnimal",
+  biologia_vegetal: "domainBiologiaVegetal",
+  materiales: "domainMateriales",
+  geografia: "domainGeografia",
+  astronomia: "domainAstronomia",
+  sociedad: "domainSociedad",
 };
 
 export interface NeighborView {
@@ -29,22 +30,31 @@ function hueToCss(hue: number): string {
   return `#${hue.toString(16).padStart(6, "0")}`;
 }
 
+/** Palabra principal según el idioma de la interfaz, la otra como subtítulo. */
+function wordPair(concept: Concept, lang: Lang): { primary: string; secondary: string } {
+  return lang === "en"
+    ? { primary: concept.word.en, secondary: concept.word.es }
+    : { primary: concept.word.es, secondary: concept.word.en };
+}
+
 function traitsToRows(concept: Concept): string {
   return Object.entries(concept.traits)
     .map(([key, value]) => `<div class="row"><span>${key}</span><span>${String(value)}</span></div>`)
     .join("");
 }
 
-function cardBody(concept: Concept, detailed: boolean): string {
+function cardBody(concept: Concept, detailed: boolean, lang: Lang): string {
   const hue = hueToCss(DOMAIN_HUES[concept.domain] ?? 0x9aa5ad);
-  const domainLabel = DOMAIN_LABELS[concept.domain] ?? concept.domain;
+  const domainKey = DOMAIN_LABEL_KEYS[concept.domain];
+  const domainLabel = domainKey ? t(domainKey, lang) : concept.domain;
+  const { primary, secondary } = wordPair(concept, lang);
   return `
     <div class="head">
       <div class="swatch" style="background:${hue}"></div>
       <div class="body">
         <div class="words">
-          <span class="es">${concept.word.es}</span>
-          <span class="en">${concept.word.en}</span>
+          <span class="primary">${primary}</span>
+          <span class="secondary">${secondary}</span>
         </div>
         <div class="domain">${domainLabel}</div>
         ${
@@ -98,6 +108,7 @@ export class VxConceptCard extends HTMLElement {
   #detailed = true;
   #pinnedAnchor: "bottom" | "center" = "bottom";
   #visibility: Visibility = "none";
+  #lang: Lang = "es";
 
   connectedCallback() {
     if (this.shadowRoot) return; // ya montado (reconexión al DOM)
@@ -108,6 +119,7 @@ export class VxConceptCard extends HTMLElement {
     // appendChild) sí los ve.
     this.#detailed = !this.hasAttribute("simple");
     this.#pinnedAnchor = this.getAttribute("pinned-anchor") === "center" ? "center" : "bottom";
+    this.#lang = getStoredLang();
     this.#shadow = attachShadow(this, css);
   }
 
@@ -116,7 +128,7 @@ export class VxConceptCard extends HTMLElement {
     this.className = "hover";
     this.style.left = `${x + 18}px`;
     this.style.top = `${y + 18}px`;
-    this.#shadow.innerHTML = cardBody(concept, false);
+    this.#shadow.innerHTML = cardBody(concept, false, this.#lang);
     if (this.#visibility === "none") fadeIn(this, { duration: 220, rise: 6 });
     this.#visibility = "hover";
   }
@@ -136,9 +148,9 @@ export class VxConceptCard extends HTMLElement {
     this.style.left = "";
     this.style.top = "";
     this.#shadow.innerHTML =
-      cardBody(concept, this.#detailed) +
+      cardBody(concept, this.#detailed, this.#lang) +
       this.#neighborsBlock(neighbors, topK) +
-      `<div class="hint">clic fuera o Esc para cerrar</div>`;
+      `<div class="hint">${t("cardHint", this.#lang)}</div>`;
     if (!wasPinned) fadeIn(this, { duration: 320, rise: 14 });
 
     const slider = this.#shadow.querySelector<HTMLInputElement>('input[type="range"]');
@@ -168,19 +180,20 @@ export class VxConceptCard extends HTMLElement {
   }
 
   #neighborsBlock(neighbors: NeighborView[], topK: number): string {
+    const lang = this.#lang;
     if (!this.#detailed) {
-      const words = neighbors.map((n) => n.concept.word.es).join(", ");
+      const words = neighbors.map((n) => wordPair(n.concept, lang).primary).join(", ");
       return `
         <div class="neighbors simple">
-          <div class="neighbors-head"><span>palabras parecidas</span></div>
-          <p class="neighbor-plain">${words || "buscando…"}</p>
+          <div class="neighbors-head"><span>${t("cardNeighborsHeadSimple", lang)}</span></div>
+          <p class="neighbor-plain">${words || t("cardNeighborsSearching", lang)}</p>
         </div>`;
     }
     const rows = neighbors
       .map((n) => {
         const pct = Math.round(Math.max(n.score, 0) * 100);
         return `<div class="neighbor">
-          <span class="nword">${n.concept.word.es}</span>
+          <span class="nword">${wordPair(n.concept, lang).primary}</span>
           <div class="nbar"><div class="nbar-fill" style="width:${pct}%"></div></div>
           <span class="nscore">${n.score.toFixed(3)}</span>
         </div>`;
@@ -189,11 +202,11 @@ export class VxConceptCard extends HTMLElement {
     return `
       <div class="neighbors">
         <div class="neighbors-head">
-          <span>vecinos más cercanos (coseno real)</span>
+          <span>${t("cardNeighborsHeadDetailed", lang)}</span>
           <span class="topk-value">${topK}</span>
         </div>
         <input type="range" min="1" max="20" step="1" value="${topK}" />
-        ${rows || '<div class="neighbor-empty">calculando…</div>'}
+        ${rows || `<div class="neighbor-empty">${t("cardNeighborsCalculating", lang)}</div>`}
       </div>`;
   }
 }

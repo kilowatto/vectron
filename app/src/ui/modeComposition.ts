@@ -7,6 +7,7 @@ import "./components/dockHeader";
 // cargado) — importarlo "de forma diferida" aquí no lo movería a otro
 // chunk, así que se importa directo (ver aviso INEFFECTIVE_DYNAMIC_IMPORT).
 import { staggerIn } from "./motion";
+import { getStoredLang, t } from "../i18n";
 
 /**
  * Monta la UI 2D del modo elegido — panel de tokenización + lo que viva
@@ -22,14 +23,13 @@ export async function composeModeUI(
   field: ParticleField,
 ): Promise<void> {
   const usesDock = mode === "intermedio" || mode === "avanzado";
+  const lang = getStoredLang();
 
   if (usesDock) {
     const header = document.createElement("vx-dock-header");
     header.setAttribute(
       "tag",
-      mode === "avanzado"
-        ? "avanzado · matemática real, sin atajos"
-        : "intermedio · el mecanismo real, sin la matemática",
+      mode === "avanzado" ? t("dockTagAvanzado", lang) : t("dockTagIntermedio", lang),
     );
     dockEl.appendChild(header);
   }
@@ -39,13 +39,10 @@ export async function composeModeUI(
     tokenPanel.setAttribute("variant", "bottom");
     tokenPanel.setAttribute("hide-toggle", "");
     tokenPanel.setAttribute("hide-ids", "");
-    tokenPanel.setAttribute("placeholder", "Escribe algo o toca un ejemplo…");
+    tokenPanel.setAttribute("placeholder", t("tokenPanelPlaceholderPrincipiante", lang));
   } else if (mode === "avanzado") {
     tokenPanel.setAttribute("variant", "docked");
-    tokenPanel.setAttribute(
-      "placeholder",
-      "Escribe una frase — abajo verás cada paso hasta la atención",
-    );
+    tokenPanel.setAttribute("placeholder", t("tokenPanelPlaceholderAvanzado", lang));
   } else {
     tokenPanel.setAttribute("variant", "docked");
   }

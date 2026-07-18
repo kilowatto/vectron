@@ -1,6 +1,8 @@
 import { fadeIn, fadeOut, staggerIn } from "../motion";
-import { MODES, type Mode } from "./modeStorage";
+import { MODE_IDS, describeMode, type Mode } from "./modeStorage";
 import { attachShadow } from "./shadow";
+import { getStoredLang, t } from "../../i18n";
+import "./langSwitcher";
 import css from "./modeSelect.css?inline";
 
 export interface ModePickDetail {
@@ -29,13 +31,17 @@ export interface ModePickDetail {
  */
 export class VxModeSelect extends HTMLElement {
   connectedCallback() {
+    const lang = getStoredLang();
+    const modes = MODE_IDS.map((id) => describeMode(id, lang));
+
     const root = attachShadow(this, css);
     root.innerHTML = `
+      <vx-lang-switcher></vx-lang-switcher>
       <div class="inner">
         <div class="brand">VECTRON</div>
-        <p class="sub">¿Con qué profundidad quieres explorar cómo piensa un LLM?</p>
+        <p class="sub">${t("modeSelectSub", lang)}</p>
         <div class="cards">
-          ${MODES.map(
+          ${modes.map(
             (m) => `
             <button type="button" class="card" data-mode="${m.id}">
               <span class="card-tag">${m.tag}</span>

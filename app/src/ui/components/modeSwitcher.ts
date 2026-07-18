@@ -1,4 +1,5 @@
-import { MODES, setStoredMode, type Mode } from "./modeStorage";
+import { MODE_IDS, describeMode, setStoredMode, type Mode } from "./modeStorage";
+import { getStoredLang } from "../../i18n";
 import { attachShadow } from "./shadow";
 import css from "./modeSwitcher.css?inline";
 
@@ -34,10 +35,13 @@ export class VxModeSwitcher extends HTMLElement {
 
   #render() {
     const current = this.getAttribute("current") as Mode | null;
+    const lang = getStoredLang();
     const root = this.shadowRoot ?? attachShadow(this, css);
-    root.innerHTML = MODES.map(
-      (m) => `<button type="button" data-mode="${m.id}" class="${m.id === current ? "active" : ""}">${m.title}</button>`,
-    ).join("");
+    root.innerHTML = MODE_IDS.map((id) => describeMode(id, lang))
+      .map(
+        (m) => `<button type="button" data-mode="${m.id}" class="${m.id === current ? "active" : ""}">${m.title}</button>`,
+      )
+      .join("");
 
     root.querySelectorAll<HTMLButtonElement>("button").forEach((btn) => {
       btn.addEventListener("click", () => {

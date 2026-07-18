@@ -2,6 +2,7 @@ import katex from "katex";
 import katexCss from "katex/dist/katex.min.css?inline";
 import { drawTensorGraph } from "../motion";
 import { attachShadow } from "./shadow";
+import { getStoredLang, t, type Lang } from "../../i18n";
 import css from "./advancedPanel.css?inline";
 
 // El CSS de KaTeX es indispensable, no cosmético: sin él, el árbol MathML
@@ -34,7 +35,7 @@ function arrow(x1: number, y1: number, x2: number, y2: number): string {
   return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="edge" marker-end="url(#arrowhead)" />`;
 }
 
-function buildGraph(n: number): string {
+function buildGraph(n: number, lang: Lang): string {
   const nn = `${n}×${n}`;
   const nd = `${n}×${D_MODEL}`;
   return `
@@ -45,10 +46,10 @@ function buildGraph(n: number): string {
       </marker>
     </defs>
 
-    ${box(90, 8, 140, 40, `tokens · n = ${n}`)}
+    ${box(90, 8, 140, 40, `${t("advGraphTokens", lang)} · n = ${n}`)}
     ${arrow(160, 48, 160, 72)}
 
-    ${box(60, 74, 200, 44, "X", `embedding · ℝ^${nd}`)}
+    ${box(60, 74, 200, 44, "X", `${t("advGraphEmbedding", lang)} · ℝ^${nd}`)}
     ${arrow(160, 118, 160, 142)}
     ${arrow(160, 130, 60, 150)}
     ${arrow(160, 130, 260, 150)}
@@ -61,16 +62,16 @@ function buildGraph(n: number): string {
     ${arrow(160, 192, 160, 226)}
     ${arrow(270, 192, 190, 290)}
 
-    ${box(80, 228, 160, 44, "QKᵗ", `similitud · ℝ^${nn}`)}
+    ${box(80, 228, 160, 44, "QKᵗ", `${t("advGraphSimilarity", lang)} · ℝ^${nn}`)}
     ${arrow(160, 272, 160, 296)}
 
-    ${box(60, 298, 200, 44, "softmax(QKᵗ / √d_k)", `pesos de atención · ℝ^${nn}`)}
+    ${box(60, 298, 200, 44, "softmax(QKᵗ / √d_k)", `${t("advGraphWeights", lang)} · ℝ^${nn}`)}
     ${arrow(160, 342, 160, 366)}
 
-    ${box(80, 368, 160, 40, "× V", "suma ponderada")}
+    ${box(80, 368, 160, 40, "× V", t("advGraphWeighted", lang))}
     ${arrow(160, 408, 160, 432)}
 
-    ${box(60, 434, 200, 44, "Output", `ℝ^${nd}`)}
+    ${box(60, 434, 200, 44, t("advGraphOutput", lang), `ℝ^${nd}`)}
   </svg>`;
 }
 
@@ -92,7 +93,8 @@ function buildGraph(n: number): string {
  * | `token-count` | number | `1`     | número de tokens actuales — redibuja el grafo (con animación) al cambiar. Reactivo en cualquier momento. |
  *
  * También expuesto como propiedad `tokenCount` (get/set), equivalente al
- * atributo.
+ * atributo. El idioma se lee de `localStorage` una vez al montarse (ver
+ * src/i18n.ts) — no es reactivo dentro de una misma sesión de página.
  *
  * ### Ejemplo
  * ```html
@@ -106,75 +108,43 @@ export class VxAdvancedPanel extends HTMLElement {
   static readonly observedAttributes = ["token-count"];
 
   #graphEl!: HTMLDivElement;
+  #lang: Lang = "es";
 
   connectedCallback() {
     if (this.shadowRoot) return; // ya montado (reconexión al DOM)
+    this.#lang = getStoredLang();
+    const lang = this.#lang;
     const root = attachShadow(this, styles);
     root.innerHTML = `
       <div class="scroll">
-        <h3>2 · De la palabra al vector — el pipeline real de Vectron</h3>
-        <p class="note">
-          Cada partícula del cubo llegó a su posición así: la palabra se mandó
-          a Workers AI (<code>@cf/baai/bge-base-en-v1.5</code>), que devolvió un
-          vector de 768 números (su embedding); ese vector de 768 dimensiones se
-          redujo a 3 con un PCA propio (rotación que conserva las direcciones de
-          mayor varianza); esas 3 coordenadas son la posición xyz que ves en el
-          cubo. Es el mismo proceso para las 153 palabras del dataset — por eso
-          conceptos relacionados (galaxia, tierra, universo) quedan cerca de
-          verdad, no por diseño manual.
-        </p>
+        <h3>${t("advH2Pipeline", lang)}</h3>
+        <p class="note">${t("advPPipeline", lang)}</p>
 
-        <h3>3 · Mecanismo de atención — con las matemáticas reales</h3>
-        <p class="note">
-          Esto es distinto del paso anterior: es cómo un <i>Transformer</i>
-          (el tipo de red detrás de un LLM generativo) calcula la atención,
-          generalizado a los <b>n</b> tokens de arriba. Vectron no ejecuta
-          todavía este forward pass en vivo sobre un modelo generativo — se
-          muestra con las dimensiones reales de su propio pipeline (768) para
-          enseñar el mecanismo, no como una simulación inventada.
-        </p>
+        <h3>${t("advH2Attention", lang)}</h3>
+        <p class="note">${t("advPAttention", lang)}</p>
 
         <div class="step">
           <div class="formula" id="f1"></div>
-          <p><b>n</b> = número de tokens actuales (arriba). 768 es la dimensión
-          real del modelo de embeddings de Vectron — no la del Transformer
-          original (ver nota al pie).</p>
+          <p>${t("advStep1", lang)}</p>
         </div>
 
         <div class="step">
           <div class="formula" id="f2"></div>
-          <p>W<sup>Q</sup>, W<sup>K</sup>, W<sup>V</sup> ∈ ℝ<sup>768×768</sup> son
-          matrices de pesos aprendidas durante el entrenamiento — un parámetro
-          por celda de cada matriz, ajustado por descenso de gradiente, no
-          elegido a mano.</p>
+          <p>${t("advStep2", lang)}</p>
         </div>
 
         <div class="step">
           <div class="formula" id="f3"></div>
-          <p>QK<sup>t</sup> mide la similitud entre cada par de tokens; softmax
-          normaliza cada fila a una distribución de probabilidad; el resultado
-          pondera V según esa atención — así cada token "mira" a los demás
-          antes de seguir a la próxima capa.</p>
+          <p>${t("advStep3", lang)}</p>
         </div>
 
         <div class="graph"></div>
 
-        <p class="footnote">
-          <b>Nota sobre d<sub>k</sub>:</b> en atención multi-cabeza,
-          d<sub>k</sub> = d<sub>model</sub> / h. El paper original usa
-          d<sub>model</sub> = 512 con h = 8 cabezas, por lo que d<sub>k</sub> = 64
-          — cifras del paper, distintas de los 768 del modelo de embeddings que
-          usa Vectron.
-        </p>
+        <p class="footnote">${t("advFootnote", lang)}</p>
 
-        <p class="cite">
-          Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez,
-          A. N., Kaiser, Ł., &amp; Polosukhin, I. (2017).
-          <i>Attention Is All You Need.</i> NeurIPS 2017. —
-          <a href="https://arxiv.org/abs/1706.03762" target="_blank" rel="noopener">arXiv:1706.03762</a>
-        </p>
+        <p class="cite">${t("advCite", lang)}</p>
 
-        <p class="todo">Próximamente: muestreo del siguiente token (temperatura, top-k, top-p) como cadena de Markov.</p>
+        <p class="todo">${t("advTodo", lang)}</p>
       </div>
     `;
 
@@ -200,7 +170,7 @@ export class VxAdvancedPanel extends HTMLElement {
   }
 
   #renderGraph(n: number) {
-    this.#graphEl.innerHTML = buildGraph(n);
+    this.#graphEl.innerHTML = buildGraph(n, this.#lang);
     const svg = this.#graphEl.querySelector<SVGSVGElement>("svg.tensor-graph");
     if (svg) drawTensorGraph(svg);
   }
