@@ -5,6 +5,7 @@
   bottom: max(clamp(16px, 4vw, 40px), env(safe-area-inset-bottom));
   transform: translateX(-50%);
   width: min(720px, calc(100vw - 24px));
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -71,6 +72,14 @@ input:focus {
 }
 
 .example {
+  /* Sin min-width:0 un flex item nunca se encoge por debajo del ancho
+     que necesita su texto en una sola línea — con una frase de ejemplo
+     larga en una pantalla angosta eso desborda el panel en vez de
+     partirse en más líneas (bug real visto en iPhone 12 Pro/390px). */
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  text-align: left;
   background: none;
   border: 1px solid rgba(231, 226, 214, 0.14);
   color: var(--dim);
