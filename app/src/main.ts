@@ -17,6 +17,7 @@ import "./ui/components/tokenPanel";
 import type { ModePickDetail } from "./ui/components/modeSelect";
 import { getStoredLang, setStoredLang, t } from "./i18n";
 import { fadeIn, fadeOut } from "./ui/motion";
+import { tokenizeSimple } from "./tokenizer";
 
 const stageEl = document.querySelector<HTMLDivElement>("#stage")!;
 const canvas = document.querySelector<HTMLCanvasElement>("#scene")!;
@@ -98,18 +99,51 @@ async function main() {
     defaultTopK: 6,
   });
 
-  // Índice palabra -> instancias del InstancedMesh, para resaltar en el
-  // cubo qué partículas coinciden con el texto tokenizado y trazar el
-  // camino entre ellas (mismo orden que las palabras en la frase).
+  // Índice palabra/frase -> instancias del InstancedMesh, para resaltar
+  // en el cubo qué partículas coinciden con el texto escrito y trazar
+  // el camino entre ellas (mismo orden que las palabras en la frase).
+  // La llave puede tener varias palabras ("black hole", "número primo")
+  // — maxNgram guarda cuántas como máximo, para el escaneo de abajo.
   const wordIndex = new Map<string, number[]>();
+  let maxNgram = 1;
   field.concepts.forEach((concept, instanceId) => {
     for (const w of [concept.word.es, concept.word.en]) {
       const key = w.toLowerCase();
       const list = wordIndex.get(key) ?? [];
       list.push(instanceId);
       wordIndex.set(key, list);
+      maxNgram = Math.max(maxNgram, key.split(/\s+/).length);
     }
   });
+
+  // Coincidencias por frase completa, no sólo por token: ni el BPE ni
+  // el modo simple agrupan varias palabras en un solo token, así que
+  // comparar token-por-token nunca encontraría "black hole" o "número
+  // primo" — se re-tokeniza el texto crudo en palabras sueltas (al
+  // margen del tokenizador elegido para mostrar) y se buscan las frases
+  // más largas primero en cada posición.
+  function findWordMatches(text: string): { matches: number[]; ordered: number[] } {
+    const words = tokenizeSimple(text)
+      .map((tok) => tok.text)
+      .filter((w) => /[\p{L}\p{N}]/u.test(w));
+    const matches = new Set<number>();
+    const ordered: number[] = [];
+    let i = 0;
+    while (i < words.length) {
+      let consumed = 0;
+      for (let len = Math.min(maxNgram, words.length - i); len >= 1; len--) {
+        const ids = wordIndex.get(words.slice(i, i + len).join(" ").toLowerCase());
+        if (ids) {
+          ids.forEach((id) => matches.add(id));
+          ordered.push(ids[0]);
+          consumed = len;
+          break;
+        }
+      }
+      i += consumed || 1;
+    }
+    return { matches: [...matches], ordered };
+  }
 
   function mountTokenPanel(mode: Mode): VxTokenPanel {
     const panel = document.createElement("vx-token-panel") as VxTokenPanel;
@@ -124,20 +158,9 @@ async function main() {
         : t("tokenPanelPlaceholderDefault", lang),
     );
     panel.addEventListener("vx-tokens-change", (event) => {
-      const { tokens } = (event as CustomEvent<TokensChangeDetail>).detail;
-      const matches = new Set<number>();
-      // Orden de la frase, no de aparición en el dataset — así la línea
-      // que conecta las partículas traza el mismo camino que las
-      // palabras escritas.
-      const ordered: number[] = [];
-      for (const token of tokens) {
-        const key = token.text.trim().toLowerCase();
-        const ids = wordIndex.get(key);
-        if (!ids) continue;
-        ids.forEach((id) => matches.add(id));
-        ordered.push(ids[0]);
-      }
-      field.setSearchHighlights([...matches]);
+      const { text } = (event as CustomEvent<TokensChangeDetail>).detail;
+      const { matches, ordered } = findWordMatches(text);
+      field.setSearchHighlights(matches);
       field.setChainLines(ordered);
     });
     stageEl.appendChild(panel);

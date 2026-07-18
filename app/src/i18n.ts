@@ -95,6 +95,9 @@ const STRINGS = {
   domainGeografia: { es: "Geografía", en: "Geography" },
   domainAstronomia: { es: "Astronomía", en: "Astronomy" },
   domainSociedad: { es: "Sociedad", en: "Society" },
+  domainHistoria: { es: "Historia", en: "History" },
+  domainMitologia: { es: "Mitología", en: "Mythology" },
+  domainQuimica: { es: "Química", en: "Chemistry" },
 
   // --- HUD ---
   hudLoading: { es: "cargando…", en: "loading…" },

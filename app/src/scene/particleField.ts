@@ -26,6 +26,9 @@ export const DOMAIN_HUES: Record<string, number> = {
   geografia: 0xd98a34,
   astronomia: 0x5f7fd9,
   sociedad: 0xd9598a,
+  historia: 0xa67c52,
+  mitologia: 0x9d4edd,
+  quimica: 0x2ee6a8,
 };
 
 const FALLBACK_HUE = 0x9aa5ad;

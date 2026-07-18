@@ -8,6 +8,13 @@ export type TokenizerMode = "bpe" | "simple";
 export interface TokensChangeDetail {
   tokens: Token[];
   mode: TokenizerMode;
+  /** El texto tal cual se escribió, sin tokenizar — quien escucha lo
+   * usa para buscar coincidencias de palabra/frase completa contra el
+   * dataset (los tokens de BPE son fragmentos de subpalabra, no sirven
+   * para eso; y ni BPE ni el modo simple agrupan varias palabras en un
+   * solo token, así que tampoco alcanzan para conceptos de 2+ palabras
+   * como "black hole"). */
+  text: string;
 }
 
 /**
@@ -24,7 +31,7 @@ export interface TokensChangeDetail {
  * | `placeholder`  | string  | frase genérica | placeholder del input. Reactivo: se puede cambiar en cualquier momento. |
  *
  * ### Eventos
- * - `vx-tokens-change` — `CustomEvent<{ tokens: Token[]; mode: "bpe"\|"simple" }>`,
+ * - `vx-tokens-change` — `CustomEvent<{ tokens: Token[]; mode: "bpe"\|"simple"; text: string }>`,
  *   disparado cada vez que el texto se retokeniza (con debounce natural
  *   por ser async — una escritura más reciente cancela la anterior).
  *
@@ -145,7 +152,7 @@ export class VxTokenPanel extends HTMLElement {
 
     this.dispatchEvent(
       new CustomEvent<TokensChangeDetail>("vx-tokens-change", {
-        detail: { tokens, mode: this.#mode },
+        detail: { tokens, mode: this.#mode, text },
       }),
     );
   }
