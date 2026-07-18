@@ -1966,4 +1966,78 @@ export const SEED_CONCEPTS: SeedConcept[] = [
     const [es, en] = pair.split(",");
     return { wordEs: es, wordEn: en, domain: "matematicas", taxonomy: ["matematicas", "concepto_abstracto"], traits: { abstracto: true } };
   }),
+
+  // --- Química: ampliación — completar la tabla periódica ---
+  ...[
+    "escandio,scandium", "vanadio,vanadium", "galio,gallium", "germanio,germanium",
+    "arsénico,arsenic", "selenio,selenium", "bromo,bromine", "kriptón,krypton",
+    "rubidio,rubidium", "estroncio,strontium", "itrio,yttrium", "zirconio,zirconium",
+    "niobio,niobium", "molibdeno,molybdenum", "tecnecio,technetium", "rutenio,ruthenium",
+    "rodio,rhodium", "paladio,palladium", "cadmio,cadmium", "indio,indium",
+    "antimonio,antimony", "telurio,tellurium", "yodo,iodine", "xenón,xenon",
+    "cesio,cesium", "bario,barium", "lantano,lanthanum", "cerio,cerium",
+    "europio,europium", "gadolinio,gadolinium", "hafnio,hafnium", "tantalio,tantalum",
+    "renio,rhenium", "osmio,osmium", "iridio,iridium", "talio,thallium",
+    "bismuto,bismuth", "polonio,polonium", "astato,astatine", "radón,radon",
+    "francio,francium", "radio (elemento),radium", "actinio,actinium", "torio,thorium",
+    "protactinio,protactinium", "neptunio,neptunium", "plutonio,plutonium",
+    "americio,americium", "curio,curium",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return {
+      wordEs: es, wordEn: en, domain: "quimica", taxonomy: ["quimica", "elemento"],
+      distinctiveTrait: "elemento_quimico", traits: { esElemento: true },
+    };
+  }),
+
+  // --- Geografía: ampliación — más países del mundo ---
+  ...[
+    "honduras,honduras", "el salvador,el salvador", "nicaragua,nicaragua",
+    "república dominicana,dominican republic", "jamaica,jamaica", "haití,haiti",
+    "bahamas,bahamas", "trinidad y tobago,trinidad and tobago", "guyana,guyana",
+    "surinam,suriname", "mongolia,mongolia", "kazajistán,kazakhstan",
+    "uzbekistán,uzbekistan", "afganistán,afghanistan", "irak,iraq", "siria,syria",
+    "líbano,lebanon", "jordania,jordan", "yemen,yemen", "omán,oman",
+    "emiratos árabes unidos,united arab emirates", "qatar,qatar", "kuwait,kuwait",
+    "bangladés,bangladesh", "sri lanka,sri lanka", "nepal,nepal", "birmania,myanmar",
+    "camboya,cambodia", "laos,laos", "malasia,malaysia", "brunéi,brunei",
+    "taiwán,taiwan", "etiopía,ethiopia", "argelia,algeria", "túnez,tunisia",
+    "libia,libya", "sudán,sudan", "ghana,ghana", "senegal,senegal",
+    "camerún,cameroon", "angola,angola", "mozambique,mozambique", "zimbabue,zimbabwe",
+    "zambia,zambia", "botsuana,botswana", "namibia,namibia", "madagascar,madagascar",
+    "ruanda,rwanda", "uganda,uganda", "tanzania,tanzania",
+    "república democrática del congo,democratic republic of the congo",
+    "costa de marfil,ivory coast", "hungría,hungary", "república checa,czech republic",
+    "rumania,romania", "bulgaria,bulgaria", "serbia,serbia", "croacia,croatia",
+    "eslovaquia,slovakia", "eslovenia,slovenia", "lituania,lithuania", "letonia,latvia",
+    "estonia,estonia", "bielorrusia,belarus", "georgia (país),georgia (country)",
+    "azerbaiyán,azerbaijan", "armenia,armenia", "chipre,cyprus", "malta,malta",
+    "luxemburgo,luxembourg", "mónaco,monaco", "andorra,andorra",
+    "liechtenstein,liechtenstein", "san marino,san marino", "vaticano,vatican city",
+    "fiyi,fiji", "papúa nueva guinea,papua new guinea",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "geografia", taxonomy: ["geografia", "pais"], traits: { tipo: "pais" } };
+  }),
+
+  // --- Personajes: ampliación ---
+  ...[
+    "marco aurelio,marcus aurelius", "alejandro magno,alexander the great",
+    "gengis kan,genghis khan", "carlomagno,charlemagne", "juana de arco,joan of arc",
+    "isabel i de inglaterra,elizabeth i", "catalina la grande,catherine the great",
+    "pedro el grande,peter the great", "simón bolívar,simon bolivar",
+    "benito juárez,benito juarez", "emiliano zapata,emiliano zapata",
+    "pancho villa,pancho villa", "che guevara,che guevara",
+    "winston churchill,winston churchill", "franklin d. roosevelt,franklin d. roosevelt",
+    "mao zedong,mao zedong", "mikhaíl gorbachov,mikhail gorbachev",
+    "rosa parks,rosa parks", "ana frank,anne frank", "karl marx,karl marx",
+    "sigmund freud,sigmund freud", "adam smith,adam smith",
+    "john maynard keynes,john maynard keynes", "immanuel kant,immanuel kant",
+    "friedrich nietzsche,friedrich nietzsche", "rené descartes,rene descartes",
+    "voltaire,voltaire", "johannes kepler,johannes kepler",
+    "dmitri mendeléyev,dmitri mendeleev", "james watson,james watson",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "personajes", taxonomy: ["personajes", "biografia"], traits: { tipo: "personaje" } };
+  }),
 ];
