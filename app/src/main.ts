@@ -17,6 +17,12 @@ import "./ui/components/composer";
 import type { VxTokenStrip } from "./ui/components/tokenStrip";
 import "./ui/components/tokenStrip";
 import type { ModePickDetail } from "./ui/components/modeSelect";
+import type { VxZoomRail } from "./ui/components/zoomRail";
+import "./ui/components/zoomRail";
+import type { VxKindLegend } from "./ui/components/kindLegend";
+import "./ui/components/kindLegend";
+import type { VxColorKey, DomainIsolateDetail } from "./ui/components/colorKey";
+import "./ui/components/colorKey";
 import { getStoredLang, setStoredLang, t } from "./i18n";
 import { fadeIn, fadeOut, tweenNumber } from "./ui/motion";
 import { tokenizeSimple } from "./tokenizer";
@@ -113,6 +119,45 @@ async function main() {
     },
   });
   engine.scene.add(field.group);
+
+  // P4 — chrome discreto: rail de zoom + leyenda de tipos + llave de
+  // colores (ver DOCs/05-hud-legends-zoom-colors.md). Se crean UNA vez
+  // (como los switchers), no por modo — sólo cambian de copy/contenido.
+  const zoomRail = document.createElement("vx-zoom-rail") as VxZoomRail;
+  zoomRail.setAttribute("readout", "");
+  stageEl.appendChild(zoomRail);
+  zoomRail.attach(engine.camera, engine.controls);
+
+  const kindLegend = document.createElement("vx-kind-legend") as VxKindLegend;
+  stageEl.appendChild(kindLegend);
+
+  const colorKey = document.createElement("vx-color-key") as VxColorKey;
+  stageEl.appendChild(colorKey);
+
+  // Índice dominio -> instancias, para que "aislar" en la llave de
+  // colores reutilice el mismo atenuado que ya existe para búsqueda de
+  // texto (setSearchHighlights) — sin nueva API en particleField.
+  const domainIndex = new Map<string, number[]>();
+  field.concepts.forEach((c, i) => {
+    const list = domainIndex.get(c.domain) ?? [];
+    list.push(i);
+    domainIndex.set(c.domain, list);
+  });
+  colorKey.addEventListener("vx-domain-isolate", (event) => {
+    const { domain } = (event as CustomEvent<DomainIsolateDetail>).detail;
+    field.setSearchHighlights(domain ? (domainIndex.get(domain) ?? []) : []);
+  });
+
+  function refreshColorKey() {
+    const counts = new Map<string, number>();
+    for (const c of field.concepts) {
+      if (!allowedPos.has(c.partOfSpeech)) continue;
+      counts.set(c.domain, (counts.get(c.domain) ?? 0) + 1);
+    }
+    colorKey.setVisibleDomains(
+      [...counts.entries()].map(([domain, count]) => ({ domain, count })),
+    );
+  }
 
   const card = document.createElement("vx-concept-card") as VxConceptCard;
   stageEl.appendChild(card);
@@ -332,6 +377,9 @@ async function main() {
     interaction.setDefaultTopK(mode === "principiante" ? 5 : 6);
     interaction.reset(); // suelta el pin ANTES del morph — mismo orden que "cancela al empezar" (06 §6)
     tokenMode.setEnabled(mode === "avanzado");
+    kindLegend.setMode(mode);
+    colorKey.setMode(mode);
+    field.setSearchHighlights([]); // suelta cualquier dominio aislado del modo anterior
     // P2: mitosis (nacen las que entran) / fusión (las que salen se
     // comen hacia una vecina) en vez del corte instantáneo de antes —
     // ver DOCs/06-mode-morph-cells.md. Nunca tarda más de ~1.15s.
@@ -339,6 +387,7 @@ async function main() {
       typeof matchMedia !== "undefined" &&
       matchMedia("(prefers-reduced-motion: reduce)").matches;
     const { visibleCount } = await field.morphToPartOfSpeechFilter(allowedPos, { reducedMotion });
+    refreshColorKey();
 
     // El HUD también habla el idioma de cada modo: Principiante no dice
     // "vector", los otros sí (con la notación ℝ en Avanzado).

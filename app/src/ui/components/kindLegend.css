@@ -1,0 +1,75 @@
+:host {
+  position: fixed;
+  z-index: 13;
+  left: max(16px, env(safe-area-inset-left));
+  /* Encima del composer de abajo: su propio margen (clamp 16-40px) MÁS
+     su alto real (~118-160px según cuántas líneas use el toggle) — no
+     sólo el margen, ese fue el bug real (la leyenda quedaba tapada por
+     los ejemplos del composer, visto en captura). */
+  bottom: max(calc(clamp(16px, 4vw, 40px) + 160px), 190px);
+  font-family: var(--font-mono);
+  opacity: 0.55;
+  transition: opacity 0.2s ease;
+}
+
+:host(:hover) {
+  opacity: 1;
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  max-width: 60vw;
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9.5px;
+  color: var(--dim);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink);
+  flex-shrink: 0;
+}
+
+.dot.big {
+  width: 9px;
+  height: 9px;
+}
+
+.dot.bge {
+  background: #39ff6a;
+}
+
+.dot.gpt {
+  background: #22c7ff;
+}
+
+.dot.phrase {
+  background: #ffe14d;
+}
+
+.line {
+  display: inline-block;
+  width: 12px;
+  height: 2px;
+  flex-shrink: 0;
+}
+
+.line.orange {
+  background: #d98a34;
+}
+
+.line.cyan {
+  background: #4fb8c4;
+}

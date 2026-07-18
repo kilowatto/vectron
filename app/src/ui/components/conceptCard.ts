@@ -5,7 +5,9 @@ import { attachShadow } from "./shadow";
 import { getStoredLang, t, type Lang, type StringKey } from "../../i18n";
 import css from "./conceptCard.css?inline";
 
-const DOMAIN_LABEL_KEYS: Record<string, StringKey> = {
+/** Exportado para <vx-color-key> (P4) — mismo mapeo dominio->etiqueta,
+ * una sola fuente de verdad en vez de duplicarlo. */
+export const DOMAIN_LABEL_KEYS: Record<string, StringKey> = {
   matematicas: "domainMatematicas",
   fisica: "domainFisica",
   programacion: "domainProgramacion",

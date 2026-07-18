@@ -147,6 +147,17 @@ const STRINGS = {
   hudWebgpu: { es: "WebGPU · compute activo", en: "WebGPU · compute active" },
   hudWebgl: { es: "WebGL · modo compatible", en: "WebGL · compatibility mode" },
   hudError: { es: "error al iniciar el motor 3D", en: "error starting the 3D engine" },
+
+  // --- P4: vx-color-key ---
+  colorKeyLabelSimple: { es: "colores = temas", en: "colors = themes" },
+  colorKeyLabelIntermedio: { es: "dominios", en: "domains" },
+  colorKeyLabelAvanzado: { es: "domain hues", en: "domain hues" },
+
+  // --- P4: vx-kind-legend ---
+  kindLegendNotable: { es: "luz grande = destacado", en: "big light = notable" },
+  kindLegendNeighbors: { es: "vecinos (coseno real)", en: "neighbors (real cosine)" },
+  kindLegendPath: { es: "camino de tu frase", en: "your phrase's path" },
+  kindLegendTokens: { es: "BGE · GPT · frase (vivo)", en: "BGE · GPT · phrase (live)" },
 } satisfies Record<string, Record<Lang, string>>;
 
 export type StringKey = keyof typeof STRINGS;
