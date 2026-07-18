@@ -12,8 +12,10 @@ import "./ui/components/langSwitcher";
 import type { LangChangeDetail } from "./ui/components/langSwitcher";
 import type { VxConceptCard } from "./ui/components/conceptCard";
 import "./ui/components/conceptCard";
-import type { VxTokenPanel, TokensChangeDetail } from "./ui/components/tokenPanel";
-import "./ui/components/tokenPanel";
+import type { VxComposer, TokensChangeDetail } from "./ui/components/composer";
+import "./ui/components/composer";
+import type { VxTokenStrip } from "./ui/components/tokenStrip";
+import "./ui/components/tokenStrip";
 import type { ModePickDetail } from "./ui/components/modeSelect";
 import { getStoredLang, setStoredLang, t } from "./i18n";
 import { fadeIn, fadeOut, tweenNumber } from "./ui/motion";
@@ -225,25 +227,32 @@ async function main() {
     return { matches: [...matches], ordered };
   }
 
-  function mountTokenPanel(mode: Mode): VxTokenPanel {
-    const panel = document.createElement("vx-token-panel") as VxTokenPanel;
+  // P1: composer (entrada, abajo) y strip (chips, franja superior) son
+  // dos componentes separados que se montan juntos — la franja de
+  // tokens ya no vive en la misma barra que el input, así que puede
+  // crecer (comparación BGE) sin competir con él por espacio ni tapar
+  // el centro del cubo (ver DOCs/04-build-order.md P1).
+  function mountComposerAndStrip(mode: Mode): { composer: VxComposer; strip: VxTokenStrip } {
+    const composer = document.createElement("vx-composer") as VxComposer;
+    const strip = document.createElement("vx-token-strip") as VxTokenStrip;
     if (mode === "principiante") {
-      panel.setAttribute("hide-toggle", "");
-      panel.setAttribute("hide-ids", "");
+      composer.setAttribute("hide-toggle", "");
+      strip.setAttribute("hide-ids", "");
     }
     if (mode === "avanzado") {
       // Modo token: dos filas comparadas (GPT vs BGE) + partículas
       // efímeras de tu frase embebidas en vivo.
-      panel.setAttribute("compare", "");
+      strip.setAttribute("compare", "");
     }
-    panel.setAttribute(
+    composer.setAttribute(
       "placeholder",
       mode === "principiante"
         ? t("tokenPanelPlaceholderPrincipiante", lang)
         : t("tokenPanelPlaceholderDefault", lang),
     );
-    panel.addEventListener("vx-tokens-change", (event) => {
-      const { text } = (event as CustomEvent<TokensChangeDetail>).detail;
+    composer.addEventListener("vx-tokens-change", (event) => {
+      const { tokens, mode: tokMode, text } = (event as CustomEvent<TokensChangeDetail>).detail;
+      void strip.setTokens(tokens, tokMode, text);
       const { matches, ordered } = findWordMatches(text);
       field.setSearchHighlights(matches);
       const chainObj = field.setChainLines(ordered);
@@ -269,12 +278,15 @@ async function main() {
       }
       tokenMode.setText(text);
     });
-    stageEl.appendChild(panel);
-    fadeIn(panel, { duration: 420, rise: 16 });
-    return panel;
+    stageEl.appendChild(composer);
+    stageEl.appendChild(strip);
+    fadeIn(composer, { duration: 420, rise: 16 });
+    fadeIn(strip, { duration: 420, rise: -16 });
+    return { composer, strip };
   }
 
-  let tokenPanel: VxTokenPanel | null = null;
+  let composer: VxComposer | null = null;
+  let tokenStrip: VxTokenStrip | null = null;
   let currentMode: Mode = initialMode;
 
   // El "cambio de stage" real: nunca recrea el motor 3D ni recarga la
@@ -301,7 +313,7 @@ async function main() {
           ? t("hudUnitIntermedio", lang)
           : t("hudUnitAvanzado", lang);
     baseCountText = `${visibleCount.toLocaleString(lang === "en" ? "en-US" : "es-MX")} ${countUnit}`;
-    if (!tokenPanel) {
+    if (!composer) {
       renderCountLabel();
     } else {
       fadeOut(countLabel, { duration: 150 }).then(() => {
@@ -310,11 +322,15 @@ async function main() {
       });
     }
 
-    if (tokenPanel) {
-      await fadeOut(tokenPanel, { duration: 220 });
-      tokenPanel.remove();
+    if (composer && tokenStrip) {
+      await Promise.all([
+        fadeOut(composer, { duration: 220 }),
+        fadeOut(tokenStrip, { duration: 220 }),
+      ]);
+      composer.remove();
+      tokenStrip.remove();
     }
-    tokenPanel = mountTokenPanel(mode);
+    ({ composer, strip: tokenStrip } = mountComposerAndStrip(mode));
   }
 
   switcher.addEventListener("vx-mode-change", (event) => {
