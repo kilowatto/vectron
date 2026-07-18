@@ -1,25 +1,35 @@
-import { MODE_IDS, describeMode, setStoredMode, type Mode } from "./modeStorage";
+import { MODE_IDS, describeMode, type Mode } from "./modeStorage";
 import { getStoredLang } from "../../i18n";
 import { attachShadow } from "./shadow";
 import css from "./modeSwitcher.css?inline";
 
+export interface ModeChangeDetail {
+  mode: Mode;
+}
+
 /**
  * `<vx-mode-switcher current="avanzado">` — control persistente para
  * cambiar de modo sin volver a la portada: cambiar de modo es cambiar
- * de app, no "salir" de la app. Guarda el nuevo modo y recarga directo
- * a él — la pantalla de selección (`<vx-mode-select>`) nunca vuelve a
- * aparecer una vez que hay un modo guardado.
+ * de app, no "salir" de la app. Elegir una pestaña dispara `vx-mode-change`
+ * y espera a que quien la escucha actualice el atributo `current` — no
+ * recarga la página ni guarda nada por sí mismo, así el cambio de modo
+ * puede animarse en vivo en lugar de recargar de golpe.
  *
  * ### Atributos
  * | nombre    | tipo   | default | descripción                          |
  * |-----------|--------|---------|----------------------------------------|
  * | `current` | string | —       | modo activo (`principiante`\|`intermedio`\|`avanzado`), resalta su pestaña |
  *
- * No dispara eventos — la navegación (guardar + recargar) es interna.
+ * ### Eventos
+ * - `vx-mode-change` — `CustomEvent<{ mode: Mode }>`, disparado al elegir
+ *   una pestaña distinta a `current`.
  *
  * ### Ejemplo
  * ```html
  * <vx-mode-switcher current="avanzado"></vx-mode-switcher>
+ * <script>
+ *   switcher.addEventListener("vx-mode-change", (e) => switchTo(e.detail.mode));
+ * </script>
  * ```
  */
 export class VxModeSwitcher extends HTMLElement {
@@ -47,8 +57,9 @@ export class VxModeSwitcher extends HTMLElement {
       btn.addEventListener("click", () => {
         const mode = btn.dataset.mode as Mode;
         if (mode === current) return;
-        setStoredMode(mode);
-        location.reload();
+        this.dispatchEvent(
+          new CustomEvent<ModeChangeDetail>("vx-mode-change", { detail: { mode }, bubbles: true }),
+        );
       });
     });
   }

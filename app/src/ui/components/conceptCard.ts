@@ -79,8 +79,8 @@ type Visibility = "none" | "hover" | "pinned";
  * ### Atributos
  * | nombre           | tipo    | default    | descripción                                                    |
  * |------------------|---------|------------|------------------------------------------------------------------|
- * | `simple`         | boolean | ausente    | si está presente, oculta taxonomía/atributos/coordenadas y los scores de coseno (Principiante). Fijar antes de insertar. |
- * | `pinned-anchor`  | string  | `"bottom"` | `"bottom"` o `"center"` — dónde se centra la tarjeta fijada. Fijar antes de insertar. |
+ * | `simple`         | boolean | ausente    | si está presente, oculta taxonomía/atributos/coordenadas y los scores de coseno (Principiante). Config inicial — fijar antes de insertar. |
+ * | `pinned-anchor`  | string  | `"bottom"` | `"bottom"` o `"center"` — dónde se centra la tarjeta fijada. Config inicial — fijar antes de insertar. |
  *
  * ### Métodos públicos
  * (reciben datos complejos — por eso son métodos, no atributos)
@@ -89,6 +89,12 @@ type Visibility = "none" | "hover" | "pinned";
  * - `showPinned(concept, neighbors, topK)` — tarjeta fija e interactiva.
  * - `hidePinned()`
  * - `isPinned(): boolean`
+ * - `configure({simple?, pinnedAnchor?, lang?})` — cambia la config en
+ *   vivo (a diferencia de los atributos de arriba, que sólo se leen al
+ *   insertar). Pensado para cambio de modo/idioma sin recrear el
+ *   elemento: oculta cualquier estado visible al instante, sin
+ *   animación — es un detalle menor frente a la transición más grande
+ *   que lo rodea.
  *
  * ### Eventos
  * - `vx-topk-change` — `CustomEvent<{ topK: number }>`, disparado al
@@ -177,6 +183,23 @@ export class VxConceptCard extends HTMLElement {
 
   isPinned(): boolean {
     return this.#visibility === "pinned";
+  }
+
+  configure({
+    simple,
+    pinnedAnchor,
+    lang,
+  }: { simple?: boolean; pinnedAnchor?: "bottom" | "center"; lang?: Lang }): void {
+    if (simple !== undefined) this.#detailed = !simple;
+    if (pinnedAnchor !== undefined) this.#pinnedAnchor = pinnedAnchor;
+    if (lang !== undefined) this.#lang = lang;
+    if (this.#visibility !== "none") {
+      this.getAnimations().forEach((a) => a.cancel());
+      this.className = "";
+      this.style.opacity = "0";
+      this.style.pointerEvents = "none";
+      this.#visibility = "none";
+    }
   }
 
   #neighborsBlock(neighbors: NeighborView[], topK: number): string {

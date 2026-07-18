@@ -11,13 +11,23 @@ export interface ConceptInteractionOptions {
   defaultTopK: number;
 }
 
+export interface ConceptInteraction {
+  /** Cambia el top-K default para futuros pines (no afecta el actualmente fijado). */
+  setDefaultTopK(topK: number): void;
+  /** Suelta el pin activo (si hay) y limpia resaltados — usado al cambiar de modo. */
+  reset(): void;
+}
+
 /**
  * Hover muestra tooltip, click fija la tarjeta + pide sus vecinos reales
  * (líneas de similitud) — toda la interacción de "tocar una partícula",
- * independiente del motor 3D y de qué modo/UI la rodea.
+ * independiente del motor 3D y de qué modo/UI la rodea. `defaultTopK` es
+ * mutable vía el objeto devuelto porque cada modo pide un valor distinto
+ * y el 3D/la interacción se reutilizan entre modos (no se recrean).
  */
-export function setupConceptInteraction(options: ConceptInteractionOptions): void {
-  const { canvas, camera, field, card, defaultTopK } = options;
+export function setupConceptInteraction(options: ConceptInteractionOptions): ConceptInteraction {
+  const { canvas, camera, field, card } = options;
+  let defaultTopK = options.defaultTopK;
 
   const raycaster = new THREE.Raycaster();
   const pointerNdc = new THREE.Vector2();
@@ -108,4 +118,11 @@ export function setupConceptInteraction(options: ConceptInteractionOptions): voi
       unpin();
     }
   });
+
+  return {
+    setDefaultTopK(topK: number) {
+      defaultTopK = topK;
+    },
+    reset: unpin,
+  };
 }

@@ -3,36 +3,37 @@ import type { ParticleField } from "../scene/particleField";
 import type { VxTokenPanel, TokensChangeDetail } from "./components/tokenPanel";
 import "./components/tokenPanel";
 import "./components/dockHeader";
-// staggerIn ya llega al bundle principal vía conceptCard.ts (siempre
-// cargado) — importarlo "de forma diferida" aquí no lo movería a otro
-// chunk, así que se importa directo (ver aviso INEFFECTIVE_DYNAMIC_IMPORT).
-import { staggerIn } from "./motion";
+import { staggerIn, fadeIn, fadeOut } from "./motion";
 import { getStoredLang, t } from "../i18n";
 
+export interface DockHandle {
+  usesDock: boolean;
+  /** Desvanece el contenido actual sin quitarlo del DOM todavía — la siguiente llamada a `mountModeDock` lo reemplaza una vez resuelto. */
+  teardown(): Promise<void>;
+}
+
 /**
- * Monta la UI 2D del modo elegido — panel de tokenización + lo que viva
- * en el dock (nada en Principiante, la explicación del mecanismo en
- * Intermedio, el grafo de tensores en Avanzado). Cada modo es su propia
- * composición (ver feedback-vectron-modes), esta función es el único
- * lugar que decide "qué componentes le tocan a cada modo".
+ * Monta la UI 2D de un modo (header del dock + token panel + lo que viva
+ * en el dock: nada en Principiante, el explicador del mecanismo en
+ * Intermedio, el grafo de tensores en Avanzado) dentro de `dockEl`. Cada
+ * modo es su propia composición (ver feedback-vectron-modes) — esta
+ * función es el único lugar que decide "qué componentes le tocan a cada
+ * modo".
+ *
+ * Pensada para llamarse repetidas veces (cambio de modo en vivo, sin
+ * recargar la página): construye todo el contenido nuevo ANTES de tocar
+ * el DOM (import dinámico + creación de elementos), y sólo entonces hace
+ * un swap atómico con `replaceChildren` — nunca hay un estado a medio
+ * construir visible. Quien llama es responsable de, si hubo un montaje
+ * anterior, esperar su `DockHandle.teardown()` antes de volver a llamar.
  */
-export async function composeModeUI(
+export async function mountModeDock(
   mode: Mode,
-  appEl: HTMLElement,
   dockEl: HTMLElement,
   field: ParticleField,
-): Promise<void> {
+): Promise<DockHandle> {
   const usesDock = mode === "intermedio" || mode === "avanzado";
   const lang = getStoredLang();
-
-  if (usesDock) {
-    const header = document.createElement("vx-dock-header");
-    header.setAttribute(
-      "tag",
-      mode === "avanzado" ? t("dockTagAvanzado", lang) : t("dockTagIntermedio", lang),
-    );
-    dockEl.appendChild(header);
-  }
 
   const tokenPanel = document.createElement("vx-token-panel") as VxTokenPanel;
   if (mode === "principiante") {
@@ -46,36 +47,46 @@ export async function composeModeUI(
   } else {
     tokenPanel.setAttribute("variant", "docked");
   }
-  (usesDock ? dockEl : document.body).appendChild(tokenPanel);
 
-  // El contenido de cada dock se carga aquí, siempre visible de una vez
-  // (no detrás de un botón). Importado de forma diferida porque el de
-  // Avanzado carga KaTeX, no porque esté oculto.
-  let advancedPanel: HTMLElement & { tokenCount: number } | null = null;
+  const nodes: HTMLElement[] = [];
+  if (usesDock) {
+    const header = document.createElement("vx-dock-header");
+    header.setAttribute(
+      "tag",
+      mode === "avanzado" ? t("dockTagAvanzado", lang) : t("dockTagIntermedio", lang),
+    );
+    nodes.push(header);
+  }
+  // variant="bottom" se posiciona fijo por su cuenta (:host{position:fixed}
+  // en tokenPanel.css) — da igual que su padre en el DOM sea #dock, así
+  // que siempre vive ahí y el teardown/swap de abajo es uniforme para
+  // los 3 modos, sin un caso especial para Principiante.
+  nodes.push(tokenPanel);
+
+  let advancedPanel: (HTMLElement & { tokenCount: number }) | null = null;
   if (mode === "intermedio") {
     await import("./components/mechanismExplainer");
-    dockEl.appendChild(document.createElement("vx-mechanism-explainer"));
+    nodes.push(document.createElement("vx-mechanism-explainer"));
   } else if (mode === "avanzado") {
     await import("./components/advancedPanel");
     advancedPanel = document.createElement("vx-advanced-panel") as HTMLElement & {
       tokenCount: number;
     };
-    dockEl.appendChild(advancedPanel);
+    nodes.push(advancedPanel);
   }
 
+  dockEl.replaceChildren(...nodes);
+
   if (usesDock) {
-    // Todo el contenido ya existe: ahora sí se abre el layout y se pinta
-    // el dock en cascada — nada aparece de golpe. Síncrono a propósito:
-    // ya hubo varios `await` antes de este punto (fetch, import, init de
-    // WebGPU), de sobra para que el navegador haya pintado el estado
-    // "cerrado" — no depende de que un requestAnimationFrame llegue a
-    // ejecutarse, que en una pestaña sin foco puede no pasar nunca.
-    appEl.classList.add("has-dock");
+    // Mismo timing que el montaje inicial: un pequeño delay para que el
+    // panel ya esté abriéndose (grid-template-columns, 0.7s) antes de que
+    // el contenido empiece a aparecer — nada aparece de golpe ni antes de
+    // que haya espacio para verlo.
     staggerIn(dockEl, { step: 90, initialDelay: 150, duration: 550 });
-    // Shadow DOM abierto: se puede seguir el cascadeo hacia dentro del
-    // contenido de Avanzado (cada fórmula/sección, no sólo el panel entero).
     const advScroll = advancedPanel?.shadowRoot?.querySelector<HTMLElement>(".scroll");
     if (advScroll) staggerIn(advScroll, { step: 70, initialDelay: 500, duration: 500 });
+  } else {
+    fadeIn(tokenPanel, { duration: 450, rise: 16 });
   }
 
   // Resalta en el cubo las palabras del dataset que aparecen en el texto
@@ -101,4 +112,13 @@ export async function composeModeUI(
     field.setSearchHighlights([...matches]);
     if (advancedPanel) advancedPanel.tokenCount = tokens.length;
   });
+
+  return {
+    usesDock,
+    async teardown() {
+      await Promise.all(
+        Array.from(dockEl.children).map((el) => fadeOut(el as HTMLElement, { duration: 220 })),
+      );
+    },
+  };
 }
