@@ -2466,4 +2466,55 @@ export const SEED_CONCEPTS: SeedConcept[] = [
   animal("dodo", "dodo", ["prehistorico"], { legs: 2, hasWings: true, vertebrado: true, dieta: "herbivoro" }),
   animal("megalodón", "megalodon", ["prehistorico"], { legs: 0, hasWings: false, vertebrado: true, dieta: "carnivoro" }, "carnivoro"),
   animal("perezoso gigante", "giant sloth", ["prehistorico"], { legs: 4, hasWings: false, vertebrado: true, dieta: "herbivoro" }),
+
+  // --- Geografía: ampliación — más países del mundo ---
+  ...[
+    "benín,benin", "togo,togo", "burkina faso,burkina faso", "mali,mali",
+    "níger,niger", "chad,chad", "sudán del sur,south sudan", "somalia,somalia",
+    "eritrea,eritrea", "yibuti,djibouti", "lesoto,lesotho", "esuatini,eswatini",
+    "malaui,malawi", "guinea,guinea", "guinea-bisáu,guinea-bissau",
+    "guinea ecuatorial,equatorial guinea", "gabón,gabon",
+    "república del congo,republic of the congo",
+    "república centroafricana,central african republic", "sierra leona,sierra leone",
+    "liberia,liberia", "mauritania,mauritania", "gambia,gambia", "cabo verde,cape verde",
+    "santo tomé y príncipe,sao tome and principe", "comoras,comoros",
+    "seychelles,seychelles", "mauricio,mauritius", "bután,bhutan",
+    "maldivas,maldives", "timor oriental,east timor", "kirguistán,kyrgyzstan",
+    "tayikistán,tajikistan", "turkmenistán,turkmenistan", "moldavia,moldova",
+    "montenegro,montenegro", "macedonia del norte,north macedonia",
+    "bosnia y herzegovina,bosnia and herzegovina", "albania,albania", "kosovo,kosovo",
+    "san vicente y las granadinas,saint vincent and the grenadines",
+    "santa lucía,saint lucia", "granada (país),grenada",
+    "dominica,dominica", "san cristóbal y nieves,saint kitts and nevis",
+    "antigua y barbuda,antigua and barbuda", "barbados,barbados", "belice,belize",
+    "islas marshall,marshall islands", "micronesia,micronesia", "palaos,palau",
+    "kiribati,kiribati", "tuvalu,tuvalu", "nauru,nauru", "samoa,samoa",
+    "tonga,tonga", "vanuatu,vanuatu", "islas salomón,solomon islands",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "geografia", taxonomy: ["geografia", "pais"], traits: { tipo: "pais" } };
+  }),
+
+  // --- Química: biomoléculas ---
+  ...[
+    "proteína,protein", "aminoácido,amino acid", "enzima,enzyme", "hormona,hormone",
+    "lípido,lipid", "carbohidrato,carbohydrate", "atp,atp", "arn,rna",
+    "mitocondria,mitochondria", "cloroplasto,chloroplast", "ribosoma,ribosome",
+    "núcleo celular,cell nucleus", "membrana celular,cell membrane",
+    "citoplasma,cytoplasm", "cromosoma,chromosome",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "quimica", taxonomy: ["quimica", "biomolecula"], traits: { tipo: "biomolecula" } };
+  }),
+
+  // --- Arte y Cultura: movimientos artísticos ---
+  ...[
+    "barroco,baroque", "rococó,rococo", "art nouveau,art nouveau",
+    "minimalismo (arte),minimalism (art)", "pop art,pop art",
+    "expresionismo,expressionism", "dadaísmo,dadaism", "gótico (arte),gothic (art)",
+    "romanticismo,romanticism", "realismo (arte),realism (art)",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "arte_y_cultura", taxonomy: ["arte_y_cultura", "movimiento"], traits: { tipo: "movimiento_artistico" } };
+  }),
 ];
