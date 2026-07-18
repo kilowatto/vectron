@@ -84,14 +84,16 @@ async function handleConcepts(env: Env, request: Request): Promise<Response> {
       { status: 404, headers: corsHeaders(request) },
     );
   }
-  // P5 (ver DOCs/03 §6.5): ETag real del objeto R2 + max-age más largo
-  // — segunda visita revalida en vez de re-descargar completo, sin
-  // esperar a que expire un max-age corto (antes: 300s, plano, sin
-  // ETag; ya no hace falta re-sembrar seguido como para justificarlo).
+  // P5 (ver DOCs/03 §6.5): ETag real del objeto R2 + no-cache (no
+  // max-age) — bug real corregido 2026-07-18: max-age=3600 hacía que
+  // el navegador NUNCA revalidara dentro de esa hora, así que un
+  // reseed no se veía hasta que expirara el cache local (visto en vivo
+  // reseedeando varias veces seguidas). no-cache SÍ revalida siempre
+  // con el ETag — 304 barato si no cambió, descarga completa si sí.
   return new Response(object.body, {
     headers: {
       "Content-Type": "application/json",
-      "Cache-Control": "public, max-age=3600",
+      "Cache-Control": "public, no-cache",
       ETag: object.httpEtag,
       ...corsHeaders(request),
     },
@@ -151,7 +153,7 @@ async function handlePcaBasis(env: Env, request: Request): Promise<Response> {
   return new Response(object.body, {
     headers: {
       "Content-Type": "application/json",
-      "Cache-Control": "public, max-age=3600",
+      "Cache-Control": "public, no-cache",
       ETag: object.httpEtag,
       ...corsHeaders(request),
     },
