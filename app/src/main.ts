@@ -16,7 +16,7 @@ import type { VxTokenPanel, TokensChangeDetail } from "./ui/components/tokenPane
 import "./ui/components/tokenPanel";
 import type { ModePickDetail } from "./ui/components/modeSelect";
 import { getStoredLang, setStoredLang, t } from "./i18n";
-import { fadeIn, fadeOut } from "./ui/motion";
+import { fadeIn, fadeOut, tweenNumber } from "./ui/motion";
 import { tokenizeSimple } from "./tokenizer";
 
 const stageEl = document.querySelector<HTMLDivElement>("#stage")!;
@@ -75,18 +75,29 @@ async function main() {
 
   const engine = await createEngine(canvas);
 
-  const field = createParticleField(concepts);
-  engine.scene.add(field.group);
-
+  const CUBE_EDGE_OPACITY = 0.12;
+  const cubeEdgeMaterial = new THREE.LineBasicMaterial({
+    color: 0xd98a34,
+    transparent: true,
+    opacity: CUBE_EDGE_OPACITY,
+  });
   const cubeEdges = new THREE.LineSegments(
     new THREE.EdgesGeometry(new THREE.BoxGeometry(2.8, 2.8, 2.8)),
-    new THREE.LineBasicMaterial({
-      color: 0xd98a34,
-      transparent: true,
-      opacity: 0.12,
-    }),
+    cubeEdgeMaterial,
   );
   engine.scene.add(cubeEdges);
+
+  // Atenuar las aristas junto con las partículas no seleccionadas
+  // cuando hay foco activo (buscar texto o fijar una partícula) — todo
+  // el "ruido visual" de fondo baja a la vez, refuerza el efecto.
+  const field = createParticleField(concepts, {
+    onFocusChange: (active) => {
+      tweenNumber(cubeEdgeMaterial.opacity, active ? 0.015 : CUBE_EDGE_OPACITY, 300, (v) => {
+        cubeEdgeMaterial.opacity = v;
+      });
+    },
+  });
+  engine.scene.add(field.group);
 
   const card = document.createElement("vx-concept-card") as VxConceptCard;
   stageEl.appendChild(card);

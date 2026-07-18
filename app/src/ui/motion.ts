@@ -48,6 +48,28 @@ export function fadeOut(
   return Promise.race([anim.finished.then(() => undefined), safetyTimeout]);
 }
 
+/** Interpola un número cualquiera en el tiempo — para propiedades que no
+ * son CSS (ej. la opacidad de un THREE.Material), donde no aplica usar
+ * la Web Animations API como en fadeIn/fadeOut. */
+export function tweenNumber(
+  from: number,
+  to: number,
+  durationMs: number,
+  onUpdate: (value: number) => void,
+): void {
+  if (reducedMotion) {
+    onUpdate(to);
+    return;
+  }
+  const start = performance.now();
+  function tick() {
+    const t = Math.min((performance.now() - start) / durationMs, 1);
+    onUpdate(from + (to - from) * t);
+    if (t < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
 /** Anima cada hijo directo de `container` con un pequeño retraso escalonado. */
 export function staggerIn(
   container: HTMLElement,

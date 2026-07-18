@@ -70,6 +70,7 @@ export function setupConceptInteraction(options: ConceptInteractionOptions): Con
   function pinInstance(instanceId: number) {
     currentPinnedInstanceId = instanceId;
     field.setPointerHighlight(instanceId);
+    field.setPinnedFocus(true);
     card.showPinned(field.concepts[instanceId], [], defaultTopK);
     loadNeighbors(instanceId, defaultTopK);
   }
@@ -84,6 +85,7 @@ export function setupConceptInteraction(options: ConceptInteractionOptions): Con
     currentPinnedInstanceId = null;
     card.hidePinned();
     field.setPointerHighlight(null);
+    field.setPinnedFocus(false);
     field.setSearchHighlights([]);
     field.setSimilarityLines(null, []);
     field.setChainLines([]);

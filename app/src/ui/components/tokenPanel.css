@@ -32,13 +32,20 @@
   flex-wrap: wrap;
 }
 
-input {
+.input-wrap {
+  position: relative;
   flex: 1;
   min-width: 140px;
+  display: flex;
+}
+
+input {
+  flex: 1;
+  width: 100%;
   background: rgba(231, 226, 214, 0.06);
   border: 1px solid rgba(231, 226, 214, 0.16);
   border-radius: 6px;
-  padding: 12px 14px;
+  padding: 12px 34px 12px 14px;
   color: var(--ink);
   font-family: var(--font-sans);
   font-size: 15px;
@@ -47,6 +54,34 @@ input {
 
 input:focus {
   border-color: var(--accent);
+}
+
+.clear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: 50%;
+  color: var(--dim);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.clear.visible {
+  display: flex;
+}
+
+.clear:hover {
+  color: var(--ink);
+  background: rgba(231, 226, 214, 0.1);
 }
 
 .toggle {

@@ -14,6 +14,7 @@ import {
   vec3,
 } from "three/tsl";
 import type { Concept } from "../data/concepts";
+import { createElectricLine, type ElectricLine } from "./electricLine";
 
 /** Codificación por capas §04 del plan: un tono por dominio raíz. */
 export const DOMAIN_HUES: Record<string, number> = {
@@ -41,6 +42,9 @@ export interface ParticleField {
   concepts: Concept[];
   setPointerHighlight: (instanceId: number | null) => void;
   setSearchHighlights: (instanceIds: number[]) => void;
+  /** Fijar (clic) es distinto de sólo pasar el cursor: atenúa el resto
+   * del cubo (junto con las aristas, vía onFocusChange) — hover no. */
+  setPinnedFocus: (active: boolean) => void;
   setSimilarityLines: (
     sourceInstanceId: number | null,
     neighborInstanceIds: number[],
@@ -52,12 +56,22 @@ export interface ParticleField {
   setChainLines: (instanceIds: number[]) => void;
 }
 
+export interface ParticleFieldOptions {
+  /** Se llama cuando cambia si hay "foco" activo (buscar texto o fijar
+   * una partícula) — quien llama usa esto para atenuar en sincronía
+   * elementos fuera del InstancedMesh (las aristas del cubo). */
+  onFocusChange?: (active: boolean) => void;
+}
+
 /**
  * Builds the glowing instanced-sphere cloud from real concept data:
  * position = coordenadas reducidas del embedding real (PCA→3D),
  * color = tono categórico del dominio (§04).
  */
-export function createParticleField(concepts: Concept[]): ParticleField {
+export function createParticleField(
+  concepts: Concept[],
+  options: ParticleFieldOptions = {},
+): ParticleField {
   const count = concepts.length;
   const geometry = new THREE.IcosahedronGeometry(0.032, 1);
   const material = new THREE.MeshBasicNodeMaterial({
@@ -87,10 +101,12 @@ export function createParticleField(concepts: Concept[]): ParticleField {
   });
 
   const highlightAttrArray = new Float32Array(count);
-  const highlightAttribute = new THREE.InstancedBufferAttribute(
-    highlightAttrArray,
-    1,
-  );
+  const highlightAttribute = new THREE.InstancedBufferAttribute(highlightAttrArray, 1);
+  // 1 = brillo normal, ~0.05 = casi invisible — apaga todo lo que NO
+  // coincide con la búsqueda/partícula fijada para que lo que sí
+  // coincide se sienta protagonista absoluto del cubo.
+  const focusAttrArray = new Float32Array(count).fill(1);
+  const focusAttribute = new THREE.InstancedBufferAttribute(focusAttrArray, 1);
 
   geometry.setAttribute(
     "instanceColor",
@@ -101,11 +117,13 @@ export function createParticleField(concepts: Concept[]): ParticleField {
     new THREE.InstancedBufferAttribute(phaseAttr, 1),
   );
   geometry.setAttribute("instanceHighlight", highlightAttribute);
+  geometry.setAttribute("instanceFocus", focusAttribute);
 
   const glowStrength = uniform(0.75);
   const instanceColor = attribute<"vec3">("instanceColor", "vec3");
   const instancePhase = attribute<"float">("instancePhase", "float");
   const instanceHighlight = attribute<"float">("instanceHighlight", "float");
+  const instanceFocus = attribute<"float">("instanceFocus", "float");
 
   const pulse = float(0.75).add(
     float(0.16).mul(sin(time.mul(1.6).add(instancePhase))),
@@ -121,7 +139,7 @@ export function createParticleField(concepts: Concept[]): ParticleField {
     const glow = base.mul(
       float(0.22).add(rim.mul(glowStrength)).add(instanceHighlight),
     );
-    return vec3(glow).mul(pulse);
+    return vec3(glow).mul(pulse).mul(instanceFocus);
   })();
 
   mesh.instanceMatrix.needsUpdate = true;
@@ -131,12 +149,29 @@ export function createParticleField(concepts: Concept[]): ParticleField {
 
   let pointerId: number | null = null;
   let searchIds: number[] = [];
+  let pinnedFocus = false;
+  let focusActive = false;
 
   function recomputeHighlights() {
+    const active = searchIds.length > 0 || pinnedFocus;
+    const dim = active ? 0.05 : 1;
     highlightAttrArray.fill(0);
-    for (const id of searchIds) highlightAttrArray[id] = 0.55;
-    if (pointerId !== null) highlightAttrArray[pointerId] = 1.1;
+    focusAttrArray.fill(dim);
+    for (const id of searchIds) {
+      highlightAttrArray[id] = 0.55;
+      focusAttrArray[id] = 1;
+    }
+    if (pointerId !== null) {
+      highlightAttrArray[pointerId] = 1.1;
+      if (active) focusAttrArray[pointerId] = 1;
+    }
     highlightAttribute.needsUpdate = true;
+    focusAttribute.needsUpdate = true;
+
+    if (active !== focusActive) {
+      focusActive = active;
+      options.onFocusChange?.(active);
+    }
   }
 
   function setPointerHighlight(instanceId: number | null) {
@@ -149,69 +184,47 @@ export function createParticleField(concepts: Concept[]): ParticleField {
     recomputeHighlights();
   }
 
-  let lines: THREE.LineSegments | null = null;
+  function setPinnedFocus(active: boolean) {
+    pinnedFocus = active;
+    recomputeHighlights();
+  }
+
+  let similarityLine: ElectricLine | null = null;
   function setSimilarityLines(
     sourceInstanceId: number | null,
     neighborInstanceIds: number[],
   ) {
-    if (lines) {
-      group.remove(lines);
-      lines.geometry.dispose();
-      (lines.material as THREE.Material).dispose();
-      lines = null;
-    }
+    similarityLine?.dispose();
+    if (similarityLine) group.remove(similarityLine.object);
+    similarityLine = null;
     if (sourceInstanceId === null || neighborInstanceIds.length === 0) return;
 
     const src = concepts[sourceInstanceId].coords;
-    const positions: number[] = [];
-    for (const neighborId of neighborInstanceIds) {
+    const srcVec = new THREE.Vector3(src[0], src[1], src[2]);
+    const polylines = neighborInstanceIds.map((neighborId) => {
       const dst = concepts[neighborId].coords;
-      positions.push(src[0], src[1], src[2], dst[0], dst[1], dst[2]);
-    }
-
-    const geom = new THREE.BufferGeometry();
-    geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-    const mat = new THREE.LineBasicMaterial({
-      color: 0xd98a34,
-      transparent: true,
-      opacity: 0.5,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
+      return [srcVec, new THREE.Vector3(dst[0], dst[1], dst[2])];
     });
-    lines = new THREE.LineSegments(geom, mat);
-    group.add(lines);
+    similarityLine = createElectricLine(polylines, 0);
+    group.add(similarityLine.object);
+    similarityLine.reveal();
   }
 
-  let chainLines: THREE.LineSegments | null = null;
+  let chainLine: ElectricLine | null = null;
+  let chainColorCounter = 0;
   function setChainLines(instanceIds: number[]) {
-    if (chainLines) {
-      group.remove(chainLines);
-      chainLines.geometry.dispose();
-      (chainLines.material as THREE.Material).dispose();
-      chainLines = null;
-    }
+    chainLine?.dispose();
+    if (chainLine) group.remove(chainLine.object);
+    chainLine = null;
     if (instanceIds.length < 2) return;
 
-    const positions: number[] = [];
-    for (let i = 0; i < instanceIds.length - 1; i++) {
-      const a = concepts[instanceIds[i]].coords;
-      const b = concepts[instanceIds[i + 1]].coords;
-      positions.push(a[0], a[1], a[2], b[0], b[1], b[2]);
-    }
-
-    const geom = new THREE.BufferGeometry();
-    geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-    // Acento distinto del de setSimilarityLines (naranja = vecino real de
-    // Vectorize): cian = el camino de tu propia frase por el cubo.
-    const mat = new THREE.LineBasicMaterial({
-      color: 0x4fb8c4,
-      transparent: true,
-      opacity: 0.55,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
+    const points = instanceIds.map((id) => {
+      const c = concepts[id].coords;
+      return new THREE.Vector3(c[0], c[1], c[2]);
     });
-    chainLines = new THREE.LineSegments(geom, mat);
-    group.add(chainLines);
+    chainLine = createElectricLine([points], chainColorCounter++ % 4);
+    group.add(chainLine.object);
+    chainLine.reveal();
   }
 
   return {
@@ -221,6 +234,7 @@ export function createParticleField(concepts: Concept[]): ParticleField {
     concepts,
     setPointerHighlight,
     setSearchHighlights,
+    setPinnedFocus,
     setSimilarityLines,
     setChainLines,
   };

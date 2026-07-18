@@ -61,6 +61,7 @@ const STRINGS = {
     es: "Escribe algo o toca un ejemplo…",
     en: "Write something or tap an example…",
   },
+  tokenPanelClear: { es: "Limpiar", en: "Clear" },
   tokenPanelToggleBpe: { es: "BPE real", en: "Real BPE" },
   tokenPanelToggleSimple: { es: "Simplificado", en: "Simplified" },
   examplePhrase1: {

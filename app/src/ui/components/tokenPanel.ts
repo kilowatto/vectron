@@ -30,6 +30,11 @@ export interface TokensChangeDetail {
  * | `hide-ids`     | boolean | ausente    | si está presente, los chips no muestran el ID numérico del token. Fijar antes de insertar. |
  * | `placeholder`  | string  | frase genérica | placeholder del input. Reactivo: se puede cambiar en cualquier momento. |
  *
+ * ### Métodos públicos
+ * - `clear()` — vacía el input (botón × visible sólo con texto, o tecla
+ *   Escape) y dispara `vx-tokens-change` con texto vacío, como si se
+ *   hubiera borrado a mano.
+ *
  * ### Eventos
  * - `vx-tokens-change` — `CustomEvent<{ tokens: Token[]; mode: "bpe"\|"simple"; text: string }>`,
  *   disparado cada vez que el texto se retokeniza (con debounce natural
@@ -49,6 +54,7 @@ export class VxTokenPanel extends HTMLElement {
   static readonly observedAttributes = ["placeholder"];
 
   #input!: HTMLInputElement;
+  #clearBtn!: HTMLButtonElement;
   #tokensEl!: HTMLDivElement;
   #examplesEl!: HTMLDivElement;
   #toggleButtons: HTMLButtonElement[] = [];
@@ -74,7 +80,10 @@ export class VxTokenPanel extends HTMLElement {
     const root = attachShadow(this, css);
     root.innerHTML = `
       <div class="row">
-        <input type="text" autocomplete="off" spellcheck="false" />
+        <div class="input-wrap">
+          <input type="text" autocomplete="off" spellcheck="false" />
+          <button type="button" class="clear" aria-label="${t("tokenPanelClear", lang)}">×</button>
+        </div>
         ${
           this.#hideToggle
             ? ""
@@ -89,9 +98,15 @@ export class VxTokenPanel extends HTMLElement {
     `;
 
     this.#input = root.querySelector("input")!;
+    this.#clearBtn = root.querySelector(".clear")!;
     this.#tokensEl = root.querySelector(".tokens")!;
     this.#examplesEl = root.querySelector(".examples")!;
     this.#toggleButtons = Array.from(root.querySelectorAll(".toggle button"));
+
+    this.#clearBtn.addEventListener("click", () => this.clear());
+    this.#input.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") this.clear();
+    });
 
     this.#input.placeholder =
       this.getAttribute("placeholder") ?? t("tokenPanelPlaceholderDefault", lang);
@@ -131,9 +146,19 @@ export class VxTokenPanel extends HTMLElement {
     }
   }
 
+  /** Vacía el input y apaga cualquier resalte/línea que hubiera quedado
+   * (dispara `vx-tokens-change` con texto vacío, igual que borrar todo
+   * a mano) — usado por el botón × y por Escape. */
+  clear(): void {
+    this.#input.value = "";
+    this.#render();
+    this.#input.focus();
+  }
+
   async #render() {
     const seq = ++this.#requestSeq;
     const text = this.#input.value;
+    this.#clearBtn.classList.toggle("visible", text.length > 0);
     const tokens = text.trim()
       ? this.#mode === "bpe"
         ? await tokenizeBPE(text)
