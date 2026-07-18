@@ -39,6 +39,8 @@ export const DOMAIN_HUES: Record<string, number> = {
   medicina_y_salud: 0x06d6a0,
   economia_y_negocios: 0x8ecae6,
   personajes: 0xbc6c25,
+  emociones: 0xff4d94,
+  hogar: 0xa8dadc,
 };
 
 const FALLBACK_HUE = 0x9aa5ad;

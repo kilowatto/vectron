@@ -2152,4 +2152,108 @@ export const SEED_CONCEPTS: SeedConcept[] = [
     const [es, en] = pair.split(",");
     return { wordEs: es, wordEn: en, domain: "biologia_vegetal", taxonomy: ["biologia", "planta", "concepto"], traits: { esPlanta: true } };
   }),
+
+  // --- Emociones (dominio nuevo, sustantivos) ---
+  ...[
+    "alegría,joy", "tristeza,sadness", "miedo,fear", "enojo,anger", "sorpresa,surprise",
+    "asco,disgust", "amor (emoción),love (emotion)", "odio (emoción),hate (emotion)",
+    "ansiedad,anxiety", "calma,calmness", "esperanza,hope", "desesperación,despair",
+    "orgullo,pride", "vergüenza,shame", "culpa,guilt", "envidia,envy", "celos,jealousy",
+    "gratitud,gratitude", "compasión,compassion", "empatía,empathy", "soledad,loneliness",
+    "nostalgia,nostalgia", "euforia,euphoria", "frustración,frustration",
+    "confusión,confusion", "curiosidad (emoción),curiosity (emotion)", "aburrimiento,boredom",
+    "entusiasmo,enthusiasm", "satisfacción,satisfaction", "arrepentimiento,regret",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "emociones", taxonomy: ["emociones", "concepto"], traits: { tipo: "emocion" } };
+  }),
+
+  // --- Historia: ampliación ---
+  ...[
+    "guerra de los balcanes,balkan wars", "guerra sino-japonesa,sino-japanese war",
+    "revolución cultural,cultural revolution", "guerra de las malvinas,falklands war",
+    "muro de berlín,berlin wall", "cortina de hierro,iron curtain",
+    "plan marshall,marshall plan", "tratado de tordesillas,treaty of tordesillas",
+    "conquista de méxico,conquest of mexico",
+    "independencia de estados unidos,american independence",
+    "revolución haitiana,haitian revolution", "era colonial,colonial era",
+    "esclavitud,slavery", "apartheid,apartheid", "holocausto,holocaust",
+    "genocidio,genocide", "dinastía tang,tang dynasty", "era meiji,meiji era",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "historia", taxonomy: ["historia", "evento"], traits: { tipo: "evento" } };
+  }),
+
+  // --- Materiales: ampliación ---
+  ...[
+    "fibra de vidrio,fiberglass", "cerámica (material),ceramic (material)",
+    "porcelana,porcelain", "cuero,leather", "lana (material),wool (material)",
+    "seda (material),silk (material)", "lino,linen", "nylon,nylon", "poliéster,polyester",
+    "concreto armado,reinforced concrete", "ladrillo,brick", "yeso,plaster",
+    "arcilla,clay", "arena,sand", "grava,gravel", "bronce,bronze", "latón,brass",
+    "acero inoxidable,stainless steel", "grafeno,graphene", "fibra de carbono,carbon fiber",
+    "plexiglás,plexiglass", "mica,mica", "cuarzo,quartz",
+    "turquesa (material),turquoise (material)", "jade (material),jade (material)",
+    "ámbar,amber", "obsidiana,obsidian",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "materiales", taxonomy: ["materiales", "no_metal"], traits: { esMetal: false } };
+  }),
+
+  // --- Tecnología: ampliación ---
+  ...[
+    "wifi,wifi", "bluetooth,bluetooth", "gps,gps", "código qr,qr code", "nfc,nfc",
+    "criptografía,cryptography", "autenticación biométrica,biometric authentication",
+    "reconocimiento facial,facial recognition", "dron,drone", "impresora 3d,3d printer",
+    "realidad mixta,mixed reality",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "tecnologia", taxonomy: ["tecnologia", "concepto"], traits: { tipo: "concepto" } };
+  }),
+
+  // --- Hogar (dominio nuevo, sugerido por el usuario) — cocina ---
+  ...[
+    "sartén,frying pan", "olla,pot", "estufa,stove", "microondas,microwave",
+    "licuadora,blender", "refrigerador,refrigerator", "horno,oven",
+    "lavavajillas,dishwasher", "fregadero,kitchen sink", "tostadora,toaster",
+    "cafetera,coffee maker",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "hogar", taxonomy: ["hogar", "cocina"], traits: { tipo: "cocina" } };
+  }),
+  // --- Hogar: recámara ---
+  ...[
+    "cama,bed", "lámpara,lamp", "buró,nightstand", "televisor,tv", "clóset,closet",
+    "ropa,clothing", "zapatos,shoes", "almohada,pillow", "cobija,blanket", "espejo,mirror",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "hogar", taxonomy: ["hogar", "recamara"], traits: { tipo: "recamara" } };
+  }),
+  // --- Hogar: sala ---
+  ...[
+    "sillón,armchair", "silla,chair", "mesa de centro,coffee table",
+    "mesa lateral,side table", "sofá,sofa", "alfombra,rug", "cortina,curtain",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "hogar", taxonomy: ["hogar", "sala"], traits: { tipo: "sala" } };
+  }),
+  // --- Hogar: comedor ---
+  ...[
+    "plato,plate", "vaso,glass", "tenedor,fork", "cuchara,spoon", "cuchillo,knife",
+    "cubiertos,cutlery", "servilleta,napkin", "mantel,tablecloth",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "hogar", taxonomy: ["hogar", "comedor"], traits: { tipo: "comedor" } };
+  }),
+
+  // --- Gastronomía: ampliación (comida sugerida) ---
+  ...[
+    "carne de res,beef", "carne de cerdo,pork",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "gastronomia", taxonomy: ["gastronomia", "concepto"], traits: { tipo: "gastronomia" } };
+  }),
+
+  // --- Biología animal: el cuy, sugerido por el usuario ---
+  animal("cuy", "guinea pig", ["mamifero", "roedor"], { legs: 4, hasWings: false, vertebrado: true, dieta: "herbivoro" }),
 ];

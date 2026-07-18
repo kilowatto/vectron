@@ -108,6 +108,8 @@ const STRINGS = {
   domainMedicinaYSalud: { es: "Medicina y Salud", en: "Medicine and Health" },
   domainEconomiaYNegocios: { es: "Economía y Negocios", en: "Economy and Business" },
   domainPersonajes: { es: "Personajes", en: "Notable People" },
+  domainEmociones: { es: "Emociones", en: "Emotions" },
+  domainHogar: { es: "Hogar", en: "Home" },
 
   // --- HUD ---
   hudLoading: { es: "cargando…", en: "loading…" },
