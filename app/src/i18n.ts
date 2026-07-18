@@ -100,6 +100,7 @@ const STRINGS = {
   domainMitologia: { es: "Mitología", en: "Mythology" },
   domainQuimica: { es: "Química", en: "Chemistry" },
   domainTecnologia: { es: "Tecnología", en: "Technology" },
+  domainCualidadesYAcciones: { es: "Cualidades y acciones", en: "Qualities and actions" },
 
   // --- HUD ---
   hudLoading: { es: "cargando…", en: "loading…" },

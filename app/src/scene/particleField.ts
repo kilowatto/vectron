@@ -13,7 +13,7 @@ import {
   uniform,
   vec3,
 } from "three/tsl";
-import type { Concept } from "../data/concepts";
+import type { Concept, PartOfSpeech } from "../data/concepts";
 import { createElectricLine, type ElectricLine } from "./electricLine";
 
 /** Codificación por capas §04 del plan: un tono por dominio raíz. */
@@ -31,6 +31,7 @@ export const DOMAIN_HUES: Record<string, number> = {
   mitologia: 0x9d4edd,
   quimica: 0x2ee6a8,
   tecnologia: 0x2196f3,
+  cualidades_y_acciones: 0xf0e6d2,
 };
 
 const FALLBACK_HUE = 0x9aa5ad;
@@ -50,6 +51,12 @@ export interface ParticleField {
    * responden normal. Evita atrapar el cursor en una partícula
    * atenuada cuando lo que se quiere tocar es la que sí importa. */
   getFocusedIds: () => Set<number> | null;
+  /** Principiante=sustantivos, Intermedio=+adjetivos, Avanzado=+verbos
+   * — las instancias fuera del filtro se escalan a 0 (sin geometría
+   * visible ni alcanzable por raycasting) en vez de reconstruir el
+   * InstancedMesh, que sigue teniendo TODOS los conceptos siempre.
+   * Devuelve cuántas quedaron visibles (para el HUD). */
+  setPartOfSpeechFilter: (allowed: Set<PartOfSpeech>) => number;
   setSimilarityLines: (
     sourceInstanceId: number | null,
     neighborInstanceIds: number[],
@@ -92,6 +99,8 @@ export function createParticleField(
   const mesh = new THREE.InstancedMesh(geometry, material, count);
   const dummy = new THREE.Object3D();
 
+  const baseScaleOf = (concept: Concept) => (concept.distinctiveTrait ? 1.25 : 0.85);
+
   concepts.forEach((concept, i) => {
     const hue = DOMAIN_HUES[concept.domain] ?? FALLBACK_HUE;
     tmpColor.setHex(hue);
@@ -99,11 +108,24 @@ export function createParticleField(
     phaseAttr[i] = Math.random() * Math.PI * 2;
 
     dummy.position.set(concept.coords[0], concept.coords[1], concept.coords[2]);
-    const s = concept.distinctiveTrait ? 1.25 : 0.85;
-    dummy.scale.setScalar(s);
+    dummy.scale.setScalar(baseScaleOf(concept));
     dummy.updateMatrix();
     mesh.setMatrixAt(i, dummy.matrix);
   });
+
+  function setPartOfSpeechFilter(allowed: Set<PartOfSpeech>): number {
+    let visible = 0;
+    concepts.forEach((concept, i) => {
+      const show = allowed.has(concept.partOfSpeech);
+      if (show) visible++;
+      dummy.position.set(concept.coords[0], concept.coords[1], concept.coords[2]);
+      dummy.scale.setScalar(show ? baseScaleOf(concept) : 0);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    return visible;
+  }
 
   const highlightAttrArray = new Float32Array(count);
   const highlightAttribute = new THREE.InstancedBufferAttribute(highlightAttrArray, 1);
@@ -254,6 +276,7 @@ export function createParticleField(
     setSearchHighlights,
     setPinnedFocus,
     getFocusedIds,
+    setPartOfSpeechFilter,
     setSimilarityLines,
     setChainLines,
   };

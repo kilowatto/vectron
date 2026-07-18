@@ -18,6 +18,15 @@ import type { ModePickDetail } from "./ui/components/modeSelect";
 import { getStoredLang, setStoredLang, t } from "./i18n";
 import { fadeIn, fadeOut, tweenNumber } from "./ui/motion";
 import { tokenizeSimple } from "./tokenizer";
+import type { PartOfSpeech } from "./data/concepts";
+
+// Principiante=sustantivos, Intermedio=+adjetivos, Avanzado=+verbos —
+// mismo diseño confirmado para el tipo de palabra visible por modo.
+const MODE_POS: Record<Mode, Set<PartOfSpeech>> = {
+  principiante: new Set(["sustantivo"]),
+  intermedio: new Set(["sustantivo", "adjetivo"]),
+  avanzado: new Set(["sustantivo", "adjetivo", "verbo"]),
+};
 
 const stageEl = document.querySelector<HTMLDivElement>("#stage")!;
 const canvas = document.querySelector<HTMLCanvasElement>("#scene")!;
@@ -132,7 +141,11 @@ async function main() {
   // comparar token-por-token nunca encontraría "black hole" o "número
   // primo" — se re-tokeniza el texto crudo en palabras sueltas (al
   // margen del tokenizador elegido para mostrar) y se buscan las frases
-  // más largas primero en cada posición.
+  // más largas primero en cada posición. Sólo cuentan coincidencias
+  // cuyo tipo de palabra esté visible en el modo actual — si no, un
+  // verbo en Principiante conectaría hacia una partícula invisible
+  // (escala 0), una línea que apunta a la nada.
+  let allowedPos: Set<PartOfSpeech> = MODE_POS.principiante;
   function findWordMatches(text: string): { matches: number[]; ordered: number[] } {
     const words = tokenizeSimple(text)
       .map((tok) => tok.text)
@@ -143,8 +156,9 @@ async function main() {
     while (i < words.length) {
       let consumed = 0;
       for (let len = Math.min(maxNgram, words.length - i); len >= 1; len--) {
-        const ids = wordIndex.get(words.slice(i, i + len).join(" ").toLowerCase());
-        if (ids) {
+        const allIds = wordIndex.get(words.slice(i, i + len).join(" ").toLowerCase());
+        const ids = allIds?.filter((id) => allowedPos.has(field.concepts[id].partOfSpeech));
+        if (ids && ids.length > 0) {
           ids.forEach((id) => matches.add(id));
           ordered.push(ids[0]);
           consumed = len;
@@ -187,12 +201,14 @@ async function main() {
   // la barra de tokenización y la tarjeta de concepto se reconfiguran.
   async function applyMode(mode: Mode) {
     currentMode = mode;
+    allowedPos = MODE_POS[mode];
     switcher.setAttribute("current", mode);
     backendTag.textContent = engine.usingWebGPU ? t("hudWebgpu", lang) : t("hudWebgl", lang);
 
     card.configure({ simple: mode === "principiante", lang });
     interaction.setDefaultTopK(mode === "principiante" ? 5 : 6);
     interaction.reset();
+    const visibleCount = field.setPartOfSpeechFilter(allowedPos);
 
     // El HUD también habla el idioma de cada modo: Principiante no dice
     // "vector", los otros sí (con la notación ℝ en Avanzado).
@@ -202,7 +218,7 @@ async function main() {
         : mode === "intermedio"
           ? t("hudUnitIntermedio", lang)
           : t("hudUnitAvanzado", lang);
-    const countText = `${field.count.toLocaleString(lang === "en" ? "en-US" : "es-MX")} ${countUnit}`;
+    const countText = `${visibleCount.toLocaleString(lang === "en" ? "en-US" : "es-MX")} ${countUnit}`;
     if (!tokenPanel) {
       countLabel.textContent = countText;
     } else {

@@ -61,6 +61,7 @@ async function main() {
   const withIds = SEED_CONCEPTS.map((concept, idx) => ({
     id: idx + 1,
     ...concept,
+    partOfSpeech: concept.partOfSpeech ?? "sustantivo",
     coords: reduced[idx] as [number, number, number],
     embedding: embeddings[idx],
     embeddingModel: EMBEDDING_MODEL,
@@ -70,7 +71,7 @@ async function main() {
   const sqlLines = withIds.map((c) => {
     const traitsJson = sqlEscape(JSON.stringify(c.traits));
     const taxonomyJson = sqlEscape(JSON.stringify(c.taxonomy));
-    return `INSERT INTO concepts (id, word_es, word_en, domain, taxonomy, distinctive_trait, traits, coord_x, coord_y, coord_z, embedding_model) VALUES (${c.id}, '${sqlEscape(c.wordEs)}', '${sqlEscape(c.wordEn)}', '${sqlEscape(c.domain)}', '${taxonomyJson}', ${c.distinctiveTrait ? `'${sqlEscape(c.distinctiveTrait)}'` : "NULL"}, '${traitsJson}', ${c.coords[0]}, ${c.coords[1]}, ${c.coords[2]}, '${sqlEscape(EMBEDDING_MODEL)}');`;
+    return `INSERT INTO concepts (id, word_es, word_en, domain, taxonomy, distinctive_trait, traits, coord_x, coord_y, coord_z, embedding_model, part_of_speech) VALUES (${c.id}, '${sqlEscape(c.wordEs)}', '${sqlEscape(c.wordEn)}', '${sqlEscape(c.domain)}', '${taxonomyJson}', ${c.distinctiveTrait ? `'${sqlEscape(c.distinctiveTrait)}'` : "NULL"}, '${traitsJson}', ${c.coords[0]}, ${c.coords[1]}, ${c.coords[2]}, '${sqlEscape(EMBEDDING_MODEL)}', '${sqlEscape(c.partOfSpeech)}');`;
   });
   writeFileSync(join(OUT_DIR, "concepts.sql"), sqlLines.join("\n") + "\n");
 
@@ -97,6 +98,7 @@ async function main() {
     distinctiveTrait: c.distinctiveTrait ?? null,
     traits: c.traits,
     coords: c.coords,
+    partOfSpeech: c.partOfSpeech,
   }));
   writeFileSync(
     join(OUT_DIR, "concepts.json"),

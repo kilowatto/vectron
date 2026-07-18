@@ -1,3 +1,5 @@
+export type PartOfSpeech = "sustantivo" | "adjetivo" | "verbo";
+
 export interface Concept {
   id: number;
   word: { es: string; en: string };
@@ -6,6 +8,7 @@ export interface Concept {
   distinctiveTrait: string | null;
   traits: Record<string, string | number | boolean>;
   coords: [number, number, number];
+  partOfSpeech: PartOfSpeech;
 }
 
 // En producción el mismo Worker sirve el frontend y la API (misma
