@@ -1,9 +1,24 @@
 /**
  * Minimal PCA (power iteration + deflation) — no external deps.
- * Good enough for a few hundred points at build/seed time. UMAP with a
+ * Good enough for a few thousand points at build/seed time. UMAP with a
  * real neighbor graph is the upgrade path noted in the plan for Fase 2+.
  */
-export function pcaReduce(vectors: number[][], componentCount = 3): number[][] {
+
+/** Todo lo necesario para proyectar un embedding NUEVO al mismo espacio
+ * 3D del cubo sin re-correr PCA: se guarda junto al dataset (R2) y el
+ * cliente lo usa para posicionar tokens/frases embebidos en vivo. */
+export interface PcaBasis {
+  mean: number[];
+  components: number[][]; // componentCount x dim
+  /** máximo absoluto por eje ANTES de escalar al cubo (ver normalizeToCube) */
+  maxAbs: number[];
+  cubeScale: number;
+}
+
+export function pcaReduce(
+  vectors: number[][],
+  componentCount = 3,
+): { points: number[][]; mean: number[]; components: number[][] } {
   const n = vectors.length;
   const dim = vectors[0].length;
 
@@ -78,7 +93,7 @@ export function pcaReduce(vectors: number[][], componentCount = 3): number[][] {
     }
   }
 
-  return centered.map((v) => {
+  const points = centered.map((v) => {
     const point: number[] = [];
     for (const comp of components) {
       let dot = 0;
@@ -87,14 +102,26 @@ export function pcaReduce(vectors: number[][], componentCount = 3): number[][] {
     }
     return point;
   });
+
+  return {
+    points,
+    mean: Array.from(mean),
+    components: components.map((c) => Array.from(c)),
+  };
 }
 
 /** Rescale each axis independently so the cloud fills roughly [-scale, scale]. */
-export function normalizeToCube(points: number[][], scale = 1.25): number[][] {
+export function normalizeToCube(
+  points: number[][],
+  scale = 1.25,
+): { points: number[][]; maxAbs: number[] } {
   const dims = points[0].length;
   const maxAbs = new Array(dims).fill(0);
   for (const p of points) {
     for (let i = 0; i < dims; i++) maxAbs[i] = Math.max(maxAbs[i], Math.abs(p[i]));
   }
-  return points.map((p) => p.map((v, i) => (maxAbs[i] > 0 ? (v / maxAbs[i]) * scale : 0)));
+  return {
+    points: points.map((p) => p.map((v, i) => (maxAbs[i] > 0 ? (v / maxAbs[i]) * scale : 0))),
+    maxAbs,
+  };
 }

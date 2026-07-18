@@ -139,12 +139,56 @@ input:focus {
   border-color: var(--accent);
 }
 
-.tokens {
+.tokens-zone {
   order: -1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tokens {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
   min-height: 24px;
+}
+
+.tokens.bge {
+  min-height: 0;
+}
+
+.rowlabel {
+  font-size: 9.5px;
+  color: var(--dim);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Colores por modelo en modo compare — mismos acentos que las
+   partículas de tokens en el cubo: GPT azul eléctrico, BGE verde. */
+:host([compare]) .tokens:not(.bge) .token {
+  background: rgba(34, 199, 255, 0.1);
+  border-color: rgba(34, 199, 255, 0.35);
+}
+
+:host([compare]) .tokens:not(.bge) .token small {
+  color: #22c7ff;
+}
+
+.tokens.bge .token {
+  background: rgba(57, 255, 106, 0.1);
+  border-color: rgba(57, 255, 106, 0.35);
+}
+
+.tokens.bge .token small {
+  color: #39ff6a;
+}
+
+.disclaimer {
+  font-size: 9.5px;
+  color: var(--dim);
+  line-height: 1.45;
+  max-width: 66ch;
 }
 
 .token {

@@ -15,6 +15,7 @@ import {
 } from "three/tsl";
 import type { Concept, PartOfSpeech } from "../data/concepts";
 import { createElectricLine, type ElectricLine } from "./electricLine";
+import { hoverableLines } from "./lineHover";
 
 /** Codificación por capas §04 del plan: un tono por dominio raíz. */
 export const DOMAIN_HUES: Record<string, number> = {
@@ -49,6 +50,8 @@ export const DOMAIN_HUES: Record<string, number> = {
   festividades: 0xf72585,
   filosofia: 0x8d99ae,
   idiomas: 0xffc857,
+  // Modo token (Avanzado): partículas efímeras de tu frase, no dataset.
+  token_vivo: 0x39ff6a,
 };
 
 const FALLBACK_HUE = 0x9aa5ad;
@@ -63,6 +66,11 @@ export interface ParticleField {
   /** Fijar (clic) es distinto de sólo pasar el cursor: atenúa el resto
    * del cubo (junto con las aristas, vía onFocusChange) — hover no. */
   setPinnedFocus: (active: boolean) => void;
+  /** Igual que setPinnedFocus pero para el modo token (Avanzado):
+   * mientras hay tokens vivos de tu frase, el dataset se atenúa. Flag
+   * separado para que fijar/soltar partículas y escribir/borrar frases
+   * no se pisen entre sí. */
+  setTokenFocus: (active: boolean) => void;
   /** Qué instancias siguen "activas" para hover/clic cuando hay foco
    * (búsqueda o partícula fijada) — `null` cuando no hay foco, todas
    * responden normal. Evita atrapar el cursor en una partícula
@@ -74,15 +82,18 @@ export interface ParticleField {
    * InstancedMesh, que sigue teniendo TODOS los conceptos siempre.
    * Devuelve cuántas quedaron visibles (para el HUD). */
   setPartOfSpeechFilter: (allowed: Set<PartOfSpeech>) => number;
+  /** Devuelve el objeto de línea creado (o null) para que quien llama
+   * le cuelgue `userData.segments` (etiquetas de hover con el coseno
+   * real por segmento — ver lineHover.ts). */
   setSimilarityLines: (
     sourceInstanceId: number | null,
     neighborInstanceIds: number[],
-  ) => void;
+  ) => THREE.Object3D | null;
   /** Traza una línea de A a B a C… en el orden dado — usado para mostrar
    * cómo se conectan, en el cubo, las palabras de una frase escrita
    * (distinto de `setSimilarityLines`, que es la estrella de vecinos
-   * reales de una partícula fijada). */
-  setChainLines: (instanceIds: number[]) => void;
+   * reales de una partícula fijada). Devuelve el objeto de línea. */
+  setChainLines: (instanceIds: number[]) => THREE.Object3D | null;
 }
 
 export interface ParticleFieldOptions {
@@ -206,10 +217,11 @@ export function createParticleField(
   let searchIds: number[] = [];
   let pinnedFocus = false;
   let focusActive = false;
+  let tokenFocus = false;
   let focusedIds: Set<number> | null = null;
 
   function recomputeHighlights() {
-    const active = searchIds.length > 0 || pinnedFocus;
+    const active = searchIds.length > 0 || pinnedFocus || tokenFocus;
     // Atenuado real pero no "casi invisible" — se veía demasiado
     // agresivo en la práctica, hay que poder seguir ubicando el resto
     // del cubo como contexto.
@@ -257,15 +269,23 @@ export function createParticleField(
     recomputeHighlights();
   }
 
+  function setTokenFocus(active: boolean) {
+    tokenFocus = active;
+    recomputeHighlights();
+  }
+
   let similarityLine: ElectricLine | null = null;
   function setSimilarityLines(
     sourceInstanceId: number | null,
     neighborInstanceIds: number[],
-  ) {
-    similarityLine?.dispose();
-    if (similarityLine) group.remove(similarityLine.object);
+  ): THREE.Object3D | null {
+    if (similarityLine) {
+      hoverableLines.delete(similarityLine.object);
+      group.remove(similarityLine.object);
+      similarityLine.dispose();
+    }
     similarityLine = null;
-    if (sourceInstanceId === null || neighborInstanceIds.length === 0) return;
+    if (sourceInstanceId === null || neighborInstanceIds.length === 0) return null;
 
     const src = concepts[sourceInstanceId].coords;
     const srcVec = new THREE.Vector3(src[0], src[1], src[2]);
@@ -275,16 +295,21 @@ export function createParticleField(
     });
     similarityLine = createElectricLine(polylines, 0);
     group.add(similarityLine.object);
+    hoverableLines.add(similarityLine.object);
     similarityLine.reveal();
+    return similarityLine.object;
   }
 
   let chainLine: ElectricLine | null = null;
   let chainColorCounter = 0;
-  function setChainLines(instanceIds: number[]) {
-    chainLine?.dispose();
-    if (chainLine) group.remove(chainLine.object);
+  function setChainLines(instanceIds: number[]): THREE.Object3D | null {
+    if (chainLine) {
+      hoverableLines.delete(chainLine.object);
+      group.remove(chainLine.object);
+      chainLine.dispose();
+    }
     chainLine = null;
-    if (instanceIds.length < 2) return;
+    if (instanceIds.length < 2) return null;
 
     const points = instanceIds.map((id) => {
       const c = concepts[id].coords;
@@ -292,7 +317,9 @@ export function createParticleField(
     });
     chainLine = createElectricLine([points], chainColorCounter++ % 4);
     group.add(chainLine.object);
+    hoverableLines.add(chainLine.object);
     chainLine.reveal();
+    return chainLine.object;
   }
 
   return {
@@ -303,6 +330,7 @@ export function createParticleField(
     setPointerHighlight,
     setSearchHighlights,
     setPinnedFocus,
+    setTokenFocus,
     getFocusedIds,
     setPartOfSpeechFilter,
     setSimilarityLines,

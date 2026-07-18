@@ -1,4 +1,5 @@
 import { tokenizeBPE, tokenizeSimple, type Token } from "../../tokenizer";
+import { tokenizeBGE } from "../../bgeTokenizer";
 import { attachShadow } from "./shadow";
 import { getStoredLang, t } from "../../i18n";
 import css from "./tokenPanel.css?inline";
@@ -28,6 +29,7 @@ export interface TokensChangeDetail {
  * |----------------|---------|------------|-----------------------------------------------------------|
  * | `hide-toggle`  | boolean | ausente    | si está presente, oculta el switch BPE/Simplificado y fuerza tokenizador simple. Fijar antes de insertar. |
  * | `hide-ids`     | boolean | ausente    | si está presente, los chips no muestran el ID numérico del token. Fijar antes de insertar. |
+ * | `compare`      | boolean | ausente    | modo token de Avanzado: muestra DOS filas etiquetadas — la tokenización elegida (GPT cl100k / simplificada) y la del tokenizador REAL de BGE (el modelo del cubo) — más la nota de honestidad técnica. Fijar antes de insertar. |
  * | `placeholder`  | string  | frase genérica | placeholder del input. Reactivo: se puede cambiar en cualquier momento. |
  *
  * ### Métodos públicos
@@ -56,12 +58,17 @@ export class VxTokenPanel extends HTMLElement {
   #input!: HTMLInputElement;
   #clearBtn!: HTMLButtonElement;
   #tokensEl!: HTMLDivElement;
+  #bgeTokensEl!: HTMLDivElement;
+  #gptLabelEl!: HTMLDivElement;
+  #bgeLabelEl!: HTMLDivElement;
+  #disclaimerEl!: HTMLDivElement;
   #examplesEl!: HTMLDivElement;
   #toggleButtons: HTMLButtonElement[] = [];
   #mode: TokenizerMode = "bpe";
   #requestSeq = 0;
   #hideToggle = false;
   #hideIds = false;
+  #compare = false;
 
   connectedCallback() {
     if (this.shadowRoot) return; // ya montado (reconexión al DOM)
@@ -74,6 +81,7 @@ export class VxTokenPanel extends HTMLElement {
     // ya se aplicaron.
     this.#hideToggle = this.hasAttribute("hide-toggle");
     this.#hideIds = this.hasAttribute("hide-ids");
+    this.#compare = this.hasAttribute("compare");
     this.#mode = this.#hideToggle ? "simple" : "bpe";
     const lang = getStoredLang();
 
@@ -94,12 +102,22 @@ export class VxTokenPanel extends HTMLElement {
         }
       </div>
       <div class="examples"></div>
-      <div class="tokens"></div>
+      <div class="tokens-zone">
+        <div class="rowlabel gpt-label" hidden></div>
+        <div class="tokens"></div>
+        <div class="rowlabel bge-label" hidden></div>
+        <div class="tokens bge"></div>
+        <div class="disclaimer" hidden>${t("tokenDisclaimer", lang)}</div>
+      </div>
     `;
 
     this.#input = root.querySelector("input")!;
     this.#clearBtn = root.querySelector(".clear")!;
-    this.#tokensEl = root.querySelector(".tokens")!;
+    this.#tokensEl = root.querySelector(".tokens:not(.bge)")!;
+    this.#bgeTokensEl = root.querySelector(".tokens.bge")!;
+    this.#gptLabelEl = root.querySelector(".gpt-label")!;
+    this.#bgeLabelEl = root.querySelector(".bge-label")!;
+    this.#disclaimerEl = root.querySelector(".disclaimer")!;
     this.#examplesEl = root.querySelector(".examples")!;
     this.#toggleButtons = Array.from(root.querySelectorAll(".toggle button"));
 
@@ -155,18 +173,8 @@ export class VxTokenPanel extends HTMLElement {
     this.#input.focus();
   }
 
-  async #render() {
-    const seq = ++this.#requestSeq;
-    const text = this.#input.value;
-    this.#clearBtn.classList.toggle("visible", text.length > 0);
-    const tokens = text.trim()
-      ? this.#mode === "bpe"
-        ? await tokenizeBPE(text)
-        : tokenizeSimple(text)
-      : [];
-    if (seq !== this.#requestSeq) return; // una escritura más reciente ya resolvió
-
-    this.#tokensEl.innerHTML = tokens
+  #renderChips(el: HTMLDivElement, tokens: Token[]) {
+    el.innerHTML = tokens
       .map(
         (t) =>
           `<span class="token"><b>${t.text.replace(/\s/g, "·")}</b>${
@@ -174,6 +182,35 @@ export class VxTokenPanel extends HTMLElement {
           }</span>`,
       )
       .join("");
+  }
+
+  async #render() {
+    const seq = ++this.#requestSeq;
+    const text = this.#input.value;
+    const lang = getStoredLang();
+    this.#clearBtn.classList.toggle("visible", text.length > 0);
+
+    const tokens = text.trim()
+      ? this.#mode === "bpe"
+        ? await tokenizeBPE(text)
+        : tokenizeSimple(text)
+      : [];
+    const bgeTokens = this.#compare && text.trim() ? await tokenizeBGE(text) : [];
+    if (seq !== this.#requestSeq) return; // una escritura más reciente ya resolvió
+
+    this.#renderChips(this.#tokensEl, tokens);
+
+    if (this.#compare) {
+      const hasText = text.trim().length > 0;
+      this.#gptLabelEl.hidden = !hasText;
+      this.#bgeLabelEl.hidden = !hasText;
+      this.#bgeTokensEl.hidden = !hasText;
+      this.#disclaimerEl.hidden = !hasText;
+      this.#gptLabelEl.textContent =
+        this.#mode === "bpe" ? t("tokenRowGpt", lang) : t("tokenRowSimple", lang);
+      this.#bgeLabelEl.textContent = t("tokenRowBge", lang);
+      this.#renderChips(this.#bgeTokensEl, bgeTokens);
+    }
 
     this.dispatchEvent(
       new CustomEvent<TokensChangeDetail>("vx-tokens-change", {

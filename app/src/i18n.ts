@@ -63,6 +63,17 @@ const STRINGS = {
   },
   tokenPanelClear: { es: "Limpiar", en: "Clear" },
   tokenPanelToggleBpe: { es: "BPE real", en: "Real BPE" },
+  tokenRowGpt: { es: "GPT · cl100k_base", en: "GPT · cl100k_base" },
+  tokenRowSimple: { es: "Simplificado (no real)", en: "Simplified (not real)" },
+  tokenRowBge: {
+    es: "BGE · bge-base-en-v1.5 — el modelo del cubo",
+    en: "BGE · bge-base-en-v1.5 — the cube's model",
+  },
+  tokenDisclaimer: {
+    es: "Cada fragmento se embebe aislado con BGE (números 100% reales del mismo modelo del cubo); el modelo real lee los tokens en contexto, con atención mutua — su posición aquí es una aproximación declarada. Los cortes de GPT también se embeben con BGE para ubicarlos en el mismo espacio.",
+    en: "Each fragment is embedded in isolation with BGE (100% real numbers from the same model as the cube); the real model reads tokens in context, with mutual attention — their position here is a declared approximation. GPT's cuts are also embedded with BGE so they can live in the same space.",
+  },
+  tokenPhraseLabel: { es: "frase completa", en: "full phrase" },
   tokenPanelToggleSimple: { es: "Simplificado", en: "Simplified" },
   examplePhrase1: {
     es: "El Rinoceronte Naranja que viene de la sabana le gusta el café Frida Café",
@@ -118,12 +129,16 @@ const STRINGS = {
   domainFestividades: { es: "Festividades", en: "Holidays" },
   domainFilosofia: { es: "Filosofía", en: "Philosophy" },
   domainIdiomas: { es: "Idiomas", en: "Languages" },
+  domainTokenVivo: { es: "Token en vivo", en: "Live token" },
 
   // --- HUD ---
   hudLoading: { es: "cargando…", en: "loading…" },
   hudUnitPrincipiante: { es: "palabras", en: "words" },
   hudUnitIntermedio: { es: "embeddings", en: "embeddings" },
-  hudUnitAvanzado: { es: "embeddings · ℝ⁷⁶⁸", en: "embeddings · ℝ⁷⁶⁸" },
+  hudUnitAvanzado: {
+    es: "embeddings · ℝ⁷⁶⁸ · ~109M parámetros",
+    en: "embeddings · ℝ⁷⁶⁸ · ~109M parameters",
+  },
   hudWebgpu: { es: "WebGPU · compute activo", en: "WebGPU · compute active" },
   hudWebgl: { es: "WebGL · modo compatible", en: "WebGL · compatibility mode" },
   hudError: { es: "error al iniciar el motor 3D", en: "error starting the 3D engine" },

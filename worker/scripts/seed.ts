@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { SEED_CONCEPTS } from "../src/data/seedConcepts";
-import { pcaReduce, normalizeToCube } from "./pca";
+import { pcaReduce, normalizeToCube, type PcaBasis } from "./pca";
 
 const ACCOUNT_ID = "99c9300f175af0e76483b949f6c6acd1";
 const EMBEDDING_MODEL = "@cf/baai/bge-base-en-v1.5";
@@ -56,7 +56,23 @@ async function main() {
   }
 
   console.log("Reduciendo a 3D con PCA…");
-  const reduced = normalizeToCube(pcaReduce(embeddings, 3));
+  const CUBE_SCALE = 1.25;
+  const pca = pcaReduce(embeddings, 3);
+  const { points: reduced, maxAbs } = normalizeToCube(pca.points, CUBE_SCALE);
+
+  // La base de proyección se persiste junto al dataset: con ella el
+  // cliente puede proyectar embeddings NUEVOS (tokens/frases en vivo)
+  // al MISMO cubo que las partículas, sin re-correr PCA. Tiene que ser
+  // de esta misma corrida — cada corrida da ejes ligeramente distintos
+  // (la iteración de potencias arranca de vectores aleatorios), así que
+  // basis y coords deben salir juntos siempre.
+  const basis: PcaBasis = {
+    mean: pca.mean,
+    components: pca.components,
+    maxAbs,
+    cubeScale: CUBE_SCALE,
+  };
+  writeFileSync(join(OUT_DIR, "pca_basis.json"), JSON.stringify(basis));
 
   const withIds = SEED_CONCEPTS.map((concept, idx) => ({
     id: idx + 1,
@@ -109,6 +125,7 @@ async function main() {
   console.log("  concepts.sql      -> wrangler d1 execute vectron-db --remote --file=");
   console.log("  vectors.ndjson    -> wrangler vectorize insert vectron-concepts --file=");
   console.log("  concepts.json     -> wrangler r2 object put vectron-dataset/concepts.json --file=");
+  console.log("  pca_basis.json    -> wrangler r2 object put vectron-dataset/pca_basis.json --file=");
 }
 
 main().catch((err) => {

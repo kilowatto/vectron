@@ -18,7 +18,8 @@ import type { ModePickDetail } from "./ui/components/modeSelect";
 import { getStoredLang, setStoredLang, t } from "./i18n";
 import { fadeIn, fadeOut, tweenNumber } from "./ui/motion";
 import { tokenizeSimple } from "./tokenizer";
-import type { PartOfSpeech } from "./data/concepts";
+import { fetchCosinePairs, type PartOfSpeech } from "./data/concepts";
+import { setupTokenMode } from "./scene/tokenMode";
 
 // Principiante=sustantivos, Intermedio=+adjetivos, Avanzado=+verbos —
 // mismo diseño confirmado para el tipo de palabra visible por modo.
@@ -119,6 +120,25 @@ async function main() {
     defaultTopK: 6,
   });
 
+  // HUD: base por modo + sufijo de tokens vivos (modo token, Avanzado).
+  let baseCountText = "";
+  let liveTokenCount = 0;
+  function renderCountLabel() {
+    countLabel.textContent =
+      liveTokenCount > 0 ? `${baseCountText} + ${liveTokenCount} tokens` : baseCountText;
+  }
+
+  const tokenMode = setupTokenMode({
+    canvas,
+    camera: engine.camera,
+    field,
+    card,
+    onCountChange: (n) => {
+      liveTokenCount = n;
+      renderCountLabel();
+    },
+  });
+
   // Índice palabra/frase -> instancias del InstancedMesh, para resaltar
   // en el cubo qué partículas coinciden con el texto escrito y trazar
   // el camino entre ellas (mismo orden que las palabras en la frase).
@@ -176,6 +196,11 @@ async function main() {
       panel.setAttribute("hide-toggle", "");
       panel.setAttribute("hide-ids", "");
     }
+    if (mode === "avanzado") {
+      // Modo token: dos filas comparadas (GPT vs BGE) + partículas
+      // efímeras de tu frase embebidas en vivo.
+      panel.setAttribute("compare", "");
+    }
     panel.setAttribute(
       "placeholder",
       mode === "principiante"
@@ -186,7 +211,28 @@ async function main() {
       const { text } = (event as CustomEvent<TokensChangeDetail>).detail;
       const { matches, ordered } = findWordMatches(text);
       field.setSearchHighlights(matches);
-      field.setChainLines(ordered);
+      const chainObj = field.setChainLines(ordered);
+      if (chainObj && ordered.length >= 2) {
+        // Hover con similitud de coseno REAL por segmento: los vectores
+        // 768-d del dataset viven en Vectorize, así que se piden al
+        // worker (una llamada por frase, no por segmento).
+        const pairs: [number, number][] = [];
+        for (let i = 0; i < ordered.length - 1; i++) {
+          pairs.push([field.concepts[ordered[i]].id, field.concepts[ordered[i + 1]].id]);
+        }
+        fetchCosinePairs(pairs).then((scores) => {
+          // Si la línea ya fue reemplazada por otra frase, no tocarla.
+          if (!chainObj.parent) return;
+          chainObj.userData.segments = scores.map((s, i) => {
+            const a = field.concepts[ordered[i]].word;
+            const b = field.concepts[ordered[i + 1]].word;
+            const wa = lang === "en" ? a.en : a.es;
+            const wb = lang === "en" ? b.en : b.es;
+            return s === null ? "" : `${wa} ↔ ${wb} · cos(θ) = ${s.toFixed(3)}`;
+          });
+        });
+      }
+      tokenMode.setText(text);
     });
     stageEl.appendChild(panel);
     fadeIn(panel, { duration: 420, rise: 16 });
@@ -208,6 +254,7 @@ async function main() {
     card.configure({ simple: mode === "principiante", lang });
     interaction.setDefaultTopK(mode === "principiante" ? 5 : 6);
     interaction.reset();
+    tokenMode.setEnabled(mode === "avanzado");
     const visibleCount = field.setPartOfSpeechFilter(allowedPos);
 
     // El HUD también habla el idioma de cada modo: Principiante no dice
@@ -218,12 +265,12 @@ async function main() {
         : mode === "intermedio"
           ? t("hudUnitIntermedio", lang)
           : t("hudUnitAvanzado", lang);
-    const countText = `${visibleCount.toLocaleString(lang === "en" ? "en-US" : "es-MX")} ${countUnit}`;
+    baseCountText = `${visibleCount.toLocaleString(lang === "en" ? "en-US" : "es-MX")} ${countUnit}`;
     if (!tokenPanel) {
-      countLabel.textContent = countText;
+      renderCountLabel();
     } else {
       fadeOut(countLabel, { duration: 150 }).then(() => {
-        countLabel.textContent = countText;
+        renderCountLabel();
         fadeIn(countLabel, { duration: 200, rise: 0 });
       });
     }

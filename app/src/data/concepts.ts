@@ -43,3 +43,86 @@ export async function fetchSimilar(
   const body = await res.json();
   return body.ok ? body.neighbors : [];
 }
+
+/** Base de PCA de la corrida de seed vigente — para proyectar embeddings
+ * vivos (tokens/frase del modo token) al mismo cubo que las partículas. */
+export interface PcaBasis {
+  mean: number[];
+  components: number[][];
+  maxAbs: number[];
+  cubeScale: number;
+}
+
+export async function fetchPcaBasis(): Promise<PcaBasis | null> {
+  const res = await fetch(`${API_BASE}/api/pca-basis`);
+  if (!res.ok) return null;
+  return res.json();
+}
+
+/** Proyección de un embedding 768-d al cubo 3D con la base guardada —
+ * exactamente la misma aritmética que seed.ts aplicó al dataset:
+ * centrar con la media, producto punto con cada eje, escalar por eje. */
+export function projectWithBasis(vector: number[], basis: PcaBasis): [number, number, number] {
+  const out: number[] = [];
+  for (let c = 0; c < basis.components.length; c++) {
+    const comp = basis.components[c];
+    let dot = 0;
+    for (let i = 0; i < vector.length; i++) {
+      dot += (vector[i] - basis.mean[i]) * comp[i];
+    }
+    out.push(basis.maxAbs[c] > 0 ? (dot / basis.maxAbs[c]) * basis.cubeScale : 0);
+  }
+  return out as [number, number, number];
+}
+
+/** Embeddings reales en vivo — cada texto va a Workers AI con el mismo
+ * modelo del dataset (bge-base-en-v1.5) y regresa su vector 768-d. */
+export async function embedTexts(texts: string[]): Promise<number[][] | null> {
+  const res = await fetch(`${API_BASE}/api/embed`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ texts }),
+  });
+  if (!res.ok) return null;
+  const body = await res.json();
+  return body.ok ? body.vectors : null;
+}
+
+/** Similitud de coseno real entre pares de conceptos del dataset (por id). */
+export async function fetchCosinePairs(pairs: [number, number][]): Promise<(number | null)[]> {
+  const res = await fetch(`${API_BASE}/api/cosine`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pairs }),
+  });
+  if (!res.ok) return pairs.map(() => null);
+  const body = await res.json();
+  return body.ok ? body.scores : pairs.map(() => null);
+}
+
+/** Vecinos reales para un vector arbitrario (partícula de token en vivo). */
+export async function fetchSimilarByVector(vector: number[], topK = 6): Promise<Neighbor[]> {
+  const res = await fetch(`${API_BASE}/api/similar-by-vector`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ vector, topK }),
+  });
+  if (!res.ok) return [];
+  const body = await res.json();
+  return body.ok ? body.neighbors : [];
+}
+
+/** Coseno local entre dos vectores crudos (para líneas del modo token,
+ * donde el cliente ya tiene ambos vectores — sin llamada extra). */
+export function cosineLocal(a: number[], b: number[]): number {
+  let dot = 0;
+  let na = 0;
+  let nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
+  }
+  const denom = Math.sqrt(na) * Math.sqrt(nb);
+  return denom > 0 ? dot / denom : 0;
+}

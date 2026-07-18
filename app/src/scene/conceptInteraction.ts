@@ -2,6 +2,8 @@ import * as THREE from "three/webgpu";
 import { fetchSimilar } from "../data/concepts";
 import type { ParticleField } from "./particleField";
 import type { VxConceptCard, NeighborView, TopKChangeDetail } from "../ui/components/conceptCard";
+import { LineHoverTooltip } from "./lineHover";
+import { getStoredLang } from "../i18n";
 
 export interface ConceptInteractionOptions {
   canvas: HTMLCanvasElement;
@@ -31,9 +33,17 @@ export function setupConceptInteraction(options: ConceptInteractionOptions): Con
 
   const raycaster = new THREE.Raycaster();
   const pointerNdc = new THREE.Vector2();
+  const lineHover = new LineHoverTooltip(canvas.parentElement!);
   let hoveredId: number | null = null;
   let lastPointer = { x: 0, y: 0 };
   let currentPinnedInstanceId: number | null = null;
+
+  function setRayFrom(clientX: number, clientY: number) {
+    const rect = canvas.getBoundingClientRect();
+    pointerNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    pointerNdc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointerNdc, camera);
+  }
 
   // id de Vectorize/D1 (1-based, estable) -> índice de instancia en el
   // InstancedMesh (0-based, orden de llegada del array).
@@ -41,10 +51,7 @@ export function setupConceptInteraction(options: ConceptInteractionOptions): Con
   field.concepts.forEach((c, i) => idToInstanceId.set(c.id, i));
 
   function pickInstance(clientX: number, clientY: number): number | null {
-    const rect = canvas.getBoundingClientRect();
-    pointerNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-    pointerNdc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
-    raycaster.setFromCamera(pointerNdc, camera);
+    setRayFrom(clientX, clientY);
     const hits = raycaster.intersectObject(field.mesh);
     // Con foco activo (búsqueda o partícula fijada), las atenuadas no
     // deben "atrapar" el cursor — sólo las que siguen a brillo normal
@@ -70,7 +77,18 @@ export function setupConceptInteraction(options: ConceptInteractionOptions): Con
       neighborInstanceIds.push(nInstanceId);
       views.push({ concept: field.concepts[nInstanceId], score: n.score });
     }
-    field.setSimilarityLines(instanceId, neighborInstanceIds);
+    const lineObj = field.setSimilarityLines(instanceId, neighborInstanceIds);
+    if (lineObj) {
+      // Hover sobre cada rayo muestra su similitud de coseno real — el
+      // mismo score de Vectorize que aparece en la tarjeta. Un segmento
+      // por vecino, mismo orden en que se generaron las polilíneas.
+      const lang = getStoredLang();
+      const srcWord = lang === "en" ? concept.word.en : concept.word.es;
+      lineObj.userData.segments = views.map((v) => {
+        const w = lang === "en" ? v.concept.word.en : v.concept.word.es;
+        return `${srcWord} ↔ ${w} · cos(θ) = ${v.score.toFixed(3)}`;
+      });
+    }
     field.setSearchHighlights(neighborInstanceIds);
     card.showPinned(concept, views, topK);
   }
@@ -101,8 +119,22 @@ export function setupConceptInteraction(options: ConceptInteractionOptions): Con
 
   canvas.addEventListener("pointermove", (event) => {
     lastPointer = { x: event.clientX, y: event.clientY };
-    if (card.isPinned()) return;
+    // El hover de líneas corre incluso con la tarjeta fijada — las
+    // líneas naranjas de vecinos SÓLO existen mientras hay pin, así que
+    // este es justo el momento en que su coseno interesa.
+    if (card.isPinned()) {
+      setRayFrom(event.clientX, event.clientY);
+      lineHover.tryShow(raycaster, event.clientX, event.clientY);
+      return;
+    }
     const instanceId = pickInstance(event.clientX, event.clientY);
+    if (instanceId === null) {
+      // Sin partícula bajo el cursor: probar líneas (el ray ya quedó
+      // puesto por pickInstance).
+      lineHover.tryShow(raycaster, event.clientX, event.clientY);
+    } else {
+      lineHover.hide();
+    }
     if (instanceId === hoveredId) return;
     hoveredId = instanceId;
     field.setPointerHighlight(instanceId);
