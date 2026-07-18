@@ -73,3 +73,15 @@
 .line.cyan {
   background: #4fb8c4;
 }
+
+/* Móvil: chrome secundario fuera — en una pantalla angosta esto
+   terminaba amontonado e ilegible encima de la llave de colores (bug
+   real, reportado con captura por el usuario). El cubo + composer +
+   franja de tokens son lo esencial; esta leyenda es una ayuda de
+   escritorio, no algo que valga la pena rescatar a costa de legibilidad
+   en el teléfono. */
+@media (max-width: 640px) {
+  :host {
+    display: none;
+  }
+}

@@ -66,3 +66,14 @@
   white-space: nowrap;
   pointer-events: none;
 }
+
+/* Móvil: el pinch de dos dedos ya hace esto nativamente (OrbitControls);
+   un rail de 28px de hit-area es más chico de lo recomendable para
+   touch (44px) y es una superficie más para tocar por accidente en una
+   pantalla ya apretada — fuera, mismo criterio que la leyenda/llave de
+   colores (reportado por el usuario con captura). */
+@media (max-width: 640px) {
+  :host {
+    display: none;
+  }
+}

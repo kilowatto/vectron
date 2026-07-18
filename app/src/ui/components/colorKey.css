@@ -103,3 +103,11 @@
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
+
+/* Móvil: mismo criterio que <vx-kind-legend> — fuera. Se amontonaba
+   con la leyenda en el mismo rincón, ilegible en pantalla angosta. */
+@media (max-width: 640px) {
+  :host {
+    display: none;
+  }
+}
