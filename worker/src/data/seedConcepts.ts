@@ -2558,4 +2558,30 @@ export const SEED_CONCEPTS: SeedConcept[] = [
     const [es, en] = pair.split(",");
     return { wordEs: es, wordEn: en, domain: "astronomia", taxonomy: ["astronomia", "constelacion"], traits: { tipo: "constelacion" } };
   }),
+
+  // --- Biología: ecosistemas ---
+  ...[
+    "arrecife de coral,coral reef", "manglar,mangrove forest", "pradera,grassland",
+    "bosque templado,temperate forest", "bosque boreal,boreal forest",
+    "humedal,wetland", "estuario,estuary", "cadena alimenticia,food chain",
+    "ecosistema,ecosystem", "biodiversidad,biodiversity",
+    "especie en peligro,endangered species", "depredador,predator",
+    "presa (animal),prey (animal)", "simbiosis,symbiosis", "mutualismo,mutualism",
+    "parasitismo,parasitism", "fotosíntesis,photosynthesis",
+    "respiración celular,cellular respiration",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "biologia_animal", taxonomy: ["biologia", "ecosistema"], traits: { tipo: "ecosistema" } };
+  }),
+
+  // --- Historia: ampliación ---
+  ...[
+    "revolución digital,digital revolution", "era espacial,space age",
+    "conferencia de yalta,yalta conference", "bloque soviético,soviet bloc",
+    "perestroika,perestroika", "glasnost,glasnost", "gran depresión,great depression",
+    "fiebre del oro,gold rush", "revolución verde,green revolution",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "historia", taxonomy: ["historia", "evento"], traits: { tipo: "evento" } };
+  }),
 ];
