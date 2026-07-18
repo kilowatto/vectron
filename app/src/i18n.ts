@@ -101,6 +101,9 @@ const STRINGS = {
   domainQuimica: { es: "Química", en: "Chemistry" },
   domainTecnologia: { es: "Tecnología", en: "Technology" },
   domainCualidadesYAcciones: { es: "Cualidades y acciones", en: "Qualities and actions" },
+  domainDeportes: { es: "Deportes", en: "Sports" },
+  domainGastronomia: { es: "Gastronomía", en: "Gastronomy" },
+  domainMusica: { es: "Música", en: "Music" },
 
   // --- HUD ---
   hudLoading: { es: "cargando…", en: "loading…" },

@@ -32,6 +32,9 @@ export const DOMAIN_HUES: Record<string, number> = {
   quimica: 0x2ee6a8,
   tecnologia: 0x2196f3,
   cualidades_y_acciones: 0xf0e6d2,
+  deportes: 0xe63946,
+  gastronomia: 0xff6b4a,
+  musica: 0xe05fc4,
 };
 
 const FALLBACK_HUE = 0x9aa5ad;
