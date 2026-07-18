@@ -117,6 +117,7 @@ const STRINGS = {
   domainVideojuegos: { es: "Videojuegos", en: "Video Games" },
   domainFestividades: { es: "Festividades", en: "Holidays" },
   domainFilosofia: { es: "Filosofía", en: "Philosophy" },
+  domainIdiomas: { es: "Idiomas", en: "Languages" },
 
   // --- HUD ---
   hudLoading: { es: "cargando…", en: "loading…" },

@@ -2517,4 +2517,45 @@ export const SEED_CONCEPTS: SeedConcept[] = [
     const [es, en] = pair.split(",");
     return { wordEs: es, wordEn: en, domain: "arte_y_cultura", taxonomy: ["arte_y_cultura", "movimiento"], traits: { tipo: "movimiento_artistico" } };
   }),
+
+  // --- Idiomas (dominio nuevo, lenguas habladas — distinto de los
+  // lenguajes de programación del dominio "programacion"). ---
+  ...[
+    "español,spanish", "inglés,english", "mandarín,mandarin chinese", "hindi,hindi",
+    "árabe,arabic", "francés,french", "bengalí,bengali", "portugués,portuguese",
+    "ruso,russian", "urdu,urdu", "indonesio,indonesian", "alemán,german",
+    "japonés,japanese", "swahili,swahili", "maratí,marathi", "telugu,telugu",
+    "turco (idioma),turkish (language)", "tamil,tamil", "coreano,korean",
+    "vietnamita,vietnamese", "italiano,italian", "persa,persian", "polaco,polish",
+    "ucraniano,ukrainian", "holandés,dutch", "griego (idioma),greek (language)",
+    "hebreo,hebrew", "tailandés,thai", "catalán,catalan", "náhuatl,nahuatl",
+    "quechua,quechua",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "idiomas", taxonomy: ["idiomas", "concepto"], traits: { tipo: "idioma" } };
+  }),
+
+  // --- Materiales: más minerales y gemas ---
+  ...[
+    "rubí,ruby", "zafiro,sapphire", "ópalo,opal", "topacio,topaz",
+    "amatista,amethyst", "peridoto,peridot", "aguamarina,aquamarine",
+    "lapislázuli,lapis lazuli", "pirita,pyrite", "calcita,calcite",
+    "feldespato,feldspar", "basalto,basalt", "pizarra,slate", "caliza,limestone",
+    "arenisca,sandstone",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "materiales", taxonomy: ["materiales", "no_metal"], traits: { esMetal: false } };
+  }),
+
+  // --- Astronomía: constelaciones ---
+  ...[
+    "osa mayor,ursa major", "osa menor,ursa minor", "orión,orion",
+    "casiopea,cassiopeia", "escorpio (constelación),scorpius (constellation)",
+    "tauro (constelación),taurus (constellation)", "leo (constelación),leo (constellation)",
+    "cruz del sur,southern cross", "andrómeda (constelación),andromeda (constellation)",
+    "can mayor,canis major",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "astronomia", taxonomy: ["astronomia", "constelacion"], traits: { tipo: "constelacion" } };
+  }),
 ];

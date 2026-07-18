@@ -48,6 +48,7 @@ export const DOMAIN_HUES: Record<string, number> = {
   videojuegos: 0x7209b7,
   festividades: 0xf72585,
   filosofia: 0x8d99ae,
+  idiomas: 0xffc857,
 };
 
 const FALLBACK_HUE = 0x9aa5ad;
