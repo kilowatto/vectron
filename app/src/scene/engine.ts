@@ -50,7 +50,11 @@ export async function createEngine(canvas: HTMLCanvasElement): Promise<Engine> {
 
   const scenePass = pass(scene, camera);
   const scenePassColor = scenePass.getTextureNode("output");
-  const bloomPass = bloom(scenePassColor, 0.32, 0.18, 0.45);
+  // threshold subido (0.45->0.62): con miles de partículas, zonas
+  // densas de traslape aditivo llegaban al umbral de bloom sólo por
+  // acumulación, no por brillo real — eso es lo que blanqueaba el
+  // cubo. strength bajado un poco también (0.32->0.24).
+  const bloomPass = bloom(scenePassColor, 0.24, 0.18, 0.62);
   const renderPipeline = new THREE.RenderPipeline(renderer);
   renderPipeline.outputNode = scenePassColor.add(bloomPass);
 

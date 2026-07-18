@@ -116,7 +116,11 @@ export function createParticleField(
   const mesh = new THREE.InstancedMesh(geometry, material, count);
   const dummy = new THREE.Object3D();
 
-  const baseScaleOf = (concept: Concept) => (concept.distinctiveTrait ? 1.25 : 0.85);
+  // Más chicas que antes: a miles de partículas, el traslape en pantalla
+  // de blending aditivo (colores que se SUMAN, no se tapan) empieza a
+  // verse blanco/gris en las zonas densas — bajar el tamaño reduce
+  // cuántas se traslapan por pixel sin perder el efecto de brillo.
+  const baseScaleOf = (concept: Concept) => (concept.distinctiveTrait ? 1.0 : 0.62);
 
   concepts.forEach((concept, i) => {
     const hue = DOMAIN_HUES[concept.domain] ?? FALLBACK_HUE;
@@ -163,7 +167,10 @@ export function createParticleField(
   geometry.setAttribute("instanceHighlight", highlightAttribute);
   geometry.setAttribute("instanceFocus", focusAttribute);
 
-  const glowStrength = uniform(0.75);
+  // Bajado de 0.75 — con miles de partículas el brillo de borde de cada
+  // una se acumula con las vecinas (blending aditivo) y termina
+  // "quemando" a blanco zonas densas del cubo.
+  const glowStrength = uniform(0.5);
   const instanceColor = attribute<"vec3">("instanceColor", "vec3");
   const instancePhase = attribute<"float">("instancePhase", "float");
   const instanceHighlight = attribute<"float">("instanceHighlight", "float");
@@ -180,8 +187,12 @@ export function createParticleField(
 
   material.colorNode = Fn(() => {
     const base = color(instanceColor);
+    // 0.22 -> 0.14: el "piso" de brillo ambiente de cada partícula es lo
+    // que más se acumula en zonas densas (siempre está encendido, a
+    // diferencia del rim/highlight que son condicionales) — bajarlo es
+    // lo que más ayuda contra el blanqueo por traslape.
     const glow = base.mul(
-      float(0.22).add(rim.mul(glowStrength)).add(instanceHighlight),
+      float(0.14).add(rim.mul(glowStrength)).add(instanceHighlight),
     );
     return vec3(glow).mul(pulse).mul(instanceFocus);
   })();
