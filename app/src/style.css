@@ -179,3 +179,252 @@ body {
   color: var(--dim);
   letter-spacing: 0.04em;
 }
+
+#token-panel {
+  position: fixed;
+  z-index: 15;
+  top: clamp(16px, 3vw, 36px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(600px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: rgba(10, 13, 17, 0.82);
+  border: 1px solid rgba(231, 226, 214, 0.14);
+  backdrop-filter: blur(6px);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+#token-panel .row {
+  display: flex;
+  gap: 10px;
+}
+
+#token-panel input {
+  flex: 1;
+  background: rgba(231, 226, 214, 0.06);
+  border: 1px solid rgba(231, 226, 214, 0.16);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  outline: none;
+}
+
+#token-panel input:focus {
+  border-color: var(--accent);
+}
+
+#token-panel .toggle {
+  display: flex;
+  border: 1px solid rgba(231, 226, 214, 0.16);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+#token-panel .toggle button {
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+  padding: 0 10px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+#token-panel .toggle button.active {
+  background: var(--accent);
+  color: #1a0f04;
+  font-weight: 600;
+}
+
+#token-panel .examples {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+#token-panel .example {
+  background: none;
+  border: 1px solid rgba(231, 226, 214, 0.14);
+  color: var(--dim);
+  border-radius: 12px;
+  padding: 3px 10px;
+  font-size: 10.5px;
+  cursor: pointer;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+#token-panel .example:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+#token-panel .tokens {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-height: 24px;
+}
+
+#token-panel .token {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  background: rgba(217, 138, 52, 0.14);
+  border: 1px solid rgba(217, 138, 52, 0.35);
+  border-radius: 5px;
+  padding: 3px 7px;
+  font-size: 12px;
+  color: var(--ink);
+}
+
+#token-panel .token small {
+  color: var(--accent);
+  font-size: 9.5px;
+}
+
+#advanced-toggle {
+  position: fixed;
+  z-index: 16;
+  top: clamp(16px, 3vw, 36px);
+  right: clamp(16px, 3vw, 36px);
+  background: rgba(10, 13, 17, 0.82);
+  border: 1px solid rgba(231, 226, 214, 0.16);
+  color: var(--dim);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+
+#advanced-toggle.active {
+  color: #1a0f04;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+#advanced-panel {
+  position: fixed;
+  z-index: 17;
+  top: clamp(64px, 9vw, 90px);
+  right: clamp(16px, 3vw, 36px);
+  width: min(360px, calc(100vw - 32px));
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+  background: rgba(8, 10, 14, 0.94);
+  border: 1px solid rgba(231, 226, 214, 0.16);
+  border-radius: 10px;
+  backdrop-filter: blur(10px);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+#advanced-panel .adv-scroll {
+  padding: 18px 20px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+#advanced-panel h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--accent);
+}
+
+#advanced-panel p {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--dim);
+  margin: 0;
+}
+
+#advanced-panel .adv-note {
+  color: var(--ink);
+  opacity: 0.85;
+}
+
+#advanced-panel .adv-step {
+  border-top: 1px solid rgba(231, 226, 214, 0.1);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#advanced-panel .adv-formula {
+  overflow-x: auto;
+  color: var(--ink);
+}
+
+#advanced-panel .adv-formula .katex {
+  font-size: 1em;
+}
+
+#advanced-panel .adv-formula .katex-display {
+  margin: 0;
+}
+
+#advanced-panel .tensor-graph {
+  width: 100%;
+  margin-top: 4px;
+}
+
+#advanced-panel .node {
+  fill: rgba(217, 138, 52, 0.1);
+  stroke: rgba(217, 138, 52, 0.55);
+  stroke-width: 1;
+}
+
+#advanced-panel .node-label {
+  fill: var(--ink);
+  font-size: 11px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+#advanced-panel .node-sub {
+  fill: var(--dim);
+  font-size: 9px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+#advanced-panel .edge {
+  stroke: rgba(231, 226, 214, 0.35);
+  stroke-width: 1.2;
+}
+
+#advanced-panel .arrowhead {
+  fill: rgba(231, 226, 214, 0.35);
+}
+
+#advanced-panel .adv-footnote {
+  border-top: 1px solid rgba(231, 226, 214, 0.1);
+  padding-top: 12px;
+  font-size: 11px;
+}
+
+#advanced-panel .adv-cite {
+  font-size: 10.5px;
+  font-style: italic;
+}
+
+#advanced-panel .adv-cite a {
+  color: var(--accent-2, var(--accent));
+}
+
+#advanced-panel .adv-todo {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.6;
+}

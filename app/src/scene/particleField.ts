@@ -35,7 +35,8 @@ export interface ParticleField {
   group: THREE.Group;
   count: number;
   concepts: Concept[];
-  setHighlight: (instanceId: number | null) => void;
+  setPointerHighlight: (instanceId: number | null) => void;
+  setSearchHighlights: (instanceIds: number[]) => void;
 }
 
 /**
@@ -115,15 +116,34 @@ export function createParticleField(concepts: Concept[]): ParticleField {
   const group = new THREE.Group();
   group.add(mesh);
 
-  let highlighted: number | null = null;
-  function setHighlight(instanceId: number | null) {
-    if (highlighted !== null) highlightAttrArray[highlighted] = 0;
-    if (instanceId !== null) highlightAttrArray[instanceId] = 1.1;
-    highlighted = instanceId;
+  let pointerId: number | null = null;
+  let searchIds: number[] = [];
+
+  function recomputeHighlights() {
+    highlightAttrArray.fill(0);
+    for (const id of searchIds) highlightAttrArray[id] = 0.55;
+    if (pointerId !== null) highlightAttrArray[pointerId] = 1.1;
     highlightAttribute.needsUpdate = true;
   }
 
-  return { mesh, group, count, concepts, setHighlight };
+  function setPointerHighlight(instanceId: number | null) {
+    pointerId = instanceId;
+    recomputeHighlights();
+  }
+
+  function setSearchHighlights(instanceIds: number[]) {
+    searchIds = instanceIds;
+    recomputeHighlights();
+  }
+
+  return {
+    mesh,
+    group,
+    count,
+    concepts,
+    setPointerHighlight,
+    setSearchHighlights,
+  };
 }
 
 export function spinField(field: ParticleField, dt: number): void {
