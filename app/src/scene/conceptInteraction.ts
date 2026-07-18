@@ -46,6 +46,14 @@ export function setupConceptInteraction(options: ConceptInteractionOptions): Con
     pointerNdc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(pointerNdc, camera);
     const hits = raycaster.intersectObject(field.mesh);
+    // Con foco activo (búsqueda o partícula fijada), las atenuadas no
+    // deben "atrapar" el cursor — sólo las que siguen a brillo normal
+    // son alcanzables, así es fácil aterrizar justo en la que importa.
+    const focusedIds = field.getFocusedIds();
+    if (focusedIds) {
+      const hit = hits.find((h) => h.instanceId !== undefined && focusedIds.has(h.instanceId));
+      return hit?.instanceId ?? null;
+    }
     return hits.length > 0 ? (hits[0].instanceId ?? null) : null;
   }
 

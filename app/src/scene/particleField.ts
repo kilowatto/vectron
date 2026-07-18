@@ -45,6 +45,11 @@ export interface ParticleField {
   /** Fijar (clic) es distinto de sólo pasar el cursor: atenúa el resto
    * del cubo (junto con las aristas, vía onFocusChange) — hover no. */
   setPinnedFocus: (active: boolean) => void;
+  /** Qué instancias siguen "activas" para hover/clic cuando hay foco
+   * (búsqueda o partícula fijada) — `null` cuando no hay foco, todas
+   * responden normal. Evita atrapar el cursor en una partícula
+   * atenuada cuando lo que se quiere tocar es la que sí importa. */
+  getFocusedIds: () => Set<number> | null;
   setSimilarityLines: (
     sourceInstanceId: number | null,
     neighborInstanceIds: number[],
@@ -151,20 +156,29 @@ export function createParticleField(
   let searchIds: number[] = [];
   let pinnedFocus = false;
   let focusActive = false;
+  let focusedIds: Set<number> | null = null;
 
   function recomputeHighlights() {
     const active = searchIds.length > 0 || pinnedFocus;
-    const dim = active ? 0.05 : 1;
+    // Atenuado real pero no "casi invisible" — se veía demasiado
+    // agresivo en la práctica, hay que poder seguir ubicando el resto
+    // del cubo como contexto.
+    const dim = active ? 0.16 : 1;
     highlightAttrArray.fill(0);
     focusAttrArray.fill(dim);
+    const nowFocused = active ? new Set(searchIds) : null;
     for (const id of searchIds) {
       highlightAttrArray[id] = 0.55;
       focusAttrArray[id] = 1;
     }
     if (pointerId !== null) {
       highlightAttrArray[pointerId] = 1.1;
-      if (active) focusAttrArray[pointerId] = 1;
+      if (active) {
+        focusAttrArray[pointerId] = 1;
+        nowFocused?.add(pointerId);
+      }
     }
+    focusedIds = nowFocused;
     highlightAttribute.needsUpdate = true;
     focusAttribute.needsUpdate = true;
 
@@ -177,6 +191,10 @@ export function createParticleField(
   function setPointerHighlight(instanceId: number | null) {
     pointerId = instanceId;
     recomputeHighlights();
+  }
+
+  function getFocusedIds(): Set<number> | null {
+    return focusedIds;
   }
 
   function setSearchHighlights(instanceIds: number[]) {
@@ -235,6 +253,7 @@ export function createParticleField(
     setPointerHighlight,
     setSearchHighlights,
     setPinnedFocus,
+    getFocusedIds,
     setSimilarityLines,
     setChainLines,
   };
