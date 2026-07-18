@@ -2370,4 +2370,53 @@ export const SEED_CONCEPTS: SeedConcept[] = [
     const [es, en] = pair.split(",");
     return { wordEs: es, wordEn: en, domain: "herramientas", taxonomy: ["herramientas", "concepto"], traits: { tipo: "herramienta" } };
   }),
+
+  // --- Biología animal: dinosaurios ---
+  animal("tiranosaurio rex", "tyrannosaurus rex", ["dinosaurio"], { legs: 2, hasWings: false, vertebrado: true, dieta: "carnivoro" }, "carnivoro"),
+  animal("velociraptor", "velociraptor", ["dinosaurio"], { legs: 2, hasWings: false, vertebrado: true, dieta: "carnivoro" }),
+  animal("triceratops", "triceratops", ["dinosaurio"], { legs: 4, hasWings: false, vertebrado: true, dieta: "herbivoro" }),
+  animal("estegosaurio", "stegosaurus", ["dinosaurio"], { legs: 4, hasWings: false, vertebrado: true, dieta: "herbivoro" }),
+  animal("braquiosaurio", "brachiosaurus", ["dinosaurio"], { legs: 4, hasWings: false, vertebrado: true, dieta: "herbivoro" }, "carnivoro"),
+  animal("pterodáctilo", "pterodactyl", ["dinosaurio"], { legs: 2, hasWings: true, vertebrado: true, dieta: "carnivoro" }, "alas"),
+  animal("diplodocus", "diplodocus", ["dinosaurio"], { legs: 4, hasWings: false, vertebrado: true, dieta: "herbivoro" }),
+  animal("anquilosaurio", "ankylosaurus", ["dinosaurio"], { legs: 4, hasWings: false, vertebrado: true, dieta: "herbivoro" }),
+  animal("espinosaurio", "spinosaurus", ["dinosaurio"], { legs: 2, hasWings: false, vertebrado: true, dieta: "carnivoro" }),
+  animal("arqueoptérix", "archaeopteryx", ["dinosaurio"], { legs: 2, hasWings: true, vertebrado: true, dieta: "carnivoro" }, "alas"),
+
+  // --- Matemáticas: formas geométricas ---
+  ...[
+    "cuadrado,square", "rectángulo,rectangle", "pentágono,pentagon",
+    "hexágono,hexagon", "octágono,octagon", "rombo,rhombus", "trapecio,trapezoid",
+    "cubo (geometría),cube (geometry)", "cilindro,cylinder", "cono,cone",
+    "pirámide (geometría),pyramid (geometry)", "prisma,prism", "óvalo,oval",
+    "elipse,ellipse", "espiral,spiral",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "matematicas", taxonomy: ["matematicas", "geometria"], traits: { abstracto: true } };
+  }),
+
+  // --- Videojuegos (dominio nuevo) ---
+  ...[
+    "consola de videojuegos,video game console", "control de videojuego,game controller",
+    "avatar,avatar", "nivel (videojuego),game level",
+    "personaje jugable,playable character", "puntaje,game score", "esports,esports",
+    "streamer,streamer", "minecraft,minecraft", "mario,mario", "pokémon,pokemon",
+    "arcade,arcade", "joystick,joystick",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "videojuegos", taxonomy: ["videojuegos", "concepto"], traits: { tipo: "videojuego" } };
+  }),
+
+  // --- Festividades (dominio nuevo) ---
+  ...[
+    "navidad,christmas", "año nuevo,new year", "halloween,halloween",
+    "día de muertos,day of the dead", "pascua,easter", "hanukkah,hanukkah",
+    "ramadán,ramadan", "día de acción de gracias,thanksgiving",
+    "día de la independencia,independence day", "carnaval,carnival",
+    "cumpleaños,birthday", "boda,wedding", "año nuevo chino,chinese new year",
+    "diwali,diwali",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "festividades", taxonomy: ["festividades", "concepto"], traits: { tipo: "festividad" } };
+  }),
 ];

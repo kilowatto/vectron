@@ -114,6 +114,8 @@ const STRINGS = {
   domainRopa: { es: "Ropa", en: "Clothing" },
   domainClima: { es: "Clima", en: "Weather" },
   domainHerramientas: { es: "Herramientas", en: "Tools" },
+  domainVideojuegos: { es: "Videojuegos", en: "Video Games" },
+  domainFestividades: { es: "Festividades", en: "Holidays" },
 
   // --- HUD ---
   hudLoading: { es: "cargando…", en: "loading…" },
