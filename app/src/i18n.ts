@@ -133,6 +133,7 @@ const STRINGS = {
   domainFestividades: { es: "Festividades", en: "Holidays" },
   domainFilosofia: { es: "Filosofía", en: "Philosophy" },
   domainIdiomas: { es: "Idiomas", en: "Languages" },
+  domainGramatica: { es: "Gramática", en: "Grammar" },
   domainTokenVivo: { es: "Token en vivo", en: "Live token" },
 
   // --- HUD ---

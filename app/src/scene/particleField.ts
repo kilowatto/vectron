@@ -50,6 +50,10 @@ export const DOMAIN_HUES: Record<string, number> = {
   festividades: 0xf72585,
   filosofia: 0x8d99ae,
   idiomas: 0xffc857,
+  // Palabras función (artículos, preposiciones, conjunciones, pronombres,
+  // cópulas) — gris-azulado neutro a propósito: no son un "tema", son la
+  // gramática que conecta a los demás dominios.
+  gramatica: 0x8a94a6,
   // Modo token (Avanzado): partículas efímeras de tu frase, no dataset.
   token_vivo: 0x39ff6a,
 };

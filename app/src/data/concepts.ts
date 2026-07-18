@@ -1,4 +1,4 @@
-export type PartOfSpeech = "sustantivo" | "adjetivo" | "verbo";
+export type PartOfSpeech = "sustantivo" | "adjetivo" | "verbo" | "funcion" | "adverbio";
 
 export interface Concept {
   id: number;

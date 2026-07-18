@@ -1,4 +1,4 @@
-export type PartOfSpeech = "sustantivo" | "adjetivo" | "verbo";
+export type PartOfSpeech = "sustantivo" | "adjetivo" | "verbo" | "funcion" | "adverbio";
 
 export interface SeedConcept {
   wordEs: string;
@@ -2584,4 +2584,281 @@ export const SEED_CONCEPTS: SeedConcept[] = [
     const [es, en] = pair.split(",");
     return { wordEs: es, wordEn: en, domain: "historia", taxonomy: ["historia", "evento"], traits: { tipo: "evento" } };
   }),
+
+  // --- Gramática (dominio nuevo, P0): pack de palabras función —
+  // artículos, pronombres, preposiciones, conjunciones, interrogativos,
+  // cópulas/auxiliares. Clase gramatical cerrada y chica a propósito
+  // (ver DOCs/09-funcion-pack.md) — visible desde Principiante, es lo
+  // que permite que frases como "el agujero negro está en la vía
+  // láctea" se iluminen completas ahí, no sólo el sustantivo.
+  //
+  // REGLA (corregida con datos reales de scripts/phraseCoverage.ts):
+  // wordEs/wordEn son SIEMPRE la forma superficial literal, sin
+  // paréntesis ni "/" combinando alternativas — el emparejamiento de
+  // frases (main.ts findWordMatches) busca la clave EXACTA en minúsculas,
+  // no substrings ni alternativas separadas por "/". Un primer intento
+  // de "colapsar por lema" (ej. wordEs:"el / la / los / las" en una sola
+  // entrada) rompía el match de "el"/"la" sueltos en las frases héroe —
+  // se detectó corriendo el propio script de cobertura, no a ojo.
+  //
+  // Toda aclaración (persona, lema asociado, sentido) vive en `traits`,
+  // nunca en el texto. Homógrafos entre categorías gramaticales (ej.
+  // "la" artículo vs "la" pronombre clítico, "bajo" preposición vs
+  // "bajo" adjetivo ya existente en cualidades_y_acciones) se aceptan
+  // como entradas separadas con el mismo wordEs — el wordIndex de la
+  // app ya soporta varios conceptos por clave (ver main.ts wordIndex),
+  // así que no es un bug, es el mismo patrón de homónimos que café/
+  // sabana pero sin sufijo textual porque aquí la categoría gramatical
+  // (taxonomy) ya los distingue.
+
+  // Artículos (8 — cada forma flexionada por separado, se pierde la
+  // agrupación en un solo texto pero se gana que "la"/"los"/"las" sueltas
+  // en una frase real sí iluminen su partícula).
+  ...[
+    ["el", "the", "articulo_definido"],
+    ["la", "the", "articulo_definido"],
+    ["los", "the", "articulo_definido"],
+    ["las", "the", "articulo_definido"],
+    ["un", "a", "articulo_indefinido"],
+    ["una", "a", "articulo_indefinido"],
+    ["unos", "some", "articulo_indefinido"],
+    ["unas", "some", "articulo_indefinido"],
+  ].map(([es, en, tipo]) => ({
+    wordEs: es,
+    wordEn: en,
+    domain: "gramatica",
+    taxonomy: ["gramatica", "articulo"],
+    traits: { tipo },
+    partOfSpeech: "funcion" as const,
+  })),
+
+  // Pronombres personales (10). Varias formas ES comparten el mismo
+  // gloss EN (tú/usted/vosotros/ustedes -> "you"; ellos/ellas -> "they")
+  // — eso es correcto, el inglés no marca esa distinción; `traits.nota`
+  // guarda la aclaración que antes iba entre paréntesis en el texto.
+  ...[
+    ["yo", "I", ""],
+    ["tú", "you", "informal"],
+    ["usted", "you", "formal"],
+    ["él", "he", ""],
+    ["ella", "she", ""],
+    ["nosotros", "we", ""],
+    ["vosotros", "you", "plural, España"],
+    ["ustedes", "you", "plural, LatAm/formal"],
+    ["ellos", "they", "masc./mixto"],
+    ["ellas", "they", "fem."],
+  ].map(([es, en, nota]) => ({
+    wordEs: es,
+    wordEn: en,
+    domain: "gramatica",
+    taxonomy: ["gramatica", "pronombre_personal"],
+    traits: nota ? { tipo: "pronombre_personal", nota } : { tipo: "pronombre_personal" },
+    partOfSpeech: "funcion" as const,
+  })),
+
+  // Pronombres clíticos (11) — "la"/"los"/"las" son homógrafos reales
+  // con los artículos de arriba (mismo wordEs, concepto distinto,
+  // taxonomy los distingue) — aceptado, ver nota general.
+  ...[
+    ["me", "me", ""],
+    ["te", "you", ""],
+    ["se", "oneself", "reflexivo/recíproco/impersonal — multifunción, una sola entrada por ahora"],
+    ["lo", "him", "objeto directo"],
+    ["la", "her", "objeto directo — homógrafo del artículo"],
+    ["los", "them", "objeto directo masc. — homógrafo del artículo"],
+    ["las", "them", "objeto directo fem. — homógrafo del artículo"],
+    ["le", "him", "objeto indirecto"],
+    ["les", "them", "objeto indirecto"],
+    ["nos", "us", ""],
+    ["os", "you", "plural, España, clítico"],
+  ].map(([es, en, nota]) => ({
+    wordEs: es,
+    wordEn: en,
+    domain: "gramatica",
+    taxonomy: ["gramatica", "pronombre_clitico"],
+    traits: nota ? { tipo: "pronombre_clitico", nota } : { tipo: "pronombre_clitico" },
+    partOfSpeech: "funcion" as const,
+  })),
+
+  // Preposiciones (23) — "bajo" es homógrafo real del adjetivo "bajo"
+  // (short/low) ya sembrado en cualidades_y_acciones; "para"/"por" y
+  // "sobre"/"tras" comparten gloss en inglés a propósito (mismo
+  // fenómeno que ser/estar: el español distingue lo que el inglés no).
+  ...[
+    ["a", "to", ""],
+    ["ante", "before", "en frente de"],
+    ["bajo", "under", "homógrafo del adjetivo 'bajo' (short/low)"],
+    ["con", "with", ""],
+    ["contra", "against", ""],
+    ["de", "of", "alt. 'from' según contexto"],
+    ["desde", "from", "también 'since'"],
+    ["durante", "during", ""],
+    ["en", "in", "alt. 'on'/'at' según contexto"],
+    ["entre", "between", ""],
+    ["hacia", "toward", ""],
+    ["hasta", "until", "también 'up to'"],
+    ["mediante", "by means of", ""],
+    ["para", "for", "propósito/destino — distinto de 'por'"],
+    ["por", "for", "causa/medio — distinto de 'para'"],
+    ["según", "according to", ""],
+    ["sin", "without", ""],
+    ["sobre", "on", "también 'about'"],
+    ["tras", "after", "también 'behind'"],
+    ["dentro de", "inside", ""],
+    ["fuera de", "outside", ""],
+    ["delante de", "in front of", ""],
+    ["detrás de", "behind", ""],
+  ].map(([es, en, nota]) => ({
+    wordEs: es,
+    wordEn: en,
+    domain: "gramatica",
+    taxonomy: ["gramatica", "preposicion"],
+    traits: nota ? { tipo: "preposicion", nota } : { tipo: "preposicion" },
+    partOfSpeech: "funcion" as const,
+  })),
+
+  // Conjunciones (13) — "y/e" y "o/u" son alomorfos fonológicos (antes
+  // de sonido i/o), no palabras distintas — se anota en traits, no se
+  // siembra "e"/"u" como entradas separadas.
+  ...[
+    ["y", "and", "alomorfo 'e' antes de sonido i (Juan e Inés)"],
+    ["o", "or", "alomorfo 'u' antes de sonido o"],
+    ["pero", "but", ""],
+    ["aunque", "although", "también 'though'"],
+    ["porque", "because", "distinto de '¿por qué?' interrogativo"],
+    ["si", "if", ""],
+    ["ni", "nor", ""],
+    ["sino", "but rather", ""],
+    ["mientras", "while", ""],
+    ["cuando", "when", ""],
+    ["como", "as", "también 'like'"],
+    ["que", "that", ""],
+    ["ya que", "since", "'given that'"],
+  ].map(([es, en, nota]) => ({
+    wordEs: es,
+    wordEn: en,
+    domain: "gramatica",
+    taxonomy: ["gramatica", "conjuncion"],
+    traits: nota ? { tipo: "conjuncion", nota } : { tipo: "conjuncion" },
+    partOfSpeech: "funcion" as const,
+  })),
+
+  // Interrogativos (8)
+  ...[
+    ["qué", "what", ""],
+    ["quién", "who", ""],
+    ["cuál", "which", ""],
+    ["cómo", "how", ""],
+    ["dónde", "where", ""],
+    ["cuándo", "when", ""],
+    ["por qué", "why", "distinto de 'porque' conjunción"],
+    ["cuánto", "how much", "también 'how many'"],
+  ].map(([es, en, nota]) => ({
+    wordEs: es,
+    wordEn: en,
+    domain: "gramatica",
+    taxonomy: ["gramatica", "interrogativo"],
+    traits: nota ? { tipo: "interrogativo", nota } : { tipo: "interrogativo" },
+    partOfSpeech: "funcion" as const,
+  })),
+
+  // Cópulas y auxiliares (13) — ser≠estar, es≠está, son≠están: formas
+  // superficiales reales (no sólo el lema) porque las frases héroe usan
+  // "está"/"son" literalmente, y no hay resolución de lema para
+  // `funcion` (a diferencia del léxico 4k+4k de P3, que sí la tendrá en
+  // D1/KV). do/does en inglés no tienen equivalente léxico en español
+  // (do-support) — wordEs es una descripción funcional, no una
+  // traducción inventada, y por eso no se busca que matchee texto real.
+  {
+    wordEs: "ser", wordEn: "to be", domain: "gramatica",
+    taxonomy: ["gramatica", "copula_auxiliar"],
+    traits: { tipo: "copula", lema: true, sentido: "esencia/identidad permanente" },
+    partOfSpeech: "funcion",
+  },
+  {
+    wordEs: "es", wordEn: "is", domain: "gramatica",
+    taxonomy: ["gramatica", "copula_auxiliar"],
+    traits: { tipo: "copula", lemaAsociado: "ser", persona: "3s" },
+    partOfSpeech: "funcion",
+  },
+  {
+    wordEs: "son", wordEn: "are", domain: "gramatica",
+    taxonomy: ["gramatica", "copula_auxiliar"],
+    traits: { tipo: "copula", lemaAsociado: "ser", persona: "3p" },
+    partOfSpeech: "funcion",
+  },
+  {
+    wordEs: "estar", wordEn: "to be", domain: "gramatica",
+    taxonomy: ["gramatica", "copula_auxiliar"],
+    traits: { tipo: "copula", lema: true, sentido: "estado/condición temporal — homógrafo de 'ser' en inglés" },
+    partOfSpeech: "funcion",
+  },
+  {
+    wordEs: "está", wordEn: "is", domain: "gramatica",
+    taxonomy: ["gramatica", "copula_auxiliar"],
+    traits: { tipo: "copula", lemaAsociado: "estar", persona: "3s", nota: "homógrafo de 'es' en inglés" },
+    partOfSpeech: "funcion",
+  },
+  {
+    wordEs: "están", wordEn: "are", domain: "gramatica",
+    taxonomy: ["gramatica", "copula_auxiliar"],
+    traits: { tipo: "copula", lemaAsociado: "estar", persona: "3p", nota: "homógrafo de 'son' en inglés" },
+    partOfSpeech: "funcion",
+  },
+  {
+    wordEs: "hay", wordEn: "there is", domain: "gramatica",
+    taxonomy: ["gramatica", "copula_auxiliar"],
+    traits: { tipo: "copula", lema: true, nota: "también 'there are' — haber existencial" },
+    partOfSpeech: "funcion",
+  },
+  {
+    wordEs: "poder", wordEn: "can", domain: "gramatica",
+    taxonomy: ["gramatica", "copula_auxiliar"],
+    traits: { tipo: "auxiliar_modal", lema: true, nota: "también 'could'" },
+    partOfSpeech: "funcion",
+  },
+  {
+    wordEs: "deber", wordEn: "should", domain: "gramatica",
+    taxonomy: ["gramatica", "copula_auxiliar"],
+    traits: { tipo: "auxiliar_modal", lema: true, nota: "también 'must'" },
+    partOfSpeech: "funcion",
+  },
+  {
+    wordEs: "auxiliar 'do' (sin traducción directa)", wordEn: "do", domain: "gramatica",
+    taxonomy: ["gramatica", "copula_auxiliar"],
+    traits: { tipo: "auxiliar_ingles", nota: "sin equivalente léxico en español (do-support)" },
+    partOfSpeech: "funcion",
+  },
+  {
+    wordEs: "auxiliar 'does' (sin traducción directa)", wordEn: "does", domain: "gramatica",
+    taxonomy: ["gramatica", "copula_auxiliar"],
+    traits: { tipo: "auxiliar_ingles", nota: "sin equivalente léxico en español (do-support)" },
+    partOfSpeech: "funcion",
+  },
+
+  // --- Gap nouns de P0 (ver DOCs/04-build-order.md P0 §Código punto 4):
+  // "programación", "física"/"physics" y "Frida" son las 3 palabras que
+  // faltaban de las frases héroe existentes y que sí son responsabilidad
+  // de P0 (a diferencia de los verbos léxicos "viene"/"gusta", que
+  // quedan para P3 — así lo dice el propio "Done when" de P0). ---
+  {
+    wordEs: "programación", wordEn: "programming", domain: "programacion",
+    taxonomy: ["programacion", "concepto"], traits: { tipo: "concepto" },
+  },
+  {
+    wordEs: "física", wordEn: "physics", domain: "fisica",
+    taxonomy: ["fisica", "concepto"], traits: { tipo: "concepto" },
+  },
+  {
+    // Marca de café referenciada en la frase de ejemplo ("Frida Café" /
+    // "Frida Café coffee") — no es Frida Kahlo (esa ya existe como
+    // "frida kahlo", dos palabras, no colisiona: el escaneo de n-gramas
+    // prueba primero el bigrama). wordEn son las DOS palabras
+    // consecutivas de la frase inglesa ("Frida Café") — ahí es el
+    // nombre de marca completo, no sólo "Frida"; en la frase española
+    // sólo "Frida" es la marca (el "café" de al lado ya matchea aparte
+    // como la bebida), por eso wordEs se queda en una sola palabra.
+    wordEs: "Frida", wordEn: "Frida Café", domain: "gastronomia",
+    taxonomy: ["gastronomia", "marca"], traits: { tipo: "marca" },
+  },
 ];

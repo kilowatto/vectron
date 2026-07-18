@@ -21,12 +21,15 @@ import { tokenizeSimple } from "./tokenizer";
 import { fetchCosinePairs, type PartOfSpeech } from "./data/concepts";
 import { setupTokenMode } from "./scene/tokenMode";
 
-// Principiante=sustantivos, Intermedio=+adjetivos, Avanzado=+verbos —
-// mismo diseño confirmado para el tipo de palabra visible por modo.
+// Principiante=sustantivos+función, Intermedio=+adjetivos, Avanzado=+verbos
+// (matriz POS cerrada 2026-07-19, ver DOCs/02-master-plan.md §03). Las
+// palabras función (artículos, preposiciones, cópulas...) son visibles
+// desde Principiante — sin ellas frases como "el agujero negro está en
+// la vía láctea" nunca encienden completas ahí, sólo el sustantivo.
 const MODE_POS: Record<Mode, Set<PartOfSpeech>> = {
-  principiante: new Set(["sustantivo"]),
-  intermedio: new Set(["sustantivo", "adjetivo"]),
-  avanzado: new Set(["sustantivo", "adjetivo", "verbo"]),
+  principiante: new Set(["sustantivo", "funcion"]),
+  intermedio: new Set(["sustantivo", "funcion", "adjetivo"]),
+  avanzado: new Set(["sustantivo", "funcion", "adjetivo", "verbo"]),
 };
 
 const stageEl = document.querySelector<HTMLDivElement>("#stage")!;
