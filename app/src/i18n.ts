@@ -104,6 +104,10 @@ const STRINGS = {
   domainDeportes: { es: "Deportes", en: "Sports" },
   domainGastronomia: { es: "Gastronomía", en: "Gastronomy" },
   domainMusica: { es: "Música", en: "Music" },
+  domainArteYCultura: { es: "Arte y Cultura", en: "Art and Culture" },
+  domainMedicinaYSalud: { es: "Medicina y Salud", en: "Medicine and Health" },
+  domainEconomiaYNegocios: { es: "Economía y Negocios", en: "Economy and Business" },
+  domainPersonajes: { es: "Personajes", en: "Notable People" },
 
   // --- HUD ---
   hudLoading: { es: "cargando…", en: "loading…" },

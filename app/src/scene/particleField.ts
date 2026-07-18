@@ -35,6 +35,10 @@ export const DOMAIN_HUES: Record<string, number> = {
   deportes: 0xe63946,
   gastronomia: 0xff6b4a,
   musica: 0xe05fc4,
+  arte_y_cultura: 0xffb703,
+  medicina_y_salud: 0x06d6a0,
+  economia_y_negocios: 0x8ecae6,
+  personajes: 0xbc6c25,
 };
 
 const FALLBACK_HUE = 0x9aa5ad;

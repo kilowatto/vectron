@@ -23,6 +23,10 @@ const DOMAIN_LABEL_KEYS: Record<string, StringKey> = {
   deportes: "domainDeportes",
   gastronomia: "domainGastronomia",
   musica: "domainMusica",
+  arte_y_cultura: "domainArteYCultura",
+  medicina_y_salud: "domainMedicinaYSalud",
+  economia_y_negocios: "domainEconomiaYNegocios",
+  personajes: "domainPersonajes",
 };
 
 export interface NeighborView {
