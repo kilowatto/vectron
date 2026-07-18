@@ -371,7 +371,22 @@ export function setupTokenMode(options: TokenModeOptions): TokenMode {
     }
   });
 
+  // Mismo filtro arrastre-vs-clic que conceptInteraction: sin esto,
+  // soltar la rotación de OrbitControls sobre un token disparaba este
+  // click igual (mousedown/mouseup comparten canvas) y te sacaba de la
+  // navegación a media órbita.
+  const DRAG_THRESHOLD_PX = 6;
+  let pointerDown: { x: number; y: number } | null = null;
+  canvas.addEventListener("pointerdown", (event) => {
+    pointerDown = { x: event.clientX, y: event.clientY };
+  });
+
   canvas.addEventListener("click", async (event) => {
+    const start = pointerDown;
+    pointerDown = null;
+    if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > DRAG_THRESHOLD_PX) {
+      return; // fue arrastre, no clic
+    }
     if (!enabled || particles.length === 0) return;
     const p = pickParticle(event.clientX, event.clientY);
     if (!p) {

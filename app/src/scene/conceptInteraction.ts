@@ -155,7 +155,25 @@ export function setupConceptInteraction(options: ConceptInteractionOptions): Con
     }
   });
 
-  canvas.addEventListener("click", () => {
+  // OrbitControls no distingue "clic" de "soltar tras arrastrar" — el
+  // evento nativo click dispara igual porque mousedown y mouseup caen
+  // en el mismo canvas. Sin este filtro, soltar la rotación justo sobre
+  // una partícula la fijaba y te sacaba de la navegación a media órbita.
+  const DRAG_THRESHOLD_PX = 6;
+  let pointerDown: { x: number; y: number } | null = null;
+
+  canvas.addEventListener("pointerdown", (event) => {
+    pointerDown = { x: event.clientX, y: event.clientY };
+  });
+
+  canvas.addEventListener("click", (event) => {
+    const start = pointerDown;
+    pointerDown = null;
+    if (start) {
+      const dx = event.clientX - start.x;
+      const dy = event.clientY - start.y;
+      if (Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) return; // fue arrastre, no clic
+    }
     const instanceId = pickInstance(lastPointer.x, lastPointer.y);
     if (instanceId !== null) {
       pinInstance(instanceId);

@@ -15,28 +15,50 @@
   opacity: 0;
 }
 
-/* La barra de tokenización ocupa la parte baja de la pantalla en los 3
-   modos, así que la tarjeta fijada se centra en medio del cubo en vez
-   de competir por ese mismo espacio. Centrado con inset+margin, no
-   translate: showPinned()/showHover() usan fadeIn() (Web Animations
-   API sobre `transform`, fill:"forwards"), que reemplaza cualquier
-   transform puesto por CSS — un translate(-50%,-50%) de centrado se
-   borraría en cuanto la animación de entrada corriera. */
+/* Fijada en la esquina superior derecha, NO centrada: centrada tapaba
+   justo el clúster donde se hace clic, y esa misma zona intercepta el
+   drag de OrbitControls (pointer-events:auto sólo en el box de la
+   tarjeta, no en todo el inset) — en la esquina, casi todo el cubo
+   queda libre para seguir navegando con la tarjeta abierta. */
 :host(.pinned) {
   pointer-events: auto;
-  inset: 0;
+  /* Debajo de <vx-lang-switcher> + <vx-mode-switcher>, que ya viven en
+     esta misma esquina (top ~16px y ~56-72px respectivamente) — si no,
+     la tarjeta les cae encima. */
+  top: max(clamp(100px, 15vw, 128px), calc(env(safe-area-inset-top) + 90px));
+  right: max(16px, env(safe-area-inset-right));
+  left: auto;
+  bottom: auto;
   /* !important: el reset global `* { margin: 0 }` (misma especificidad
      de selector de tipo/universal en teoría más baja, pero en la
-     práctica gana el empate contra :host en Shadow DOM) si no, deja el
-     margen en 0 y la tarjeta pegada a una esquina en vez de centrada —
-     mismo bug real que se vio en vx-token-panel. */
-  margin: auto !important;
+     práctica gana el empate contra :host en Shadow DOM). */
+  margin: 0 !important;
   width: fit-content;
   height: fit-content;
-  max-width: min(360px, calc(100vw - 32px));
-  max-height: calc(100vh - 220px);
+  max-width: min(300px, calc(100vw - 32px));
+  max-height: calc(100vh - 148px);
   overflow-y: auto;
   flex-direction: column;
+}
+
+/* Móvil: la esquina superior derecha por sí sola ya deja libre el
+   centro y la izquierda del cubo (donde ocurre casi todo el drag con
+   el dedo) — sólo hace falta angostarla más para no comerse medio
+   ancho de una pantalla estrecha. */
+@media (max-width: 640px) {
+  :host(.pinned) {
+    max-width: min(220px, calc(62vw - 16px));
+    padding: 10px 12px;
+    max-height: min(calc(100vh - 148px), 65vh);
+  }
+
+  .primary {
+    font-size: 13px;
+  }
+
+  .neighbor .nword {
+    width: 56px;
+  }
 }
 
 .head {
