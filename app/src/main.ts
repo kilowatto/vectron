@@ -292,7 +292,37 @@ async function main() {
   // El "cambio de stage" real: nunca recrea el motor 3D ni recarga la
   // página — las partículas siguen girando durante todo el cambio, sólo
   // la barra de tokenización y la tarjeta de concepto se reconfiguran.
+  // P2: bloquear reentrada mientras un morph está en curso, y sólo
+  // encolar el ÚLTIMO modo pedido (no cada clic intermedio) — ver
+  // DOCs/06-mode-morph-cells.md §6/§11 "User spam-clicks modes: queue
+  // last mode only". Sin este guard, clics rápidos lanzan varios
+  // applyMode concurrentes que pisan las variables compartidas
+  // (baseCountText, composer/tokenStrip) fuera de orden — bug real
+  // encontrado spam-clickeando P/I/A/P en producción: el HUD se quedaba
+  // mostrando el modo equivocado aunque el switcher sí marcaba el
+  // correcto.
+  let applyModeBusy = false;
+  let queuedMode: Mode | null = null;
+
   async function applyMode(mode: Mode) {
+    if (applyModeBusy) {
+      queuedMode = mode;
+      return;
+    }
+    applyModeBusy = true;
+    try {
+      await runApplyMode(mode);
+    } finally {
+      applyModeBusy = false;
+      if (queuedMode !== null) {
+        const next = queuedMode;
+        queuedMode = null;
+        void applyMode(next);
+      }
+    }
+  }
+
+  async function runApplyMode(mode: Mode) {
     currentMode = mode;
     allowedPos = MODE_POS[mode];
     switcher.setAttribute("current", mode);
@@ -300,9 +330,15 @@ async function main() {
 
     card.configure({ simple: mode === "principiante", lang });
     interaction.setDefaultTopK(mode === "principiante" ? 5 : 6);
-    interaction.reset();
+    interaction.reset(); // suelta el pin ANTES del morph — mismo orden que "cancela al empezar" (06 §6)
     tokenMode.setEnabled(mode === "avanzado");
-    const visibleCount = field.setPartOfSpeechFilter(allowedPos);
+    // P2: mitosis (nacen las que entran) / fusión (las que salen se
+    // comen hacia una vecina) en vez del corte instantáneo de antes —
+    // ver DOCs/06-mode-morph-cells.md. Nunca tarda más de ~1.15s.
+    const reducedMotion =
+      typeof matchMedia !== "undefined" &&
+      matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const { visibleCount } = await field.morphToPartOfSpeechFilter(allowedPos, { reducedMotion });
 
     // El HUD también habla el idioma de cada modo: Principiante no dice
     // "vector", los otros sí (con la notación ℝ en Avanzado).

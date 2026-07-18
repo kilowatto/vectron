@@ -86,6 +86,17 @@ export interface ParticleField {
    * InstancedMesh, que sigue teniendo TODOS los conceptos siempre.
    * Devuelve cuántas quedaron visibles (para el HUD). */
   setPartOfSpeechFilter: (allowed: Set<PartOfSpeech>) => number;
+  /** P2: la versión "viva" del filtro anterior — en vez de un corte
+   * instantáneo, las partículas que entran nacen por mitosis desde la
+   * más cercana (mismo dominio primero) que ya se veía, y las que salen
+   * se comen hacia su vecina más cercana antes de desaparecer. Nunca
+   * más de 1000ms de punta a punta (ver DOCs/06-mode-morph-cells.md).
+   * La primera llamada (sin filtro previo) es instantánea — no hay
+   * nada de qué nacer/morir todavía. */
+  morphToPartOfSpeechFilter: (
+    allowed: Set<PartOfSpeech>,
+    opts?: { reducedMotion?: boolean },
+  ) => Promise<{ visibleCount: number }>;
   /** Devuelve el objeto de línea creado (o null) para que quien llama
    * le cuelgue `userData.segments` (etiquetas de hover con el coseno
    * real por segmento — ver lineHover.ts). */
@@ -161,6 +172,241 @@ export function createParticleField(
     });
     mesh.instanceMatrix.needsUpdate = true;
     return visible;
+  }
+
+  // P2 — mode morph (mitosis/fusión). `currentAllowed` es null hasta la
+  // primera llamada real: sin un filtro previo no hay "padres" ni
+  // "presas" que animar, así que ese primer corte es instantáneo.
+  let currentAllowed: Set<PartOfSpeech> | null = null;
+  let morphSeq = 0;
+
+  function nearestStable(pool: number[], targetId: number): number | null {
+    if (pool.length === 0) return null;
+    const t = concepts[targetId].coords;
+    const domain = concepts[targetId].domain;
+    let best = -1;
+    let bestD = Infinity;
+    let bestDomain = -1;
+    let bestDomainD = Infinity;
+    for (const j of pool) {
+      const c = concepts[j].coords;
+      const dx = c[0] - t[0];
+      const dy = c[1] - t[1];
+      const dz = c[2] - t[2];
+      const d = dx * dx + dy * dy + dz * dz;
+      if (d < bestD) {
+        bestD = d;
+        best = j;
+      }
+      if (concepts[j].domain === domain && d < bestDomainD) {
+        bestDomainD = d;
+        bestDomain = j;
+      }
+    }
+    return bestDomain !== -1 ? bestDomain : best;
+  }
+
+  function shuffled(ids: number[]): number[] {
+    const a = ids.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  interface MorphItem {
+    id: number;
+    kind: "mitosis" | "fusion";
+    anchor: number; // padre (mitosis) o depredador (fusión)
+    start: number; // ms dentro del presupuesto de 1000ms
+    duration: number;
+  }
+
+  // Gaps aleatorios entre inicios (no un metrónomo fijo) y, si la
+  // cadena cruda se saldría de 1000ms, se comprime proporcionalmente
+  // — la aleatoriedad relativa entre gaps se conserva, sólo la escala
+  // se achica (ver DOCs/06-mode-morph-cells.md §4).
+  function buildSchedule(
+    ids: number[],
+    kind: "mitosis" | "fusion",
+    anchors: Map<number, number>,
+  ): MorphItem[] {
+    const order = shuffled(ids.filter((id) => anchors.has(id)));
+    const items: MorphItem[] = [];
+    let t = 0;
+    for (const id of order) {
+      const [dMin, dMax] = kind === "mitosis" ? [280, 420] : [260, 380];
+      items.push({
+        id,
+        kind,
+        anchor: anchors.get(id)!,
+        start: t,
+        duration: dMin + Math.random() * (dMax - dMin),
+      });
+      t += 8 + Math.random() * (45 - 8);
+    }
+    const last = items[items.length - 1];
+    if (last) {
+      const lastEnd = last.start + last.duration;
+      const BUDGET = 1000;
+      if (lastEnd > BUDGET) {
+        const avgDur = items.reduce((s, it) => s + it.duration, 0) / items.length;
+        const scale = Math.max(0, BUDGET - avgDur) / Math.max(last.start, 1);
+        for (const it of items) it.start *= scale;
+      }
+    }
+    return items;
+  }
+
+  async function morphToPartOfSpeechFilter(
+    allowed: Set<PartOfSpeech>,
+    opts: { reducedMotion?: boolean } = {},
+  ): Promise<{ visibleCount: number }> {
+    const seq = ++morphSeq;
+    const prevAllowed = currentAllowed;
+    currentAllowed = new Set(allowed);
+
+    if (!prevAllowed || opts.reducedMotion) {
+      return { visibleCount: setPartOfSpeechFilter(allowed) };
+    }
+
+    const entering: number[] = [];
+    const leaving: number[] = [];
+    const stable: number[] = [];
+    concepts.forEach((c, i) => {
+      const was = prevAllowed.has(c.partOfSpeech);
+      const now = allowed.has(c.partOfSpeech);
+      if (!was && now) entering.push(i);
+      else if (was && !now) leaving.push(i);
+      else if (was && now) stable.push(i);
+    });
+    const visibleCount = stable.length + entering.length;
+    if (entering.length === 0 && leaving.length === 0) {
+      return { visibleCount };
+    }
+
+    const parentOf = new Map<number, number>();
+    for (const e of entering) {
+      const p = nearestStable(stable, e);
+      if (p !== null) parentOf.set(e, p);
+    }
+    const predatorOf = new Map<number, number>();
+    for (const l of leaving) {
+      const p = nearestStable(stable, l);
+      if (p !== null) predatorOf.set(l, p);
+    }
+
+    // Sin pareja (S vacío — caso raro, ej. primer filtro real con casi
+    // nada estable): aparecen/desaparecen sin animar en vez de crashear.
+    for (const id of entering) {
+      if (parentOf.has(id)) continue;
+      const c = concepts[id];
+      dummy.position.set(c.coords[0], c.coords[1], c.coords[2]);
+      dummy.scale.setScalar(baseScaleOf(c));
+      dummy.updateMatrix();
+      mesh.setMatrixAt(id, dummy.matrix);
+    }
+    for (const id of leaving) {
+      if (predatorOf.has(id)) continue;
+      dummy.scale.setScalar(0);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(id, dummy.matrix);
+    }
+
+    const allItems = [
+      ...buildSchedule(entering, "mitosis", parentOf),
+      ...buildSchedule(leaving, "fusion", predatorOf),
+    ];
+    mesh.instanceMatrix.needsUpdate = true;
+    if (allItems.length === 0) return { visibleCount };
+
+    return new Promise((resolve) => {
+      const active = new Set<number>();
+      const started = new Array<boolean>(allItems.length).fill(false);
+      const startTimes = new Array<number>(allItems.length);
+      const t0 = performance.now();
+      const CONCURRENCY_CAP = 32;
+      // Margen de gracia corto sobre el presupuesto de 1000ms — si por
+      // el tope de concurrencia algo se quedó sin arrancar o a medias,
+      // salta a su pose final en vez de alargar la espera de verdad.
+      const HARD_DEADLINE = 1150;
+
+      function finalize(item: MorphItem) {
+        const c = concepts[item.id];
+        dummy.position.set(c.coords[0], c.coords[1], c.coords[2]);
+        dummy.scale.setScalar(item.kind === "mitosis" ? baseScaleOf(c) : 0);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(item.id, dummy.matrix);
+      }
+
+      function tick() {
+        if (seq !== morphSeq) {
+          resolve({ visibleCount }); // otro morph más nuevo lo reemplazó
+          return;
+        }
+        const elapsed = performance.now() - t0;
+
+        if (elapsed >= HARD_DEADLINE) {
+          for (const item of allItems) finalize(item);
+          mesh.instanceMatrix.needsUpdate = true;
+          resolve({ visibleCount });
+          return;
+        }
+
+        for (let idx = 0; idx < allItems.length; idx++) {
+          const item = allItems[idx];
+          if (!started[idx]) {
+            if (elapsed >= item.start && active.size < CONCURRENCY_CAP) {
+              started[idx] = true;
+              startTimes[idx] = elapsed;
+              active.add(idx);
+            } else {
+              continue;
+            }
+          }
+          if (!active.has(idx)) continue; // ya terminó
+
+          const localT = Math.min((elapsed - startTimes[idx]) / item.duration, 1);
+          const eased = 1 - Math.pow(1 - localT, 3);
+          const c = concepts[item.id];
+          const a = concepts[item.anchor].coords;
+
+          if (item.kind === "mitosis") {
+            dummy.position.set(
+              a[0] + (c.coords[0] - a[0]) * eased,
+              a[1] + (c.coords[1] - a[1]) * eased,
+              a[2] + (c.coords[2] - a[2]) * eased,
+            );
+            dummy.scale.setScalar(baseScaleOf(c) * eased);
+          } else {
+            dummy.position.set(
+              c.coords[0] + (a[0] - c.coords[0]) * eased,
+              c.coords[1] + (a[1] - c.coords[1]) * eased,
+              c.coords[2] + (a[2] - c.coords[2]) * eased,
+            );
+            dummy.scale.setScalar(baseScaleOf(c) * (1 - eased));
+          }
+          dummy.updateMatrix();
+          mesh.setMatrixAt(item.id, dummy.matrix);
+
+          if (localT >= 1) {
+            active.delete(idx);
+            finalize(item);
+          }
+        }
+
+        mesh.instanceMatrix.needsUpdate = true;
+
+        const pending = active.size > 0 || started.some((s) => !s);
+        if (pending) {
+          requestAnimationFrame(tick);
+        } else {
+          resolve({ visibleCount });
+        }
+      }
+      requestAnimationFrame(tick);
+    });
   }
 
   const highlightAttrArray = new Float32Array(count);
@@ -337,6 +583,7 @@ export function createParticleField(
     setTokenFocus,
     getFocusedIds,
     setPartOfSpeechFilter,
+    morphToPartOfSpeechFilter,
     setSimilarityLines,
     setChainLines,
   };
