@@ -4,8 +4,8 @@ import { bloom } from "three/addons/tsl/display/BloomNode.js";
 import { pass } from "three/tsl";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { createParticleField, spinField } from "./scene/particleField";
-
-const PARTICLE_COUNT = 1800;
+import { fetchConcepts } from "./data/concepts";
+import { createConceptCard } from "./ui/conceptCard";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#scene")!;
 const backendTag = document.querySelector<HTMLSpanElement>("#backend-tag")!;
@@ -13,6 +13,9 @@ const fpsLabel = document.querySelector<HTMLSpanElement>("#fps")!;
 const countLabel = document.querySelector<HTMLSpanElement>("#count")!;
 
 async function main() {
+  countLabel.textContent = "cargando conceptos…";
+  const concepts = await fetchConcepts();
+
   const renderer = new THREE.WebGPURenderer({
     canvas,
     antialias: true,
@@ -48,7 +51,7 @@ async function main() {
   controls.minDistance = 1.8;
   controls.maxDistance = 6.5;
 
-  const field = createParticleField(PARTICLE_COUNT);
+  const field = createParticleField(concepts);
   scene.add(field.group);
 
   const cubeEdges = new THREE.LineSegments(
@@ -61,7 +64,56 @@ async function main() {
   );
   scene.add(cubeEdges);
 
-  countLabel.textContent = `${PARTICLE_COUNT.toLocaleString("es-MX")} partículas`;
+  countLabel.textContent = `${field.count.toLocaleString("es-MX")} conceptos`;
+
+  // --- Interacción: hover muestra tooltip, click fija la tarjeta ---
+  const card = createConceptCard();
+  const raycaster = new THREE.Raycaster();
+  const pointerNdc = new THREE.Vector2();
+  let hoveredId: number | null = null;
+  let lastPointer = { x: 0, y: 0 };
+
+  function pickInstance(clientX: number, clientY: number): number | null {
+    pointerNdc.x = (clientX / window.innerWidth) * 2 - 1;
+    pointerNdc.y = -(clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(pointerNdc, camera);
+    const hits = raycaster.intersectObject(field.mesh);
+    return hits.length > 0 ? (hits[0].instanceId ?? null) : null;
+  }
+
+  canvas.addEventListener("pointermove", (event) => {
+    lastPointer = { x: event.clientX, y: event.clientY };
+    if (card.isPinned()) return;
+    const instanceId = pickInstance(event.clientX, event.clientY);
+    if (instanceId === hoveredId) return;
+    hoveredId = instanceId;
+    field.setHighlight(instanceId);
+    if (instanceId !== null) {
+      card.showHover(field.concepts[instanceId], event.clientX, event.clientY);
+      canvas.style.cursor = "pointer";
+    } else {
+      card.hideHover();
+      canvas.style.cursor = "default";
+    }
+  });
+
+  canvas.addEventListener("click", () => {
+    const instanceId = pickInstance(lastPointer.x, lastPointer.y);
+    if (instanceId !== null) {
+      field.setHighlight(instanceId);
+      card.showPinned(field.concepts[instanceId]);
+    } else if (card.isPinned()) {
+      card.hidePinned();
+      field.setHighlight(null);
+    }
+  });
+
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && card.isPinned()) {
+      card.hidePinned();
+      field.setHighlight(null);
+    }
+  });
 
   const scenePass = pass(scene, camera);
   const scenePassColor = scenePass.getTextureNode("output");
@@ -109,5 +161,6 @@ async function main() {
 
 main().catch((err) => {
   backendTag.textContent = "error al iniciar el motor 3D";
+  countLabel.textContent = "—";
   console.error(err);
 });

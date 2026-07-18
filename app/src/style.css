@@ -72,3 +72,110 @@ body {
 .tag {
   color: var(--dim);
 }
+
+#concept-card {
+  position: fixed;
+  z-index: 20;
+  display: none;
+  gap: 10px;
+  max-width: 260px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(10, 13, 17, 0.88);
+  border: 1px solid rgba(231, 226, 214, 0.14);
+  backdrop-filter: blur(6px);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color: var(--ink);
+  pointer-events: none;
+}
+
+#concept-card.pinned {
+  pointer-events: auto;
+  left: 50%;
+  bottom: clamp(16px, 4vh, 48px);
+  transform: translateX(-50%);
+  max-width: 320px;
+}
+
+#concept-card .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-top: 4px;
+  flex-shrink: 0;
+  box-shadow: 0 0 8px currentColor;
+}
+
+#concept-card .body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  min-width: 0;
+}
+
+#concept-card .words {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+#concept-card .es {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+#concept-card .en {
+  color: var(--dim);
+  font-style: italic;
+}
+
+#concept-card .domain {
+  color: var(--accent);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+#concept-card .taxonomy {
+  color: var(--dim);
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+#concept-card .traits {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+  font-size: 11px;
+}
+
+#concept-card .traits .row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--dim);
+}
+
+#concept-card .traits .row span:last-child {
+  color: var(--ink);
+}
+
+#concept-card .coords {
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+
+#concept-card .hint {
+  position: absolute;
+  bottom: -22px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 0.04em;
+}

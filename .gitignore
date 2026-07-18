@@ -6,3 +6,4 @@ dist/
 .env
 .env.local
 worker/.dev.vars
+worker/scripts/out/

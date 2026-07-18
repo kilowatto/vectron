@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "typegen": "wrangler types"
+    "typegen": "wrangler types",
+    "seed": "tsx scripts/seed.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260716.1",
+    "tsx": "^4.20.6",
     "typescript": "~5.9.3",
     "wrangler": "^4.100.0"
   }
