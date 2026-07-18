@@ -15,10 +15,10 @@ export interface TokenPanelOptions {
   /** Principiante: los chips no muestran el ID numérico del token. */
   showIds?: boolean;
   placeholder?: string;
-  /** Avanzado: se monta dentro del dock como sección, no flotante sobre body. */
+  /** Intermedio/Avanzado: se monta dentro del dock como sección permanente. */
   mountTo?: HTMLElement;
-  /** Insertar como primer hijo de mountTo (para que quede arriba del resto del dock). */
-  prepend?: boolean;
+  /** Principiante: barra ancha anclada abajo, look de app simple, no de tarjeta técnica. */
+  variant?: "bottom";
 }
 
 export interface TokenPanel {
@@ -27,7 +27,7 @@ export interface TokenPanel {
 }
 
 export function createTokenPanel(options: TokenPanelOptions = {}): TokenPanel {
-  const { showToggle = true, showIds = true, mountTo } = options;
+  const { showToggle = true, showIds = true, mountTo, variant } = options;
 
   const root = document.createElement("div");
   root.id = "token-panel";
@@ -50,9 +50,9 @@ export function createTokenPanel(options: TokenPanelOptions = {}): TokenPanel {
 
   if (mountTo) {
     root.classList.add("docked");
-    if (options.prepend) mountTo.prepend(root);
-    else mountTo.appendChild(root);
+    mountTo.appendChild(root);
   } else {
+    if (variant === "bottom") root.classList.add("bottom-bar");
     document.body.appendChild(root);
   }
 

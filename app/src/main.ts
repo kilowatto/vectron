@@ -10,6 +10,7 @@ import { createConceptCard, type NeighborView } from "./ui/conceptCard";
 import { createTokenPanel } from "./ui/tokenPanel";
 import { getStoredMode, showModeSelect, createModeSwitcher } from "./ui/modeSelect";
 import { staggerIn } from "./ui/motion";
+import { createDockHeader } from "./ui/dockHeader";
 
 const appEl = document.querySelector<HTMLDivElement>("#app")!;
 const canvas = document.querySelector<HTMLCanvasElement>("#scene")!;
@@ -77,7 +78,10 @@ async function main() {
   countLabel.textContent = `${field.count.toLocaleString("es-MX")} conceptos`;
 
   // --- Interacción: hover muestra tooltip, click fija la tarjeta + vecinos ---
-  const card = createConceptCard({ detailed: mode !== "principiante" });
+  const card = createConceptCard({
+    detailed: mode !== "principiante",
+    pinnedAnchor: mode === "principiante" ? "center" : "bottom",
+  });
   const defaultTopK = mode === "principiante" ? 5 : 6;
   const raycaster = new THREE.Raycaster();
   const pointerNdc = new THREE.Vector2();
@@ -168,8 +172,20 @@ async function main() {
     }
   });
 
-  // --- Tokenización: resalta en el cubo las palabras del dataset que
-  // aparecen en el texto escrito (§07 pasos 1 y 3 del plan) ---
+  // --- Cada modo es su propia composición, no un panel con más o menos
+  // botones (ver feedback-vectron-modes): Principiante es de pantalla
+  // completa con una barra abajo; Intermedio y Avanzado abren un dock
+  // permanente al costado, con contenido distinto en cada uno. ---
+  const usesDock = mode === "intermedio" || mode === "avanzado";
+
+  if (usesDock) {
+    const tag =
+      mode === "avanzado"
+        ? "avanzado · matemática real, sin atajos"
+        : "intermedio · el mecanismo real, sin la matemática";
+    dockEl.appendChild(createDockHeader(tag));
+  }
+
   const tokenPanel = createTokenPanel({
     showToggle: mode !== "principiante",
     showIds: mode !== "principiante",
@@ -179,28 +195,34 @@ async function main() {
         : mode === "avanzado"
           ? "Escribe una frase — abajo verás cada paso hasta la atención"
           : undefined,
-    mountTo: mode === "avanzado" ? dockEl : undefined,
+    mountTo: usesDock ? dockEl : undefined,
+    variant: mode === "principiante" ? "bottom" : undefined,
   });
-  // El grafo de tensores y las matemáticas viven en el dock, siempre
-  // visibles (no detrás de un botón) — se cargan de forma diferida sólo
-  // porque KaTeX es pesado, no porque estén ocultas.
+
+  // El contenido de cada dock se carga aquí, siempre visible de una vez
+  // (no detrás de un botón).
   let advancedPanelUpdate: ((n: number) => void) | null = null;
-  if (mode === "avanzado") {
+  if (mode === "intermedio") {
+    const { createMechanismExplainer } = await import("./ui/mechanismExplainer");
+    dockEl.appendChild(createMechanismExplainer());
+  } else if (mode === "avanzado") {
     const { createAdvancedPanelBody } = await import("./ui/advancedPanel");
     const panel = createAdvancedPanelBody();
     panel.root.classList.add("docked");
     dockEl.appendChild(panel.root);
     advancedPanelUpdate = panel.update;
+  }
 
+  if (usesDock) {
     // Todo el contenido ya existe: ahora sí se abre el layout y se pinta
     // el dock en cascada — nada aparece de golpe. Síncrono a propósito:
     // ya hubo varios `await` antes de este punto (fetch, import, init de
     // WebGPU), de sobra para que el navegador haya pintado el estado
     // "cerrado" — no depende de que un requestAnimationFrame llegue a
     // ejecutarse, que en una pestaña sin foco puede no pasar nunca.
-    appEl.classList.add("mode-avanzado");
+    appEl.classList.add("has-dock");
     staggerIn(dockEl, { step: 90, initialDelay: 150, duration: 550 });
-    const advScroll = panel.root.querySelector<HTMLElement>(".adv-scroll");
+    const advScroll = dockEl.querySelector<HTMLElement>(".adv-scroll");
     if (advScroll) staggerIn(advScroll, { step: 70, initialDelay: 500, duration: 500 });
   }
 

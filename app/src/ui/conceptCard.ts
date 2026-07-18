@@ -73,6 +73,8 @@ function cardBody(concept: Concept, detailed: boolean): string {
 export interface ConceptCardOptions {
   /** Principiante: sin taxonomía/atributos/coordenadas ni scores de coseno. */
   detailed?: boolean;
+  /** Principiante: la barra de tokenización ya ocupa la franja inferior. */
+  pinnedAnchor?: "bottom" | "center";
 }
 
 type Visibility = "none" | "hover" | "pinned";
@@ -80,11 +82,14 @@ type Visibility = "none" | "hover" | "pinned";
 export function createConceptCard(
   options: ConceptCardOptions = {},
 ): ConceptCard {
-  const { detailed = true } = options;
+  const { detailed = true, pinnedAnchor = "bottom" } = options;
   const root = document.createElement("div");
   root.id = "concept-card";
   root.style.opacity = "0";
-  document.body.appendChild(root);
+  // Se monta dentro de #stage (no de body) para que "centrado" signifique
+  // centrado en el área de partículas, no en toda la ventana — importa en
+  // los modos con dock, donde #stage no ocupa el ancho completo.
+  (document.getElementById("stage") ?? document.body).appendChild(root);
 
   let visibility: Visibility = "none";
 
@@ -147,7 +152,7 @@ export function createConceptCard(
   ) {
     const wasPinned = visibility === "pinned";
     visibility = "pinned";
-    root.className = "pinned";
+    root.className = pinnedAnchor === "center" ? "pinned centered" : "pinned";
     root.style.pointerEvents = "";
     root.style.left = "";
     root.style.top = "";

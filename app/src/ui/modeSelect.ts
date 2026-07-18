@@ -34,10 +34,6 @@ function setStoredMode(mode: Mode) {
   localStorage.setItem(STORAGE_KEY, mode);
 }
 
-export function clearStoredMode() {
-  localStorage.removeItem(STORAGE_KEY);
-}
-
 /** Pantalla de entrada: elegir modo es elegir qué app abrir, no un ajuste. */
 export function showModeSelect(): Promise<Mode> {
   return new Promise((resolve) => {
@@ -80,15 +76,29 @@ export function showModeSelect(): Promise<Mode> {
   });
 }
 
-/** Control persistente y discreto para volver a elegir modo. */
-export function createModeSwitcher(current: Mode): HTMLButtonElement {
-  const btn = document.createElement("button");
-  btn.id = "mode-switcher";
-  btn.textContent = `modo: ${current}`;
-  btn.addEventListener("click", () => {
-    clearStoredMode();
-    location.reload();
+/**
+ * Control persistente para cambiar de modo sin volver a la portada:
+ * cambiar de modo es cambiar de app, no "salir" de la app — el nuevo
+ * modo ya queda guardado antes de recargar, así que se entra directo
+ * a él, nunca a la pantalla de selección.
+ */
+export function createModeSwitcher(current: Mode): HTMLDivElement {
+  const wrap = document.createElement("div");
+  wrap.id = "mode-switcher";
+  wrap.innerHTML = MODES.map(
+    (m) =>
+      `<button data-mode="${m.id}" class="${m.id === current ? "active" : ""}">${m.title}</button>`,
+  ).join("");
+
+  wrap.querySelectorAll<HTMLButtonElement>("button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const mode = btn.dataset.mode as Mode;
+      if (mode === current) return;
+      setStoredMode(mode);
+      location.reload();
+    });
   });
-  document.body.appendChild(btn);
-  return btn;
+
+  document.body.appendChild(wrap);
+  return wrap;
 }
