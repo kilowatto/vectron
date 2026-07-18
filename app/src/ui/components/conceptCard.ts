@@ -40,6 +40,8 @@ export const DOMAIN_LABEL_KEYS: Record<string, StringKey> = {
   filosofia: "domainFilosofia",
   idiomas: "domainIdiomas",
   gramatica: "domainGramatica",
+  lexico_verbal: "domainLexicoVerbal",
+  lexico_adjetival: "domainLexicoAdjetival",
   token_vivo: "domainTokenVivo",
 };
 

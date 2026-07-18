@@ -134,6 +134,8 @@ const STRINGS = {
   domainFilosofia: { es: "Filosofía", en: "Philosophy" },
   domainIdiomas: { es: "Idiomas", en: "Languages" },
   domainGramatica: { es: "Gramática", en: "Grammar" },
+  domainLexicoVerbal: { es: "Léxico · verbos", en: "Lexicon · verbs" },
+  domainLexicoAdjetival: { es: "Léxico · adjetivos", en: "Lexicon · adjectives" },
   domainTokenVivo: { es: "Token en vivo", en: "Live token" },
 
   // --- HUD ---

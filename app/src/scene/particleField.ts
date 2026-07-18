@@ -54,6 +54,12 @@ export const DOMAIN_HUES: Record<string, number> = {
   // cópulas) — gris-azulado neutro a propósito: no son un "tema", son la
   // gramática que conecta a los demás dominios.
   gramatica: 0x8a94a6,
+  // P3 — léxico de clase abierta sin tema (ver DOCs/08 §5.0): dos tonos
+  // primos entre sí pero distinguibles (verbos = acción, más cálido;
+  // adjetivos = cualidad, más frío), deliberadamente parecidos a
+  // `cualidades_y_acciones` (mismo tipo de contenido, dominio distinto).
+  lexico_verbal: 0xe0a458,
+  lexico_adjetival: 0xf0e6d2,
   // Modo token (Avanzado): partículas efímeras de tu frase, no dataset.
   token_vivo: 0x39ff6a,
 };
