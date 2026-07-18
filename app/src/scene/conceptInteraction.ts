@@ -86,6 +86,7 @@ export function setupConceptInteraction(options: ConceptInteractionOptions): Con
     field.setPointerHighlight(null);
     field.setSearchHighlights([]);
     field.setSimilarityLines(null, []);
+    field.setChainLines([]);
   }
 
   canvas.addEventListener("pointermove", (event) => {

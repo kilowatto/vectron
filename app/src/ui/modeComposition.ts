@@ -104,12 +104,20 @@ export async function mountModeDock(
   tokenPanel.addEventListener("vx-tokens-change", (event) => {
     const { tokens } = (event as CustomEvent<TokensChangeDetail>).detail;
     const matches = new Set<number>();
+    // Orden de la frase, no de aparición en el dataset — así la línea que
+    // conecta las partículas traza el mismo camino que las palabras
+    // escritas, mostrando cómo se relacionan entre sí (no sólo cuáles
+    // existen en el cubo).
+    const ordered: number[] = [];
     for (const token of tokens) {
       const key = token.text.trim().toLowerCase();
       const ids = wordIndex.get(key);
-      if (ids) ids.forEach((id) => matches.add(id));
+      if (!ids) continue;
+      ids.forEach((id) => matches.add(id));
+      ordered.push(ids[0]);
     }
     field.setSearchHighlights([...matches]);
+    field.setChainLines(ordered);
     if (advancedPanel) advancedPanel.tokenCount = tokens.length;
   });
 

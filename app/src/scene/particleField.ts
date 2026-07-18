@@ -41,6 +41,11 @@ export interface ParticleField {
     sourceInstanceId: number | null,
     neighborInstanceIds: number[],
   ) => void;
+  /** Traza una línea de A a B a C… en el orden dado — usado para mostrar
+   * cómo se conectan, en el cubo, las palabras de una frase escrita
+   * (distinto de `setSimilarityLines`, que es la estrella de vecinos
+   * reales de una partícula fijada). */
+  setChainLines: (instanceIds: number[]) => void;
 }
 
 /**
@@ -173,6 +178,38 @@ export function createParticleField(concepts: Concept[]): ParticleField {
     group.add(lines);
   }
 
+  let chainLines: THREE.LineSegments | null = null;
+  function setChainLines(instanceIds: number[]) {
+    if (chainLines) {
+      group.remove(chainLines);
+      chainLines.geometry.dispose();
+      (chainLines.material as THREE.Material).dispose();
+      chainLines = null;
+    }
+    if (instanceIds.length < 2) return;
+
+    const positions: number[] = [];
+    for (let i = 0; i < instanceIds.length - 1; i++) {
+      const a = concepts[instanceIds[i]].coords;
+      const b = concepts[instanceIds[i + 1]].coords;
+      positions.push(a[0], a[1], a[2], b[0], b[1], b[2]);
+    }
+
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    // Acento distinto del de setSimilarityLines (naranja = vecino real de
+    // Vectorize): cian = el camino de tu propia frase por el cubo.
+    const mat = new THREE.LineBasicMaterial({
+      color: 0x4fb8c4,
+      transparent: true,
+      opacity: 0.55,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    chainLines = new THREE.LineSegments(geom, mat);
+    group.add(chainLines);
+  }
+
   return {
     mesh,
     group,
@@ -181,6 +218,7 @@ export function createParticleField(concepts: Concept[]): ParticleField {
     setPointerHighlight,
     setSearchHighlights,
     setSimilarityLines,
+    setChainLines,
   };
 }
 

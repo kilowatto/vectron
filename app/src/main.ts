@@ -9,14 +9,16 @@ import "./ui/components/modeSelect";
 import "./ui/components/modeSwitcher";
 import type { ModeChangeDetail } from "./ui/components/modeSwitcher";
 import "./ui/components/langSwitcher";
+import type { LangChangeDetail } from "./ui/components/langSwitcher";
 import type { VxConceptCard } from "./ui/components/conceptCard";
 import "./ui/components/conceptCard";
 import { mountModeDock, type DockHandle } from "./ui/modeComposition";
 import type { ModePickDetail } from "./ui/components/modeSelect";
-import { getStoredLang, t } from "./i18n";
+import { getStoredLang, setStoredLang, t } from "./i18n";
 import { fadeIn, fadeOut } from "./ui/motion";
 
 const appEl = document.querySelector<HTMLDivElement>("#app")!;
+const stageEl = document.querySelector<HTMLDivElement>("#stage")!;
 const canvas = document.querySelector<HTMLCanvasElement>("#scene")!;
 const backendTag = document.querySelector<HTMLSpanElement>("#backend-tag")!;
 const fpsLabel = document.querySelector<HTMLSpanElement>("#fps")!;
@@ -37,18 +39,43 @@ function pickMode(): Promise<Mode> {
 }
 
 async function main() {
+  let lang = getStoredLang();
+  let appReady = false;
+
+  // El switcher de idioma vive en dos sitios: dentro del shadow DOM de
+  // <vx-mode-select> (antes de elegir modo — ahí no hay nada más
+  // construido, así que un reload no cuesta nada) y, una vez adentro de
+  // la app, la instancia de #stage de abajo (appReady=true, re-renderiza
+  // en vivo). `composed:true` en el evento (ver langSwitcher.ts) es lo
+  // que permite que este único listener en window capture ambos casos
+  // aunque el primero esté anidado dentro de otro shadow root.
+  window.addEventListener("vx-lang-change", (event) => {
+    const { lang: newLang } = (event as CustomEvent<LangChangeDetail>).detail;
+    if (newLang === lang) return;
+    setStoredLang(newLang);
+    if (!appReady) {
+      location.reload();
+      return;
+    }
+    lang = newLang;
+    langSwitcher.setAttribute("current", lang);
+    void applyMode(currentMode);
+  });
+
   const initialMode = getStoredMode() ?? (await pickMode());
-  const lang = getStoredLang();
 
   const switcher = document.createElement("vx-mode-switcher");
-  document.body.appendChild(switcher);
-  document.body.appendChild(document.createElement("vx-lang-switcher"));
+  switcher.setAttribute("variant", "stage");
+  stageEl.appendChild(switcher);
+  const langSwitcher = document.createElement("vx-lang-switcher");
+  langSwitcher.setAttribute("variant", "stage");
+  langSwitcher.setAttribute("current", lang);
+  stageEl.appendChild(langSwitcher);
 
   countLabel.textContent = t("hudLoading", lang);
   const concepts = await fetchConcepts();
 
   const engine = await createEngine(canvas);
-  backendTag.textContent = engine.usingWebGPU ? t("hudWebgpu", lang) : t("hudWebgl", lang);
 
   const field = createParticleField(concepts);
   engine.scene.add(field.group);
@@ -64,7 +91,7 @@ async function main() {
   engine.scene.add(cubeEdges);
 
   const card = document.createElement("vx-concept-card") as VxConceptCard;
-  document.getElementById("stage")!.appendChild(card);
+  stageEl.appendChild(card);
 
   const interaction = setupConceptInteraction({
     canvas,
@@ -75,6 +102,7 @@ async function main() {
   });
 
   let currentDock: DockHandle | null = null;
+  let currentMode: Mode = initialMode;
   let isFirstApply = true;
 
   // El "cambio de stage" real: nunca recrea el motor 3D ni recarga la
@@ -85,7 +113,9 @@ async function main() {
   // abre/cierra mientras su contenido viejo se desvanece — el contenido
   // nuevo entra en cascada una vez que el viejo ya se fue.
   async function applyMode(mode: Mode) {
+    currentMode = mode;
     switcher.setAttribute("current", mode);
+    backendTag.textContent = engine.usingWebGPU ? t("hudWebgpu", lang) : t("hudWebgl", lang);
 
     const usesDock = mode !== "principiante";
     const teardown = currentDock?.teardown();
@@ -129,6 +159,7 @@ async function main() {
   });
 
   await applyMode(initialMode);
+  appReady = true;
 
   engine.start(
     (dt) => spinField(field, dt),
