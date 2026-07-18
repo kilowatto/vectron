@@ -2419,4 +2419,51 @@ export const SEED_CONCEPTS: SeedConcept[] = [
     const [es, en] = pair.split(",");
     return { wordEs: es, wordEn: en, domain: "festividades", taxonomy: ["festividades", "concepto"], traits: { tipo: "festividad" } };
   }),
+
+  // --- Filosofía (dominio nuevo) ---
+  ...[
+    "existencialismo,existentialism", "estoicismo,stoicism", "ética,ethics",
+    "metafísica,metaphysics", "epistemología,epistemology",
+    "lógica (filosofía),logic (philosophy)", "nihilismo,nihilism",
+    "humanismo,humanism", "empirismo,empiricism", "racionalismo,rationalism",
+    "utilitarismo,utilitarianism", "fenomenología,phenomenology", "dualismo,dualism",
+    "determinismo,determinism", "libre albedrío,free will", "dialéctica,dialectics",
+    "hedonismo,hedonism", "escepticismo,skepticism", "idealismo,idealism",
+    "materialismo (filosofía),materialism (philosophy)", "ontología,ontology",
+    "paradoja,paradox", "silogismo,syllogism", "falacia,fallacy", "axiología,axiology",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "filosofia", taxonomy: ["filosofia", "concepto"], traits: { abstracto: true } };
+  }),
+
+  // --- Física: instrumentos científicos ---
+  ...[
+    "microscopio,microscope", "balanza,scale (weighing)", "termómetro,thermometer",
+    "barómetro,barometer", "cronómetro,stopwatch", "probeta,graduated cylinder",
+    "matraz,lab flask", "bureta,burette", "pipeta,pipette", "lupa,magnifying glass",
+    "espectrómetro,spectrometer", "sismógrafo,seismograph", "altímetro,altimeter",
+    "anemómetro,anemometer", "higrómetro,hygrometer",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "fisica", taxonomy: ["fisica", "instrumento"], traits: { tipo: "instrumento" } };
+  }),
+
+  // --- Programación: ampliación — DevOps/redes ---
+  ...[
+    "ansible,ansible", "prometheus,prometheus", "grafana,grafana",
+    "elasticsearch,elasticsearch", "kafka,kafka", "rabbitmq,rabbitmq", "grpc,grpc",
+    "websocket,websocket", "oauth,oauth", "jwt,jwt", "cors,cors",
+    "microfrontend,microfrontend", "serverless,serverless",
+    "edge computing,edge computing", "devops,devops", "ci/cd,ci/cd",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "programacion", taxonomy: ["programacion", "framework_o_herramienta"], traits: { esHerramienta: true } };
+  }),
+
+  // --- Biología animal: prehistóricos ---
+  animal("mamut", "mammoth", ["prehistorico"], { legs: 4, hasWings: false, vertebrado: true, dieta: "herbivoro" }),
+  animal("tigre dientes de sable", "saber-toothed tiger", ["prehistorico"], { legs: 4, hasWings: false, vertebrado: true, dieta: "carnivoro" }, "carnivoro"),
+  animal("dodo", "dodo", ["prehistorico"], { legs: 2, hasWings: true, vertebrado: true, dieta: "herbivoro" }),
+  animal("megalodón", "megalodon", ["prehistorico"], { legs: 0, hasWings: false, vertebrado: true, dieta: "carnivoro" }, "carnivoro"),
+  animal("perezoso gigante", "giant sloth", ["prehistorico"], { legs: 4, hasWings: false, vertebrado: true, dieta: "herbivoro" }),
 ];
