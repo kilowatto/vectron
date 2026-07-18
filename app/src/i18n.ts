@@ -98,6 +98,7 @@ const STRINGS = {
   domainHistoria: { es: "Historia", en: "History" },
   domainMitologia: { es: "Mitología", en: "Mythology" },
   domainQuimica: { es: "Química", en: "Chemistry" },
+  domainTecnologia: { es: "Tecnología", en: "Technology" },
 
   // --- HUD ---
   hudLoading: { es: "cargando…", en: "loading…" },

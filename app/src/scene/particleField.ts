@@ -29,6 +29,7 @@ export const DOMAIN_HUES: Record<string, number> = {
   historia: 0xa67c52,
   mitologia: 0x9d4edd,
   quimica: 0x2ee6a8,
+  tecnologia: 0x2196f3,
 };
 
 const FALLBACK_HUE = 0x9aa5ad;

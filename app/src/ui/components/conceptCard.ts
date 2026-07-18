@@ -18,6 +18,7 @@ const DOMAIN_LABEL_KEYS: Record<string, StringKey> = {
   historia: "domainHistoria",
   mitologia: "domainMitologia",
   quimica: "domainQuimica",
+  tecnologia: "domainTecnologia",
 };
 
 export interface NeighborView {

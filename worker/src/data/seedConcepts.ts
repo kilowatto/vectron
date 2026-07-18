@@ -991,4 +991,111 @@ export const SEED_CONCEPTS: SeedConcept[] = [
       traits: { esPlanta: true },
     }),
   ),
+
+  // --- Tecnología/Informática (dominio nuevo, distinto de
+  // "programación": hardware, internet, ciberseguridad — no lenguajes
+  // ni algoritmos, eso ya vive en programación). ---
+  ...[
+    "procesador,processor",
+    "tarjeta gráfica,graphics card",
+    "memoria ram,ram memory",
+    "disco duro,hard drive",
+    "unidad ssd,ssd drive",
+    "placa madre,motherboard",
+    "fuente de poder,power supply",
+    "monitor,monitor",
+    "teclado,keyboard",
+    "mouse,mouse",
+    "impresora,printer",
+    "escáner,scanner",
+    "router,router",
+    "módem,modem",
+    "servidor,server",
+    "circuito integrado,integrated circuit",
+    "sensor,sensor",
+    "batería,battery",
+    "cargador,charger",
+    "memoria usb,usb drive",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return {
+      wordEs: es,
+      wordEn: en,
+      domain: "tecnologia",
+      taxonomy: ["tecnologia", "hardware"],
+      traits: { tipo: "hardware" },
+    };
+  }),
+  ...[
+    "internet,internet",
+    "world wide web,world wide web",
+    "navegador web,web browser",
+    "dirección ip,ip address",
+    "protocolo tcp/ip,tcp/ip protocol",
+    "servidor web,web server",
+    "nombre de dominio,domain name",
+    "correo electrónico,email",
+    "red social,social network",
+    "motor de búsqueda,search engine",
+    "ancho de banda,bandwidth",
+    "computación en la nube,cloud computing",
+    "streaming,streaming",
+    "red 5g,5g network",
+    "red privada virtual,virtual private network",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return {
+      wordEs: es,
+      wordEn: en,
+      domain: "tecnologia",
+      taxonomy: ["tecnologia", "internet"],
+      traits: { tipo: "internet" },
+    };
+  }),
+  ...[
+    "contraseña,password",
+    "cortafuegos,firewall",
+    "virus informático,computer virus",
+    "malware,malware",
+    "phishing,phishing",
+    "autenticación de dos factores,two-factor authentication",
+    "hacker,hacker",
+    "vulnerabilidad,vulnerability",
+    "ransomware,ransomware",
+    "spyware,spyware",
+    "criptomoneda,cryptocurrency",
+    "cadena de bloques,blockchain",
+    "huella digital,digital fingerprint",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return {
+      wordEs: es,
+      wordEn: en,
+      domain: "tecnologia",
+      taxonomy: ["tecnologia", "ciberseguridad"],
+      traits: { tipo: "ciberseguridad" },
+    };
+  }),
+  ...[
+    "sistema operativo,operating system",
+    "software,software",
+    "hardware,hardware",
+    "interfaz de usuario,user interface",
+    "realidad virtual,virtual reality",
+    "realidad aumentada,augmented reality",
+    "internet de las cosas,internet of things",
+    "computación cuántica,quantum computing",
+    "macrodatos,big data",
+    "automatización,automation",
+    "robot,robot",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return {
+      wordEs: es,
+      wordEn: en,
+      domain: "tecnologia",
+      taxonomy: ["tecnologia", "concepto"],
+      traits: { tipo: "concepto" },
+    };
+  }),
 ];
