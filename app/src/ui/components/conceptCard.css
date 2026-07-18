@@ -15,23 +15,18 @@
   opacity: 0;
 }
 
+/* La barra de tokenización ocupa la parte baja de la pantalla en los 3
+   modos, así que la tarjeta fijada se centra en medio del cubo en vez
+   de competir por ese mismo espacio. */
 :host(.pinned) {
   pointer-events: auto;
   left: 50%;
-  bottom: clamp(16px, 4vh, 48px);
-  transform: translateX(-50%);
-  max-width: 360px;
-  flex-direction: column;
-}
-
-/* Principiante: la barra de tokenización ya vive abajo, así que la
-   tarjeta fijada se centra en el medio del cubo en vez de competir por
-   el mismo espacio. */
-:host(.pinned.centered) {
-  left: 50%;
   top: 50%;
-  bottom: auto;
   transform: translate(-50%, -50%);
+  max-width: min(360px, calc(100vw - 32px));
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+  flex-direction: column;
 }
 
 .head {

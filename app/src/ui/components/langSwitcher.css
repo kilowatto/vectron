@@ -1,8 +1,8 @@
 :host {
   position: fixed;
   z-index: 101;
-  top: clamp(16px, 3vw, 28px);
-  right: clamp(16px, 3vw, 36px);
+  top: max(clamp(16px, 3vw, 28px), env(safe-area-inset-top));
+  right: max(clamp(16px, 3vw, 36px), env(safe-area-inset-right));
   display: flex;
   gap: 2px;
   background: rgba(10, 13, 17, 0.7);
@@ -12,16 +12,6 @@
   font-family: var(--font-mono);
   font-size: 10.5px;
   letter-spacing: 0.03em;
-}
-
-/* variant="stage": la app principal (a diferencia del uso dentro de
-   vx-mode-select, donde no hay dock y "fixed" contra todo el viewport
-   está bien) — posicionado relativo a #stage, que sólo cubre la columna
-   de partículas cuando hay dock, así nunca queda encima del contenido
-   del dock (ver feedback-vectron-modes: el dock no es un panel flotante
-   sobre el mismo espacio, es su propia columna). */
-:host([variant="stage"]) {
-  position: absolute;
 }
 
 button {

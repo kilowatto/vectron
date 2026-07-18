@@ -1,8 +1,13 @@
+/* Arriba a la derecha, debajo de <vx-lang-switcher> — no abajo: la
+   barra de tokenización es casi todo el ancho en pantallas angostas y
+   ahí sí se superpondría (ver feedback de layout "apretado"). Dejar
+   toda la franja inferior libre para esa barra, sin excepciones, es lo
+   que de verdad funciona bien en móvil. */
 :host {
   position: fixed;
   z-index: 16;
-  bottom: clamp(16px, 3vw, 28px);
-  right: clamp(16px, 3vw, 36px);
+  top: clamp(56px, 11vw, 72px);
+  right: max(clamp(16px, 3vw, 36px), env(safe-area-inset-right));
   display: flex;
   gap: 2px;
   background: rgba(10, 13, 17, 0.7);
@@ -12,13 +17,6 @@
   font-family: var(--font-mono);
   font-size: 10.5px;
   letter-spacing: 0.03em;
-}
-
-/* Posicionado relativo a #stage (la columna de partículas), no al
-   viewport completo — así nunca se superpone con el contenido del dock
-   en Intermedio/Avanzado (antes tapaba texto al hacer scroll). */
-:host([variant="stage"]) {
-  position: absolute;
 }
 
 button {

@@ -76,11 +76,14 @@ type Visibility = "none" | "hover" | "pinned";
  * vecinos reales al hacer clic. Usado por los 3 modos; lo que cambia es
  * su nivel de detalle, no el componente.
  *
+ * La tarjeta fijada siempre se centra en medio del cubo — la barra de
+ * tokenización ocupa la parte baja de la pantalla en los 3 modos, así
+ * que no hay un "abajo" libre donde anclarla.
+ *
  * ### Atributos
  * | nombre           | tipo    | default    | descripción                                                    |
  * |------------------|---------|------------|------------------------------------------------------------------|
  * | `simple`         | boolean | ausente    | si está presente, oculta taxonomía/atributos/coordenadas y los scores de coseno (Principiante). Config inicial — fijar antes de insertar. |
- * | `pinned-anchor`  | string  | `"bottom"` | `"bottom"` o `"center"` — dónde se centra la tarjeta fijada. Config inicial — fijar antes de insertar. |
  *
  * ### Métodos públicos
  * (reciben datos complejos — por eso son métodos, no atributos)
@@ -89,8 +92,8 @@ type Visibility = "none" | "hover" | "pinned";
  * - `showPinned(concept, neighbors, topK)` — tarjeta fija e interactiva.
  * - `hidePinned()`
  * - `isPinned(): boolean`
- * - `configure({simple?, pinnedAnchor?, lang?})` — cambia la config en
- *   vivo (a diferencia de los atributos de arriba, que sólo se leen al
+ * - `configure({simple?, lang?})` — cambia la config en vivo (a
+ *   diferencia de los atributos de arriba, que sólo se leen al
  *   insertar). Pensado para cambio de modo/idioma sin recrear el
  *   elemento: oculta cualquier estado visible al instante, sin
  *   animación — es un detalle menor frente a la transición más grande
@@ -102,7 +105,7 @@ type Visibility = "none" | "hover" | "pinned";
  *
  * ### Ejemplo
  * ```html
- * <vx-concept-card pinned-anchor="center"></vx-concept-card>
+ * <vx-concept-card simple></vx-concept-card>
  * <script>
  *   card.showPinned(concept, neighbors, 6);
  *   card.addEventListener("vx-topk-change", (e) => refetch(e.detail.topK));
@@ -112,19 +115,17 @@ type Visibility = "none" | "hover" | "pinned";
 export class VxConceptCard extends HTMLElement {
   #shadow!: ShadowRoot;
   #detailed = true;
-  #pinnedAnchor: "bottom" | "center" = "bottom";
   #visibility: Visibility = "none";
   #lang: Lang = "es";
 
   connectedCallback() {
     if (this.shadowRoot) return; // ya montado (reconexión al DOM)
-    // simple/pinned-anchor se leen aquí, no en el constructor: quien crea
-    // este elemento con document.createElement() + setAttribute() recién
-    // aplica los atributos DESPUÉS de que el constructor ya corrió — para
-    // esa hora es tarde para leerlos ahí. connectedCallback (tras
-    // appendChild) sí los ve.
+    // simple se lee aquí, no en el constructor: quien crea este elemento
+    // con document.createElement() + setAttribute() recién aplica el
+    // atributo DESPUÉS de que el constructor ya corrió — para esa hora
+    // es tarde para leerlo ahí. connectedCallback (tras appendChild) sí
+    // lo ve.
     this.#detailed = !this.hasAttribute("simple");
-    this.#pinnedAnchor = this.getAttribute("pinned-anchor") === "center" ? "center" : "bottom";
     this.#lang = getStoredLang();
     this.#shadow = attachShadow(this, css);
   }
@@ -149,7 +150,7 @@ export class VxConceptCard extends HTMLElement {
   showPinned(concept: Concept, neighbors: NeighborView[], topK: number): void {
     const wasPinned = this.#visibility === "pinned";
     this.#visibility = "pinned";
-    this.className = this.#pinnedAnchor === "center" ? "pinned centered" : "pinned";
+    this.className = "pinned";
     this.style.pointerEvents = "";
     this.style.left = "";
     this.style.top = "";
@@ -185,13 +186,8 @@ export class VxConceptCard extends HTMLElement {
     return this.#visibility === "pinned";
   }
 
-  configure({
-    simple,
-    pinnedAnchor,
-    lang,
-  }: { simple?: boolean; pinnedAnchor?: "bottom" | "center"; lang?: Lang }): void {
+  configure({ simple, lang }: { simple?: boolean; lang?: Lang }): void {
     if (simple !== undefined) this.#detailed = !simple;
-    if (pinnedAnchor !== undefined) this.#pinnedAnchor = pinnedAnchor;
     if (lang !== undefined) this.#lang = lang;
     if (this.#visibility !== "none") {
       this.getAnimations().forEach((a) => a.cancel());

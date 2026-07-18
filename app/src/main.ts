@@ -12,18 +12,17 @@ import "./ui/components/langSwitcher";
 import type { LangChangeDetail } from "./ui/components/langSwitcher";
 import type { VxConceptCard } from "./ui/components/conceptCard";
 import "./ui/components/conceptCard";
-import { mountModeDock, type DockHandle } from "./ui/modeComposition";
+import type { VxTokenPanel, TokensChangeDetail } from "./ui/components/tokenPanel";
+import "./ui/components/tokenPanel";
 import type { ModePickDetail } from "./ui/components/modeSelect";
 import { getStoredLang, setStoredLang, t } from "./i18n";
 import { fadeIn, fadeOut } from "./ui/motion";
 
-const appEl = document.querySelector<HTMLDivElement>("#app")!;
 const stageEl = document.querySelector<HTMLDivElement>("#stage")!;
 const canvas = document.querySelector<HTMLCanvasElement>("#scene")!;
 const backendTag = document.querySelector<HTMLSpanElement>("#backend-tag")!;
 const fpsLabel = document.querySelector<HTMLSpanElement>("#fps")!;
 const countLabel = document.querySelector<HTMLSpanElement>("#count")!;
-const dockEl = document.querySelector<HTMLDivElement>("#dock")!;
 
 /** Muestra <vx-mode-select> y resuelve cuando el usuario elige un modo. */
 function pickMode(): Promise<Mode> {
@@ -45,10 +44,10 @@ async function main() {
   // El switcher de idioma vive en dos sitios: dentro del shadow DOM de
   // <vx-mode-select> (antes de elegir modo — ahí no hay nada más
   // construido, así que un reload no cuesta nada) y, una vez adentro de
-  // la app, la instancia de #stage de abajo (appReady=true, re-renderiza
-  // en vivo). `composed:true` en el evento (ver langSwitcher.ts) es lo
-  // que permite que este único listener en window capture ambos casos
-  // aunque el primero esté anidado dentro de otro shadow root.
+  // la app, la instancia de abajo (appReady=true, re-renderiza en vivo).
+  // `composed:true` en el evento (ver langSwitcher.ts) es lo que permite
+  // que este único listener en window capture ambos casos aunque el
+  // primero esté anidado dentro de otro shadow root.
   window.addEventListener("vx-lang-change", (event) => {
     const { lang: newLang } = (event as CustomEvent<LangChangeDetail>).detail;
     if (newLang === lang) return;
@@ -65,12 +64,10 @@ async function main() {
   const initialMode = getStoredMode() ?? (await pickMode());
 
   const switcher = document.createElement("vx-mode-switcher");
-  switcher.setAttribute("variant", "stage");
-  stageEl.appendChild(switcher);
+  document.body.appendChild(switcher);
   const langSwitcher = document.createElement("vx-lang-switcher");
-  langSwitcher.setAttribute("variant", "stage");
   langSwitcher.setAttribute("current", lang);
-  stageEl.appendChild(langSwitcher);
+  document.body.appendChild(langSwitcher);
 
   countLabel.textContent = t("hudLoading", lang);
   const concepts = await fetchConcepts();
@@ -101,36 +98,70 @@ async function main() {
     defaultTopK: 6,
   });
 
-  let currentDock: DockHandle | null = null;
+  // Índice palabra -> instancias del InstancedMesh, para resaltar en el
+  // cubo qué partículas coinciden con el texto tokenizado y trazar el
+  // camino entre ellas (mismo orden que las palabras en la frase).
+  const wordIndex = new Map<string, number[]>();
+  field.concepts.forEach((concept, instanceId) => {
+    for (const w of [concept.word.es, concept.word.en]) {
+      const key = w.toLowerCase();
+      const list = wordIndex.get(key) ?? [];
+      list.push(instanceId);
+      wordIndex.set(key, list);
+    }
+  });
+
+  function mountTokenPanel(mode: Mode): VxTokenPanel {
+    const panel = document.createElement("vx-token-panel") as VxTokenPanel;
+    if (mode === "principiante") {
+      panel.setAttribute("hide-toggle", "");
+      panel.setAttribute("hide-ids", "");
+    }
+    panel.setAttribute(
+      "placeholder",
+      mode === "principiante"
+        ? t("tokenPanelPlaceholderPrincipiante", lang)
+        : t("tokenPanelPlaceholderDefault", lang),
+    );
+    panel.addEventListener("vx-tokens-change", (event) => {
+      const { tokens } = (event as CustomEvent<TokensChangeDetail>).detail;
+      const matches = new Set<number>();
+      // Orden de la frase, no de aparición en el dataset — así la línea
+      // que conecta las partículas traza el mismo camino que las
+      // palabras escritas.
+      const ordered: number[] = [];
+      for (const token of tokens) {
+        const key = token.text.trim().toLowerCase();
+        const ids = wordIndex.get(key);
+        if (!ids) continue;
+        ids.forEach((id) => matches.add(id));
+        ordered.push(ids[0]);
+      }
+      field.setSearchHighlights([...matches]);
+      field.setChainLines(ordered);
+    });
+    stageEl.appendChild(panel);
+    fadeIn(panel, { duration: 420, rise: 16 });
+    return panel;
+  }
+
+  let tokenPanel: VxTokenPanel | null = null;
   let currentMode: Mode = initialMode;
-  let isFirstApply = true;
 
   // El "cambio de stage" real: nunca recrea el motor 3D ni recarga la
   // página — las partículas siguen girando durante todo el cambio, sólo
-  // el dock/tarjeta/HUD alrededor se desmontan y vuelven a montar. La
-  // transición del grid (grid-template-columns, 0.7s en style.css) y el
-  // teardown del dock anterior (~220ms) arrancan juntos, así el panel se
-  // abre/cierra mientras su contenido viejo se desvanece — el contenido
-  // nuevo entra en cascada una vez que el viejo ya se fue.
+  // la barra de tokenización y la tarjeta de concepto se reconfiguran.
   async function applyMode(mode: Mode) {
     currentMode = mode;
     switcher.setAttribute("current", mode);
     backendTag.textContent = engine.usingWebGPU ? t("hudWebgpu", lang) : t("hudWebgl", lang);
 
-    const usesDock = mode !== "principiante";
-    const teardown = currentDock?.teardown();
-    appEl.classList.toggle("has-dock", usesDock);
-
-    card.configure({
-      simple: mode === "principiante",
-      pinnedAnchor: mode === "principiante" ? "center" : "bottom",
-      lang,
-    });
+    card.configure({ simple: mode === "principiante", lang });
     interaction.setDefaultTopK(mode === "principiante" ? 5 : 6);
     interaction.reset();
 
     // El HUD también habla el idioma de cada modo: Principiante no dice
-    // "vector", Avanzado sí y hasta con la notación ℝ del panel de tensores.
+    // "vector", los otros sí (con la notación ℝ en Avanzado).
     const countUnit =
       mode === "principiante"
         ? t("hudUnitPrincipiante", lang)
@@ -138,7 +169,7 @@ async function main() {
           ? t("hudUnitIntermedio", lang)
           : t("hudUnitAvanzado", lang);
     const countText = `${field.count.toLocaleString(lang === "en" ? "en-US" : "es-MX")} ${countUnit}`;
-    if (isFirstApply) {
+    if (!tokenPanel) {
       countLabel.textContent = countText;
     } else {
       fadeOut(countLabel, { duration: 150 }).then(() => {
@@ -146,10 +177,12 @@ async function main() {
         fadeIn(countLabel, { duration: 200, rise: 0 });
       });
     }
-    isFirstApply = false;
 
-    if (teardown) await teardown;
-    currentDock = await mountModeDock(mode, dockEl, field);
+    if (tokenPanel) {
+      await fadeOut(tokenPanel, { duration: 220 });
+      tokenPanel.remove();
+    }
+    tokenPanel = mountTokenPanel(mode);
   }
 
   switcher.addEventListener("vx-mode-change", (event) => {

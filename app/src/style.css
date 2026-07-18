@@ -1,8 +1,7 @@
 /*
- * Shell de la página: lo que NO es un componente (layout de grid entre
- * el escenario 3D y el dock, el HUD de esquina, el reset). Cada
- * componente (vx-token-panel, vx-concept-card, etc.) trae su propio CSS
- * dentro de su Shadow DOM — ver src/ui/components/*.css.
+ * Shell de la página: lo que NO es un componente (el HUD de esquina, el
+ * reset). Cada componente (vx-token-panel, vx-concept-card, etc.) trae
+ * su propio CSS dentro de su Shadow DOM — ver src/ui/components/*.css.
  *
  * Las custom properties de :root SÍ atraviesan el límite de Shadow DOM
  * (no así las reglas normales), por eso los componentes pueden usar
@@ -40,59 +39,18 @@ body {
   font-family: var(--font-sans);
 }
 
-/* Avanzado/Intermedio no son un toggle sobre la misma vista: cada modo
-   con dock abre su propio layout de dos columnas, siempre visible, sin
-   nada que se colapse detrás de un botón (ver feedback-vectron-modes).
-   El grid arranca con la segunda columna en 0 y transiciona al ancho
-   real — el panel "se abre", no aparece de golpe. */
+/* Pantalla completa de partículas en los 3 modos — no hay dock ni
+   segunda columna, ver feedback: sólo el cubo y la barra de
+   tokenización sobre él. */
 #app {
   position: fixed;
   inset: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 0px;
-  transition: grid-template-columns 0.7s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-#app.has-dock {
-  /* Ancho fijo, no min(): transicionar 0px -> min(420px, 38vw) resuelve
-     mal el valor final en algunos motores. El límite de ancho angosto
-     se cubre aparte con la media query de abajo. */
-  grid-template-columns: minmax(0, 1fr) 420px;
-}
-
-@media (max-width: 1100px) {
-  #app.has-dock {
-    grid-template-columns: minmax(0, 1fr) 340px;
-  }
 }
 
 #stage {
   position: absolute;
   inset: 0;
-  grid-column: 1;
   height: 100%;
-}
-
-#app.has-dock #stage {
-  position: relative;
-  inset: auto;
-}
-
-#dock {
-  grid-column: 2;
-  height: 100%;
-  overflow: hidden;
-  background: rgba(8, 10, 14, 0.92);
-  border-left: 1px solid transparent;
-  transition: border-color 0.5s ease 0.2s;
-  /* opacity/entrada la maneja JS (Web Animations API) — ver main.ts,
-     así no depende de que el timing de la transición CSS coincida con
-     el momento en que el contenido termina de montarse. */
-}
-
-#app.has-dock #dock {
-  overflow-y: auto;
-  border-left-color: rgba(231, 226, 214, 0.14);
 }
 
 #scene {
@@ -110,6 +68,9 @@ body {
   flex-direction: column;
   justify-content: space-between;
   padding: clamp(16px, 3vw, 36px);
+  padding-top: max(clamp(16px, 3vw, 36px), env(safe-area-inset-top));
+  padding-bottom: max(clamp(16px, 3vw, 36px), env(safe-area-inset-bottom));
+  padding-left: max(clamp(16px, 3vw, 36px), env(safe-area-inset-left));
   font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 0.04em;

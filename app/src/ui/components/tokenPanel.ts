@@ -11,13 +11,14 @@ export interface TokensChangeDetail {
 }
 
 /**
- * `<vx-token-panel>` — entrada de texto + tokenización en vivo (BPE real
- * o simplificada), compartido por los 3 modos con distinta configuración.
+ * `<vx-token-panel>` — barra flotante anclada abajo, sobre las
+ * partículas: entrada de texto + tokenización en vivo (BPE real o
+ * simplificada). Es la única UI 2D de la app además de la tarjeta de
+ * concepto — compartida por los 3 modos con distinta configuración.
  *
  * ### Atributos
  * | nombre         | tipo    | default    | descripción                                              |
  * |----------------|---------|------------|-----------------------------------------------------------|
- * | `variant`      | string  | `""`       | `"bottom"` (Principiante) o `"docked"` (Intermedio/Avanzado) — sólo estilo. Fijar antes de insertar en el DOM. |
  * | `hide-toggle`  | boolean | ausente    | si está presente, oculta el switch BPE/Simplificado y fuerza tokenizador simple. Fijar antes de insertar. |
  * | `hide-ids`     | boolean | ausente    | si está presente, los chips no muestran el ID numérico del token. Fijar antes de insertar. |
  * | `placeholder`  | string  | frase genérica | placeholder del input. Reactivo: se puede cambiar en cualquier momento. |
@@ -29,7 +30,7 @@ export interface TokensChangeDetail {
  *
  * ### Ejemplo
  * ```html
- * <vx-token-panel variant="docked" placeholder="Escribe una frase…"></vx-token-panel>
+ * <vx-token-panel placeholder="Escribe una frase…"></vx-token-panel>
  * <script>
  *   panel.addEventListener("vx-tokens-change", (e) => {
  *     console.log(e.detail.tokens, e.detail.mode);
@@ -57,9 +58,7 @@ export class VxTokenPanel extends HTMLElement {
     // código que crea el elemento tenga oportunidad de llamar
     // setAttribute() sobre él, así que a esa hora el atributo todavía no
     // existe. connectedCallback corre después de appendChild(), cuando
-    // ya se aplicaron. (Si el atributo viniera del HTML parseado en el
-    // documento, sí estaría disponible desde el constructor — pero no es
-    // como se usa este componente aquí.)
+    // ya se aplicaron.
     this.#hideToggle = this.hasAttribute("hide-toggle");
     this.#hideIds = this.hasAttribute("hide-ids");
     this.#mode = this.#hideToggle ? "simple" : "bpe";
@@ -67,7 +66,6 @@ export class VxTokenPanel extends HTMLElement {
 
     const root = attachShadow(this, css);
     root.innerHTML = `
-      <h3 class="title">${t("tokenPanelTitle", lang)}</h3>
       <div class="row">
         <input type="text" autocomplete="off" spellcheck="false" />
         ${

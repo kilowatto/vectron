@@ -21,7 +21,6 @@ export interface LangChangeDetail {
  * | nombre    | tipo   | default              | descripción                    |
  * |-----------|--------|----------------------|----------------------------------|
  * | `current` | string | `getStoredLang()`    | idioma activo (`es`\|`en`), resalta su botón |
- * | `variant` | string | `""`                 | `"stage"` — se posiciona relativo al `#stage` (esquina superior derecha del área de partículas) en vez de fijo a todo el viewport, para no superponerse con el dock. Sólo estilo. |
  *
  * ### Eventos
  * - `vx-lang-change` — `CustomEvent<{ lang: Lang }>`, disparado al elegir
@@ -29,7 +28,7 @@ export interface LangChangeDetail {
  *
  * ### Ejemplo
  * ```html
- * <vx-lang-switcher current="es" variant="stage"></vx-lang-switcher>
+ * <vx-lang-switcher current="es"></vx-lang-switcher>
  * <script>
  *   switcher.addEventListener("vx-lang-change", (e) => setLang(e.detail.lang));
  * </script>
