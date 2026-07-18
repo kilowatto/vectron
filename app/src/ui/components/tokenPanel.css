@@ -14,11 +14,11 @@
   margin-inline: auto !important;
   bottom: max(clamp(16px, 4vw, 40px), env(safe-area-inset-bottom));
   width: min(720px, calc(100vw - 24px));
-  /* Con dos filas de tokens (GPT + BGE) más el disclaimer, esta barra
-     puede crecer más alto que la pantalla y tapar el cubo entero — el
-     tope + scroll interno de .tokens-zone deja siempre visible la
-     franja de arriba con el HUD y el cubo. */
-  max-height: min(58vh, calc(100vh - 140px));
+  /* Respaldo, no el mecanismo principal: la fila BGE (la que de verdad
+     puede crecer mucho) vive colapsada en .bge-detail con su propio
+     tope fijo — esto sólo cubre el caso extremo de muchos ejemplos +
+     texto largo en una pantalla muy baja. */
+  max-height: calc(100vh - 16px);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -146,27 +146,16 @@ input:focus {
   border-color: var(--accent);
 }
 
+/* La fila primaria (GPT/simplificado) se queda siempre visible y a su
+   tamaño natural — un puñado de chips, nunca compite con el cubo. La
+   comparación BGE (segunda fila + disclaimer) es la que puede crecer
+   mucho con una frase larga, así que vive colapsada por defecto detrás
+   de .bge-toggle — ver .bge-detail más abajo. */
 .tokens-zone {
   order: -1;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  /* Única parte que puede crecer sin límite (más tokens = más chips) —
-     .row y .examples se quedan a su tamaño natural, siempre visibles;
-     esta zona cede y hace scroll interno cuando no cabe. */
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-/* Sin esto, cuando el contenido no cabe el motor de flexbox ENCOGE
-   cada hijo (rowlabel/tokens/disclaimer) en vez de dejar que la zona
-   completa desborde y haga scroll — y como `.tokens` no recorta su
-   propio contenido, la fila de chips que le sobra a su caja encogida
-   se pinta fuera de ella, encima del siguiente hijo (bug real: la
-   etiqueta BGE terminaba con chips de GPT superpuestos). */
-.tokens-zone > * {
-  flex-shrink: 0;
 }
 
 .tokens {
@@ -176,8 +165,55 @@ input:focus {
   min-height: 24px;
 }
 
-.tokens.bge {
-  min-height: 0;
+.bge-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 4px 0;
+  color: var(--dim);
+  font-family: inherit;
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+
+.bge-toggle:hover {
+  color: var(--ink);
+}
+
+.bge-toggle .chevron {
+  display: inline-block;
+  color: #39ff6a;
+  transition: transform 0.2s ease;
+}
+
+.bge-toggle.expanded .chevron {
+  transform: rotate(90deg);
+}
+
+/* Colapsada por defecto (max-height:0 + overflow:hidden). Sin
+   transición a propósito: con el render loop de WebGPU compitiendo por
+   el hilo principal, una transición de max-height puede quedarse
+   congelada a medio camino en vez de asentar — mejor un cambio
+   instantáneo y confiable que uno "suave" que a veces no termina. Al
+   expandir, tope FIJO en px — no vh — para que en un monitor grande
+   "expandido" siga siendo una franja, nunca la mayoría de la pantalla;
+   adentro, scroll propio si aun así no cabe. */
+.bge-detail {
+  max-height: 0;
+  overflow: hidden;
+}
+
+.bge-detail.expanded {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.bge-detail .rowlabel {
+  margin-top: 4px;
 }
 
 .rowlabel {

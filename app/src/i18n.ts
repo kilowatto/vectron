@@ -74,6 +74,10 @@ const STRINGS = {
     en: "Each fragment is embedded in isolation with BGE (100% real numbers from the same model as the cube); the real model reads tokens in context, with mutual attention — their position here is a declared approximation. GPT's cuts are also embedded with BGE so they can live in the same space.",
   },
   tokenPhraseLabel: { es: "frase completa", en: "full phrase" },
+  tokenCompareToggle: {
+    es: "comparar con BGE, el modelo real del cubo",
+    en: "compare with BGE, the cube's real model",
+  },
   tokenPanelToggleSimple: { es: "Simplificado", en: "Simplified" },
   examplePhrase1: {
     es: "El Rinoceronte Naranja que viene de la sabana le gusta el café Frida Café",

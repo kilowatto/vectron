@@ -61,14 +61,21 @@ export class VxTokenPanel extends HTMLElement {
   #bgeTokensEl!: HTMLDivElement;
   #gptLabelEl!: HTMLDivElement;
   #bgeLabelEl!: HTMLDivElement;
-  #disclaimerEl!: HTMLDivElement;
   #examplesEl!: HTMLDivElement;
+  #bgeToggleBtn!: HTMLButtonElement;
+  #bgeToggleLabelEl!: HTMLSpanElement;
+  #bgeDetailEl!: HTMLDivElement;
   #toggleButtons: HTMLButtonElement[] = [];
   #mode: TokenizerMode = "bpe";
   #requestSeq = 0;
   #hideToggle = false;
   #hideIds = false;
   #compare = false;
+  /** La comparación BGE (segunda fila + disclaimer) empieza colapsada
+   * — son ~20 chips más que compiten con el cubo por pantalla y sólo
+   * hacen falta cuando alguien quiere ver el tokenizador real, no en
+   * cada tecla. Se resetea a colapsado sólo cuando el texto se vacía. */
+  #bgeExpanded = false;
 
   connectedCallback() {
     if (this.shadowRoot) return; // ya montado (reconexión al DOM)
@@ -105,9 +112,15 @@ export class VxTokenPanel extends HTMLElement {
       <div class="tokens-zone">
         <div class="rowlabel gpt-label" hidden></div>
         <div class="tokens"></div>
-        <div class="rowlabel bge-label" hidden></div>
-        <div class="tokens bge"></div>
-        <div class="disclaimer" hidden>${t("tokenDisclaimer", lang)}</div>
+        <button type="button" class="bge-toggle" hidden aria-expanded="false">
+          <span class="chevron">▸</span>
+          <span class="bge-toggle-label"></span>
+        </button>
+        <div class="bge-detail">
+          <div class="rowlabel bge-label"></div>
+          <div class="tokens bge"></div>
+          <div class="disclaimer">${t("tokenDisclaimer", lang)}</div>
+        </div>
       </div>
     `;
 
@@ -117,9 +130,15 @@ export class VxTokenPanel extends HTMLElement {
     this.#bgeTokensEl = root.querySelector(".tokens.bge")!;
     this.#gptLabelEl = root.querySelector(".gpt-label")!;
     this.#bgeLabelEl = root.querySelector(".bge-label")!;
-    this.#disclaimerEl = root.querySelector(".disclaimer")!;
     this.#examplesEl = root.querySelector(".examples")!;
-    this.#toggleButtons = Array.from(root.querySelectorAll(".toggle button"));
+    this.#bgeToggleBtn = root.querySelector(".bge-toggle")!;
+    this.#bgeToggleLabelEl = root.querySelector(".bge-toggle-label")!;
+    this.#bgeDetailEl = root.querySelector(".bge-detail")!;
+
+    this.#bgeToggleBtn.addEventListener("click", () => {
+      this.#bgeExpanded = !this.#bgeExpanded;
+      this.#syncBgeExpanded();
+    });
 
     this.#clearBtn.addEventListener("click", () => this.clear());
     this.#input.addEventListener("keydown", (e) => {
@@ -173,6 +192,12 @@ export class VxTokenPanel extends HTMLElement {
     this.#input.focus();
   }
 
+  #syncBgeExpanded() {
+    this.#bgeDetailEl.classList.toggle("expanded", this.#bgeExpanded);
+    this.#bgeToggleBtn.classList.toggle("expanded", this.#bgeExpanded);
+    this.#bgeToggleBtn.setAttribute("aria-expanded", String(this.#bgeExpanded));
+  }
+
   #renderChips(el: HTMLDivElement, tokens: Token[]) {
     el.innerHTML = tokens
       .map(
@@ -203,12 +228,13 @@ export class VxTokenPanel extends HTMLElement {
     if (this.#compare) {
       const hasText = text.trim().length > 0;
       this.#gptLabelEl.hidden = !hasText;
-      this.#bgeLabelEl.hidden = !hasText;
-      this.#bgeTokensEl.hidden = !hasText;
-      this.#disclaimerEl.hidden = !hasText;
+      this.#bgeToggleBtn.hidden = !hasText;
+      if (!hasText) this.#bgeExpanded = false; // colapsa de nuevo al borrar
+      this.#syncBgeExpanded();
       this.#gptLabelEl.textContent =
         this.#mode === "bpe" ? t("tokenRowGpt", lang) : t("tokenRowSimple", lang);
       this.#bgeLabelEl.textContent = t("tokenRowBge", lang);
+      this.#bgeToggleLabelEl.textContent = `${t("tokenCompareToggle", lang)} · ${bgeTokens.length}`;
       this.#renderChips(this.#bgeTokensEl, bgeTokens);
     }
 
