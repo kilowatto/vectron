@@ -1,7 +1,23 @@
+/*
+ * Shell de la página: lo que NO es un componente (layout de grid entre
+ * el escenario 3D y el dock, el HUD de esquina, el reset). Cada
+ * componente (vx-token-panel, vx-concept-card, etc.) trae su propio CSS
+ * dentro de su Shadow DOM — ver src/ui/components/*.css.
+ *
+ * Las custom properties de :root SÍ atraviesan el límite de Shadow DOM
+ * (no así las reglas normales), por eso los componentes pueden usar
+ * var(--ink) / var(--accent) / var(--font-mono) sin que este archivo
+ * tenga que inyectarse en cada shadow root.
+ */
+
 :root {
   --ink: #e7e2d6;
   --dim: #7c8890;
   --accent: #d98a34;
+  --accent-2: #4fb8c4;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-serif: "Iowan Old Style", Georgia, serif;
   color-scheme: dark;
 }
 
@@ -21,25 +37,17 @@ body,
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-sans);
 }
 
+/* Avanzado/Intermedio no son un toggle sobre la misma vista: cada modo
+   con dock abre su propio layout de dos columnas, siempre visible, sin
+   nada que se colapse detrás de un botón (ver feedback-vectron-modes).
+   El grid arranca con la segunda columna en 0 y transiciona al ancho
+   real — el panel "se abre", no aparece de golpe. */
 #app {
   position: fixed;
   inset: 0;
-}
-
-#stage {
-  position: absolute;
-  inset: 0;
-}
-
-/* Avanzado no es un toggle sobre la misma vista: es su propio layout de
-   dos columnas, siempre visible, sin nada que se colapse detrás de un
-   botón (ver feedback-vectron-modes). El grid arranca con la segunda
-   columna en 0 y transiciona al ancho real — el panel "se abre", no
-   aparece de golpe. */
-#app {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 0px;
   transition: grid-template-columns 0.7s cubic-bezier(0.16, 1, 0.3, 1);
@@ -59,6 +67,8 @@ body {
 }
 
 #stage {
+  position: absolute;
+  inset: 0;
   grid-column: 1;
   height: 100%;
 }
@@ -85,65 +95,6 @@ body {
   border-left-color: rgba(231, 226, 214, 0.14);
 }
 
-.dock-header {
-  padding: 22px 20px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  border-bottom: 1px solid rgba(231, 226, 214, 0.12);
-}
-
-.dock-header .brand {
-  color: var(--accent);
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  letter-spacing: 0.18em;
-  font-size: 14px;
-}
-
-.dock-header .tag {
-  color: var(--dim);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.token-panel-title,
-#advanced-panel.docked h3,
-.dock-block h3 {
-  font-family: "Iowan Old Style", Georgia, serif;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--accent);
-  margin: 0 0 2px;
-}
-
-.dock-block {
-  padding: 18px 20px;
-  border-bottom: 1px solid rgba(231, 226, 214, 0.1);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.dock-block p {
-  font-size: 12.5px;
-  line-height: 1.6;
-  color: var(--dim);
-  margin: 0;
-}
-
-.dock-block p b {
-  color: var(--ink);
-}
-
-.dock-block code {
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 0.92em;
-  background: rgba(231, 226, 214, 0.08);
-  padding: 1px 5px;
-  border-radius: 3px;
-}
-
 #scene {
   position: absolute;
   inset: 0;
@@ -159,7 +110,7 @@ body {
   flex-direction: column;
   justify-content: space-between;
   padding: clamp(16px, 3vw, 36px);
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 0.04em;
   color: var(--ink);
@@ -193,572 +144,11 @@ body {
   color: var(--dim);
 }
 
-#concept-card {
-  position: absolute;
-  z-index: 20;
-  display: flex;
-  gap: 10px;
-  max-width: 260px;
-  padding: 12px 14px;
-  border-radius: 8px;
-  background: rgba(10, 13, 17, 0.88);
-  border: 1px solid rgba(231, 226, 214, 0.14);
-  backdrop-filter: blur(6px);
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  color: var(--ink);
-  pointer-events: none;
-}
-
-#concept-card.pinned {
-  pointer-events: auto;
-  left: 50%;
-  bottom: clamp(16px, 4vh, 48px);
-  transform: translateX(-50%);
-  max-width: 360px;
-  flex-direction: column;
-}
-
-/* Principiante: la barra de tokenización ya vive abajo, así que la
-   tarjeta fijada se centra en el medio del cubo en vez de competir por
-   el mismo espacio. */
-#concept-card.pinned.centered {
-  left: 50%;
-  top: 50%;
-  bottom: auto;
-  transform: translate(-50%, -50%);
-}
-
-#concept-card .head {
-  display: flex;
-  gap: 10px;
-}
-
-#concept-card .neighbors {
-  border-top: 1px solid rgba(231, 226, 214, 0.12);
-  padding-top: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-#concept-card .neighbors-head {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10.5px;
-  color: var(--dim);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-#concept-card .neighbors-head .topk-value {
-  color: var(--accent);
-  font-weight: 600;
-}
-
-#concept-card .neighbors input[type="range"] {
-  width: 100%;
-  accent-color: var(--accent);
-  margin: 2px 0 6px;
-}
-
-#concept-card .neighbor {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-}
-
-#concept-card .neighbor .nword {
-  width: 80px;
-  flex-shrink: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-#concept-card .nbar {
-  flex: 1;
-  height: 4px;
-  background: rgba(231, 226, 214, 0.1);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-#concept-card .nbar-fill {
-  height: 100%;
-  background: var(--accent);
-}
-
-#concept-card .neighbor .nscore {
-  width: 40px;
-  text-align: right;
-  color: var(--dim);
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-}
-
-#concept-card .neighbor-empty {
-  color: var(--dim);
-  font-size: 11px;
-}
-
-#concept-card .neighbor-plain {
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--ink);
-}
-
-#concept-card .swatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  margin-top: 4px;
-  flex-shrink: 0;
-  box-shadow: 0 0 8px currentColor;
-}
-
-#concept-card .body {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
-  min-width: 0;
-}
-
-#concept-card .words {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-#concept-card .es {
-  font-size: 14px;
-  font-weight: 600;
-}
-
-#concept-card .en {
-  color: var(--dim);
-  font-style: italic;
-}
-
-#concept-card .domain {
-  color: var(--accent);
-  font-size: 10.5px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-#concept-card .taxonomy {
-  color: var(--dim);
-  font-size: 11px;
-  margin-top: 4px;
-}
-
-#concept-card .traits {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-top: 6px;
-  font-size: 11px;
-}
-
-#concept-card .traits .row {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  color: var(--dim);
-}
-
-#concept-card .traits .row span:last-child {
-  color: var(--ink);
-}
-
-#concept-card .coords {
-  margin-top: 6px;
-  font-size: 10px;
-  color: var(--dim);
-  font-variant-numeric: tabular-nums;
-}
-
-#concept-card .hint {
-  position: absolute;
-  bottom: -22px;
-  left: 0;
-  right: 0;
-  text-align: center;
-  font-size: 10px;
-  color: var(--dim);
-  letter-spacing: 0.04em;
-}
-
-#token-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-}
-
-/* Dentro del dock de Intermedio/Avanzado: fluye como una sección más de
-   la página, no como una tarjeta flotante. */
-#token-panel.docked {
-  width: 100%;
-  border-bottom: 1px solid rgba(231, 226, 214, 0.12);
-  padding: 20px 20px 18px;
-}
-
-/* Principiante: barra ancha anclada abajo — otra app, no la misma
-   tarjeta con menos botones. */
-#token-panel.bottom-bar {
-  position: fixed;
-  z-index: 15;
-  left: 50%;
-  bottom: clamp(20px, 4vw, 40px);
-  transform: translateX(-50%);
-  width: min(720px, calc(100vw - 32px));
-  padding: 18px 22px;
-  border-radius: 16px;
-  background: rgba(10, 13, 17, 0.85);
-  border: 1px solid rgba(231, 226, 214, 0.16);
-  backdrop-filter: blur(10px);
-  gap: 14px;
-}
-
-#token-panel.bottom-bar input {
-  font-size: 15px;
-  padding: 12px 16px;
-}
-
-#token-panel.bottom-bar .tokens {
-  order: -1;
-}
-
-#token-panel .row {
-  display: flex;
-  gap: 10px;
-}
-
-#token-panel input {
-  flex: 1;
-  background: rgba(231, 226, 214, 0.06);
-  border: 1px solid rgba(231, 226, 214, 0.16);
-  border-radius: 6px;
-  padding: 8px 10px;
-  color: var(--ink);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 13px;
-  outline: none;
-}
-
-#token-panel input:focus {
-  border-color: var(--accent);
-}
-
-#token-panel .toggle {
-  display: flex;
-  border: 1px solid rgba(231, 226, 214, 0.16);
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-#token-panel .toggle button {
-  background: none;
-  border: none;
-  color: var(--dim);
-  font-size: 10.5px;
-  letter-spacing: 0.03em;
-  padding: 0 10px;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-#token-panel .toggle button.active {
-  background: var(--accent);
-  color: #1a0f04;
-  font-weight: 600;
-}
-
-#token-panel .examples {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-#token-panel .example {
-  background: none;
-  border: 1px solid rgba(231, 226, 214, 0.14);
-  color: var(--dim);
-  border-radius: 12px;
-  padding: 3px 10px;
-  font-size: 10.5px;
-  cursor: pointer;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-}
-
-#token-panel .example:hover {
-  color: var(--ink);
-  border-color: var(--accent);
-}
-
-#token-panel .tokens {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  min-height: 24px;
-}
-
-#token-panel .token {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-  background: rgba(217, 138, 52, 0.14);
-  border: 1px solid rgba(217, 138, 52, 0.35);
-  border-radius: 5px;
-  padding: 3px 7px;
-  font-size: 12px;
-  color: var(--ink);
-}
-
-#token-panel .token small {
-  color: var(--accent);
-  font-size: 9.5px;
-}
-
-#advanced-panel.docked {
-  position: static;
-  width: 100%;
-  max-height: none;
-  overflow-y: visible;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  backdrop-filter: none;
-  color: var(--ink);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-}
-
-#advanced-panel .adv-scroll {
-  padding: 18px 20px 26px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-#advanced-panel h3 {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0;
-  color: var(--accent);
-}
-
-#advanced-panel p {
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--dim);
-  margin: 0;
-}
-
-#advanced-panel .adv-note {
-  color: var(--ink);
-  opacity: 0.85;
-}
-
-#advanced-panel .adv-step {
-  border-top: 1px solid rgba(231, 226, 214, 0.1);
-  padding-top: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-#advanced-panel .adv-formula {
-  overflow-x: auto;
-  color: var(--ink);
-}
-
-#advanced-panel .adv-formula .katex {
-  font-size: 1em;
-}
-
-#advanced-panel .adv-formula .katex-display {
-  margin: 0;
-}
-
-#advanced-panel .tensor-graph {
-  width: 100%;
-  margin-top: 4px;
-}
-
-#advanced-panel .node {
-  fill: rgba(217, 138, 52, 0.1);
-  stroke: rgba(217, 138, 52, 0.55);
-  stroke-width: 1;
-}
-
-#advanced-panel .node-label {
-  fill: var(--ink);
-  font-size: 11px;
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-}
-
-#advanced-panel .node-sub {
-  fill: var(--dim);
+/* Diagnóstico interno (¿WebGPU o WebGL?) — útil para nosotros al revisar
+   que el fallback funcione, irrelevante para quien usa la app. Discreto
+   a propósito, no lo escondemos por si hace falta depurar en vivo. */
+#hud-top .dot,
+#backend-tag {
   font-size: 9px;
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-}
-
-#advanced-panel .edge {
-  stroke: rgba(231, 226, 214, 0.35);
-  stroke-width: 1.2;
-}
-
-#advanced-panel .arrowhead {
-  fill: rgba(231, 226, 214, 0.35);
-}
-
-#advanced-panel .adv-footnote {
-  border-top: 1px solid rgba(231, 226, 214, 0.1);
-  padding-top: 12px;
-  font-size: 11px;
-}
-
-#advanced-panel .adv-cite {
-  font-size: 10.5px;
-  font-style: italic;
-}
-
-#advanced-panel .adv-cite a {
-  color: var(--accent-2, var(--accent));
-}
-
-#advanced-panel .adv-todo {
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  opacity: 0.6;
-}
-
-#mode-select {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: radial-gradient(circle at 50% 30%, #10151b 0%, #05070a 70%);
-}
-
-.mode-select-inner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 28px;
-  padding: 0 24px;
-  text-align: center;
-}
-
-.mode-select-brand {
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 15px;
-  letter-spacing: 0.22em;
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.mode-select-sub {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  color: var(--dim);
-  font-size: 15px;
-  max-width: 46ch;
-  margin: 0;
-}
-
-.mode-cards {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.mode-card {
-  width: 220px;
-  min-height: 170px;
-  background: rgba(231, 226, 214, 0.03);
-  border: 1px solid rgba(231, 226, 214, 0.14);
-  border-radius: 12px;
-  padding: 20px 18px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  cursor: pointer;
-  text-align: left;
-  transition: border-color 0.15s, background 0.15s, transform 0.15s;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  color: var(--ink);
-}
-
-.mode-card:hover {
-  border-color: var(--accent);
-  background: rgba(217, 138, 52, 0.08);
-  transform: translateY(-2px);
-}
-
-.mode-card-tag {
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--accent-2);
-}
-
-.mode-card-title {
-  font-family: "Iowan Old Style", Georgia, serif;
-  font-size: 20px;
-  font-weight: 600;
-}
-
-.mode-card-desc {
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--dim);
-}
-
-#mode-switcher {
-  position: fixed;
-  z-index: 16;
-  bottom: clamp(16px, 3vw, 28px);
-  right: clamp(16px, 3vw, 36px);
-  display: flex;
-  gap: 2px;
-  background: rgba(10, 13, 17, 0.7);
-  border: 1px solid rgba(231, 226, 214, 0.14);
-  border-radius: 6px;
-  padding: 3px;
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 10.5px;
-  letter-spacing: 0.03em;
-}
-
-#mode-switcher button {
-  background: none;
-  border: none;
-  color: var(--dim);
-  padding: 5px 9px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: inherit;
-  letter-spacing: inherit;
-  text-transform: uppercase;
-}
-
-#mode-switcher button:hover {
-  color: var(--ink);
-}
-
-#mode-switcher button.active {
-  background: var(--accent);
-  color: #1a0f04;
-  font-weight: 600;
-  cursor: default;
+  opacity: 0.45;
 }

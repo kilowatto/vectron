@@ -1,7 +1,11 @@
-import type { Mode } from "./modeSelect";
+import type { Mode } from "./components/modeStorage";
 import type { ParticleField } from "../scene/particleField";
-import { createTokenPanel } from "./tokenPanel";
-import { createDockHeader } from "./dockHeader";
+import type { VxTokenPanel, TokensChangeDetail } from "./components/tokenPanel";
+import "./components/tokenPanel";
+import "./components/dockHeader";
+// staggerIn ya llega al bundle principal vía conceptCard.ts (siempre
+// cargado) — importarlo "de forma diferida" aquí no lo movería a otro
+// chunk, así que se importa directo (ver aviso INEFFECTIVE_DYNAMIC_IMPORT).
 import { staggerIn } from "./motion";
 
 /**
@@ -9,7 +13,7 @@ import { staggerIn } from "./motion";
  * en el dock (nada en Principiante, la explicación del mecanismo en
  * Intermedio, el grafo de tensores en Avanzado). Cada modo es su propia
  * composición (ver feedback-vectron-modes), esta función es el único
- * lugar que decide "qué UI le toca a cada modo".
+ * lugar que decide "qué componentes le tocan a cada modo".
  */
 export async function composeModeUI(
   mode: Mode,
@@ -20,38 +24,46 @@ export async function composeModeUI(
   const usesDock = mode === "intermedio" || mode === "avanzado";
 
   if (usesDock) {
-    const tag =
+    const header = document.createElement("vx-dock-header");
+    header.setAttribute(
+      "tag",
       mode === "avanzado"
         ? "avanzado · matemática real, sin atajos"
-        : "intermedio · el mecanismo real, sin la matemática";
-    dockEl.appendChild(createDockHeader(tag));
+        : "intermedio · el mecanismo real, sin la matemática",
+    );
+    dockEl.appendChild(header);
   }
 
-  const tokenPanel = createTokenPanel({
-    showToggle: mode !== "principiante",
-    showIds: mode !== "principiante",
-    placeholder:
-      mode === "principiante"
-        ? "Escribe algo o toca un ejemplo…"
-        : mode === "avanzado"
-          ? "Escribe una frase — abajo verás cada paso hasta la atención"
-          : undefined,
-    mountTo: usesDock ? dockEl : undefined,
-    variant: mode === "principiante" ? "bottom" : undefined,
-  });
+  const tokenPanel = document.createElement("vx-token-panel") as VxTokenPanel;
+  if (mode === "principiante") {
+    tokenPanel.setAttribute("variant", "bottom");
+    tokenPanel.setAttribute("hide-toggle", "");
+    tokenPanel.setAttribute("hide-ids", "");
+    tokenPanel.setAttribute("placeholder", "Escribe algo o toca un ejemplo…");
+  } else if (mode === "avanzado") {
+    tokenPanel.setAttribute("variant", "docked");
+    tokenPanel.setAttribute(
+      "placeholder",
+      "Escribe una frase — abajo verás cada paso hasta la atención",
+    );
+  } else {
+    tokenPanel.setAttribute("variant", "docked");
+  }
+  (usesDock ? dockEl : document.body).appendChild(tokenPanel);
 
   // El contenido de cada dock se carga aquí, siempre visible de una vez
-  // (no detrás de un botón).
-  let advancedPanelUpdate: ((n: number) => void) | null = null;
+  // (no detrás de un botón). Importado de forma diferida porque el de
+  // Avanzado carga KaTeX, no porque esté oculto.
+  let advancedPanel: HTMLElement & { tokenCount: number } | null = null;
   if (mode === "intermedio") {
-    const { createMechanismExplainer } = await import("./mechanismExplainer");
-    dockEl.appendChild(createMechanismExplainer());
+    await import("./components/mechanismExplainer");
+    dockEl.appendChild(document.createElement("vx-mechanism-explainer"));
   } else if (mode === "avanzado") {
-    const { createAdvancedPanelBody } = await import("./advancedPanel");
-    const panel = createAdvancedPanelBody();
-    panel.root.classList.add("docked");
-    dockEl.appendChild(panel.root);
-    advancedPanelUpdate = panel.update;
+    await import("./components/advancedPanel");
+    advancedPanel = document.createElement("vx-advanced-panel") as HTMLElement & {
+      tokenCount: number;
+    };
+    dockEl.appendChild(advancedPanel);
   }
 
   if (usesDock) {
@@ -63,7 +75,9 @@ export async function composeModeUI(
     // ejecutarse, que en una pestaña sin foco puede no pasar nunca.
     appEl.classList.add("has-dock");
     staggerIn(dockEl, { step: 90, initialDelay: 150, duration: 550 });
-    const advScroll = dockEl.querySelector<HTMLElement>(".adv-scroll");
+    // Shadow DOM abierto: se puede seguir el cascadeo hacia dentro del
+    // contenido de Avanzado (cada fórmula/sección, no sólo el panel entero).
+    const advScroll = advancedPanel?.shadowRoot?.querySelector<HTMLElement>(".scroll");
     if (advScroll) staggerIn(advScroll, { step: 70, initialDelay: 500, duration: 500 });
   }
 
@@ -79,7 +93,8 @@ export async function composeModeUI(
     }
   });
 
-  tokenPanel.onChange((tokens) => {
+  tokenPanel.addEventListener("vx-tokens-change", (event) => {
+    const { tokens } = (event as CustomEvent<TokensChangeDetail>).detail;
     const matches = new Set<number>();
     for (const token of tokens) {
       const key = token.text.trim().toLowerCase();
@@ -87,6 +102,6 @@ export async function composeModeUI(
       if (ids) ids.forEach((id) => matches.add(id));
     }
     field.setSearchHighlights([...matches]);
-    advancedPanelUpdate?.(tokens.length);
+    if (advancedPanel) advancedPanel.tokenCount = tokens.length;
   });
 }

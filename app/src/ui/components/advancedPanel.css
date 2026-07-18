@@ -1,0 +1,107 @@
+:host {
+  display: block;
+  width: 100%;
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+.scroll {
+  padding: 18px 20px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--accent);
+}
+
+p {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--dim);
+  margin: 0;
+}
+
+.note {
+  color: var(--ink);
+  opacity: 0.85;
+}
+
+.step {
+  border-top: 1px solid rgba(231, 226, 214, 0.1);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.formula {
+  overflow-x: auto;
+  color: var(--ink);
+}
+
+.formula .katex {
+  font-size: 1em;
+}
+
+.formula .katex-display {
+  margin: 0;
+}
+
+.tensor-graph {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.node {
+  fill: rgba(217, 138, 52, 0.1);
+  stroke: rgba(217, 138, 52, 0.55);
+  stroke-width: 1;
+}
+
+.node-label {
+  fill: var(--ink);
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+.node-sub {
+  fill: var(--dim);
+  font-size: 9px;
+  font-family: var(--font-mono);
+}
+
+.edge {
+  stroke: rgba(231, 226, 214, 0.35);
+  stroke-width: 1.2;
+}
+
+.arrowhead {
+  fill: rgba(231, 226, 214, 0.35);
+}
+
+.footnote {
+  border-top: 1px solid rgba(231, 226, 214, 0.1);
+  padding-top: 12px;
+  font-size: 11px;
+}
+
+.cite {
+  font-size: 10.5px;
+  font-style: italic;
+}
+
+.cite a {
+  color: var(--accent-2);
+}
+
+.todo {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.6;
+}

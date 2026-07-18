@@ -1,0 +1,22 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 22px 20px 16px;
+  border-bottom: 1px solid rgba(231, 226, 214, 0.12);
+}
+
+.brand {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  letter-spacing: 0.18em;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.tag {
+  color: var(--dim);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

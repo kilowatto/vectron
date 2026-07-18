@@ -1,13 +1,13 @@
 import * as THREE from "three/webgpu";
 import { fetchSimilar } from "../data/concepts";
 import type { ParticleField } from "./particleField";
-import type { ConceptCard, NeighborView } from "../ui/conceptCard";
+import type { VxConceptCard, NeighborView, TopKChangeDetail } from "../ui/components/conceptCard";
 
 export interface ConceptInteractionOptions {
   canvas: HTMLCanvasElement;
   camera: THREE.Camera;
   field: ParticleField;
-  card: ConceptCard;
+  card: VxConceptCard;
   defaultTopK: number;
 }
 
@@ -54,19 +54,21 @@ export function setupConceptInteraction(options: ConceptInteractionOptions): voi
     }
     field.setSimilarityLines(instanceId, neighborInstanceIds);
     field.setSearchHighlights(neighborInstanceIds);
-    card.showPinned(concept, views, topK, (newTopK) =>
-      loadNeighbors(instanceId, newTopK),
-    );
+    card.showPinned(concept, views, topK);
   }
 
   function pinInstance(instanceId: number) {
     currentPinnedInstanceId = instanceId;
     field.setPointerHighlight(instanceId);
-    card.showPinned(field.concepts[instanceId], [], defaultTopK, (topK) =>
-      loadNeighbors(instanceId, topK),
-    );
+    card.showPinned(field.concepts[instanceId], [], defaultTopK);
     loadNeighbors(instanceId, defaultTopK);
   }
+
+  card.addEventListener("vx-topk-change", (event) => {
+    if (currentPinnedInstanceId === null) return;
+    const { topK } = (event as CustomEvent<TopKChangeDetail>).detail;
+    loadNeighbors(currentPinnedInstanceId, topK);
+  });
 
   function unpin() {
     currentPinnedInstanceId = null;

@@ -1,13 +1,16 @@
 import "./style.css";
-import "katex/dist/katex.min.css";
 import * as THREE from "three/webgpu";
 import { createParticleField, spinField } from "./scene/particleField";
 import { createEngine } from "./scene/engine";
 import { setupConceptInteraction } from "./scene/conceptInteraction";
 import { fetchConcepts } from "./data/concepts";
-import { createConceptCard } from "./ui/conceptCard";
+import { getStoredMode, type Mode } from "./ui/components/modeStorage";
+import "./ui/components/modeSelect";
+import "./ui/components/modeSwitcher";
+import type { VxConceptCard } from "./ui/components/conceptCard";
+import "./ui/components/conceptCard";
 import { composeModeUI } from "./ui/modeComposition";
-import { getStoredMode, showModeSelect, createModeSwitcher } from "./ui/modeSelect";
+import type { ModePickDetail } from "./ui/components/modeSelect";
 
 const appEl = document.querySelector<HTMLDivElement>("#app")!;
 const canvas = document.querySelector<HTMLCanvasElement>("#scene")!;
@@ -16,11 +19,32 @@ const fpsLabel = document.querySelector<HTMLSpanElement>("#fps")!;
 const countLabel = document.querySelector<HTMLSpanElement>("#count")!;
 const dockEl = document.querySelector<HTMLDivElement>("#dock")!;
 
-async function main() {
-  const mode = getStoredMode() ?? (await showModeSelect());
-  createModeSwitcher(mode);
+/** Muestra <vx-mode-select> y resuelve cuando el usuario elige un modo. */
+function pickMode(): Promise<Mode> {
+  return new Promise((resolve) => {
+    const picker = document.createElement("vx-mode-select");
+    picker.addEventListener(
+      "vx-mode-pick",
+      (event) => resolve((event as CustomEvent<ModePickDetail>).detail.mode),
+      { once: true },
+    );
+    document.body.appendChild(picker);
+  });
+}
 
-  countLabel.textContent = "cargando conceptos…";
+async function main() {
+  const mode = getStoredMode() ?? (await pickMode());
+
+  const switcher = document.createElement("vx-mode-switcher");
+  switcher.setAttribute("current", mode);
+  document.body.appendChild(switcher);
+
+  // El HUD también habla el idioma de cada modo: Principiante no dice
+  // "vector", Avanzado sí y hasta con la notación ℝ del panel de tensores.
+  const countUnit =
+    mode === "principiante" ? "palabras" : mode === "intermedio" ? "embeddings" : "embeddings · ℝ⁷⁶⁸";
+
+  countLabel.textContent = "cargando…";
   const concepts = await fetchConcepts();
 
   const engine = await createEngine(canvas);
@@ -41,12 +65,14 @@ async function main() {
   );
   engine.scene.add(cubeEdges);
 
-  countLabel.textContent = `${field.count.toLocaleString("es-MX")} conceptos`;
+  countLabel.textContent = `${field.count.toLocaleString("es-MX")} ${countUnit}`;
 
-  const card = createConceptCard({
-    detailed: mode !== "principiante",
-    pinnedAnchor: mode === "principiante" ? "center" : "bottom",
-  });
+  const card = document.createElement("vx-concept-card") as VxConceptCard;
+  if (mode === "principiante") {
+    card.setAttribute("simple", "");
+    card.setAttribute("pinned-anchor", "center");
+  }
+  document.getElementById("stage")!.appendChild(card);
 
   setupConceptInteraction({
     canvas,
