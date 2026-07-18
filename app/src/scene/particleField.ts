@@ -44,6 +44,7 @@ export const DOMAIN_HUES: Record<string, number> = {
   transporte: 0x6d7bd9,
   ropa: 0xd98ac4,
   clima: 0x89c2ff,
+  herramientas: 0xb08968,
 };
 
 const FALLBACK_HUE = 0x9aa5ad;

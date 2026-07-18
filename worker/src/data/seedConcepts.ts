@@ -2307,4 +2307,67 @@ export const SEED_CONCEPTS: SeedConcept[] = [
     const [es, en] = pair.split(",");
     return { wordEs: es, wordEn: en, domain: "clima", taxonomy: ["clima", "concepto"], traits: { tipo: "clima" } };
   }),
+
+  // --- Geografía: ampliación — estados de México ---
+  ...[
+    "aguascalientes,aguascalientes", "baja california,baja california",
+    "baja california sur,baja california sur", "campeche,campeche", "chiapas,chiapas",
+    "chihuahua,chihuahua", "coahuila,coahuila", "colima,colima", "durango,durango",
+    "guanajuato,guanajuato", "guerrero,guerrero", "hidalgo,hidalgo", "jalisco,jalisco",
+    "michoacán,michoacan", "morelos,morelos", "nayarit,nayarit",
+    "nuevo león,nuevo leon", "oaxaca,oaxaca", "puebla,puebla", "querétaro,queretaro",
+    "quintana roo,quintana roo", "san luis potosí,san luis potosi", "sinaloa,sinaloa",
+    "sonora,sonora", "tabasco,tabasco", "tamaulipas,tamaulipas", "tlaxcala,tlaxcala",
+    "veracruz,veracruz", "yucatán,yucatan", "zacatecas,zacatecas",
+    "estado de méxico,state of mexico",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "geografia", taxonomy: ["geografia", "estado_mexicano"], traits: { tipo: "estado_mexicano" } };
+  }),
+
+  // --- Geografía: ampliación — estados de EE.UU. ---
+  ...[
+    "california,california", "texas,texas", "florida,florida",
+    "nueva york (estado),new york (state)", "illinois,illinois",
+    "pensilvania,pennsylvania", "ohio,ohio", "georgia (estado),georgia (state)",
+    "carolina del norte,north carolina", "michigan,michigan", "arizona,arizona",
+    "washington (estado),washington (state)", "massachusetts,massachusetts",
+    "colorado,colorado", "nevada,nevada", "oregón,oregon", "luisiana,louisiana",
+    "hawái,hawaii", "alaska,alaska", "utah,utah",
+    "nuevo méxico (estado),new mexico (state)", "carolina del sur,south carolina",
+    "virginia,virginia", "tennessee,tennessee", "misuri,missouri",
+    "wisconsin,wisconsin", "minnesota,minnesota", "indiana,indiana", "maryland,maryland",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "geografia", taxonomy: ["geografia", "estado_estadounidense"], traits: { tipo: "estado_estadounidense" } };
+  }),
+
+  // --- Sociedad: ampliación — profesiones ---
+  ...[
+    "abogado,lawyer", "arquitecto,architect", "contador,accountant",
+    "veterinario,veterinarian", "dentista,dentist", "piloto,pilot",
+    "bombero,firefighter", "policía,police officer", "soldado,soldier",
+    "granjero,farmer", "carpintero,carpenter", "electricista,electrician",
+    "plomero,plumber", "peluquero,hairdresser", "panadero,baker",
+    "carnicero,butcher", "sastre,tailor", "fotógrafo,photographer",
+    "periodista,journalist", "traductor,translator", "programador,programmer",
+    "diseñador,designer", "farmacéutico,pharmacist", "bibliotecario,librarian",
+    "notario,notary", "juez,judge",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "sociedad", taxonomy: ["sociedad", "ocupacion"], traits: { tipo: "ocupacion" } };
+  }),
+
+  // --- Herramientas (dominio nuevo) ---
+  ...[
+    "martillo,hammer", "destornillador,screwdriver", "llave inglesa,wrench",
+    "taladro,drill", "serrucho,handsaw", "alicate,pliers",
+    "cinta métrica,tape measure", "nivel (herramienta),level (tool)", "clavo,nail",
+    "tornillo,screw", "tuerca,nut (hardware)", "escalera (herramienta),ladder",
+    "pala,shovel", "rastrillo,rake", "manguera,hose", "cubeta,bucket",
+    "soplete,torch",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "herramientas", taxonomy: ["herramientas", "concepto"], traits: { tipo: "herramienta" } };
+  }),
 ];

@@ -113,6 +113,7 @@ const STRINGS = {
   domainTransporte: { es: "Transporte", en: "Transportation" },
   domainRopa: { es: "Ropa", en: "Clothing" },
   domainClima: { es: "Clima", en: "Weather" },
+  domainHerramientas: { es: "Herramientas", en: "Tools" },
 
   // --- HUD ---
   hudLoading: { es: "cargando…", en: "loading…" },
