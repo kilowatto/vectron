@@ -17,12 +17,22 @@
 
 /* La barra de tokenización ocupa la parte baja de la pantalla en los 3
    modos, así que la tarjeta fijada se centra en medio del cubo en vez
-   de competir por ese mismo espacio. */
+   de competir por ese mismo espacio. Centrado con inset+margin, no
+   translate: showPinned()/showHover() usan fadeIn() (Web Animations
+   API sobre `transform`, fill:"forwards"), que reemplaza cualquier
+   transform puesto por CSS — un translate(-50%,-50%) de centrado se
+   borraría en cuanto la animación de entrada corriera. */
 :host(.pinned) {
   pointer-events: auto;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  inset: 0;
+  /* !important: el reset global `* { margin: 0 }` (misma especificidad
+     de selector de tipo/universal en teoría más baja, pero en la
+     práctica gana el empate contra :host en Shadow DOM) si no, deja el
+     margen en 0 y la tarjeta pegada a una esquina en vez de centrada —
+     mismo bug real que se vio en vx-token-panel. */
+  margin: auto !important;
+  width: fit-content;
+  height: fit-content;
   max-width: min(360px, calc(100vw - 32px));
   max-height: calc(100vh - 220px);
   overflow-y: auto;

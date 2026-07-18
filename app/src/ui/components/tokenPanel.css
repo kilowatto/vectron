@@ -1,9 +1,18 @@
 :host {
+  /* Centrado sin transform: la entrada usa fadeIn() (Web Animations
+     API sobre `transform`, con fill:"forwards"), que REEMPLAZA — no
+     compone con — cualquier transform puesto por CSS. Si este :host
+     centrara con `left:50%;transform:translateX(-50%)`, la animación de
+     entrada borraría ese translateX en cuanto corriera, dejando la
+     barra pegada al centro del viewport y desbordando hacia la derecha
+     (bug real, invisible en desktop porque el ancho fijo de 720px hacía
+     que el corrimiento no se notara; catastrófico en 390px de ancho). */
   position: fixed;
   z-index: 15;
-  left: 50%;
+  left: 0;
+  right: 0;
+  margin-inline: auto !important;
   bottom: max(clamp(16px, 4vw, 40px), env(safe-area-inset-bottom));
-  transform: translateX(-50%);
   width: min(720px, calc(100vw - 24px));
   overflow: hidden;
   display: flex;
