@@ -2040,4 +2040,116 @@ export const SEED_CONCEPTS: SeedConcept[] = [
     const [es, en] = pair.split(",");
     return { wordEs: es, wordEn: en, domain: "personajes", taxonomy: ["personajes", "biografia"], traits: { tipo: "personaje" } };
   }),
+
+  // --- Mitología: ampliación — más culturas ---
+  ...[
+    "lugh,lugh", "morrigan,morrigan", "dagda,dagda", "brigid,brigid", "cernunnos,cernunnos",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "mitologia", taxonomy: ["mitologia", "celta"], traits: { cultura: "celta" } };
+  }),
+  ...[
+    "jade emperador,jade emperor", "nuwa,nuwa", "houyi,houyi", "chang'e,chang'e",
+    "guanyin,guanyin", "sun wukong,sun wukong",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "mitologia", taxonomy: ["mitologia", "china"], traits: { cultura: "china" } };
+  }),
+  ...[
+    "amaterasu,amaterasu", "susanoo,susanoo", "tsukuyomi,tsukuyomi", "izanagi,izanagi",
+    "izanami,izanami", "raijin,raijin", "fujin,fujin",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "mitologia", taxonomy: ["mitologia", "japonesa"], traits: { cultura: "japonesa" } };
+  }),
+  ...[
+    "shiva,shiva", "vishnu,vishnu", "brahma,brahma", "ganesha,ganesha", "durga,durga",
+    "kali,kali", "hanuman,hanuman", "krishna,krishna", "indra,indra", "lakshmi,lakshmi",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "mitologia", taxonomy: ["mitologia", "hindu"], traits: { cultura: "hindu" } };
+  }),
+  ...[
+    "perun,perun", "veles,veles", "mokosh,mokosh", "svarog,svarog", "baba yaga,baba yaga",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "mitologia", taxonomy: ["mitologia", "eslava"], traits: { cultura: "eslava" } };
+  }),
+  ...[
+    "anansi,anansi", "oxum,oshun", "shango,shango", "yemayá,yemoja", "eshu,eshu",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "mitologia", taxonomy: ["mitologia", "africana"], traits: { cultura: "africana" } };
+  }),
+  ...[
+    "maui,maui", "pele,pele", "kanaloa,kanaloa", "hina,hina",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "mitologia", taxonomy: ["mitologia", "polinesia"], traits: { cultura: "polinesia" } };
+  }),
+
+  // --- Biología animal: ampliación — más órdenes/familias ---
+  animal("hiena", "hyena", ["mamifero", "salvaje"], { legs: 4, hasWings: false, vertebrado: true, dieta: "carnivoro" }),
+  animal("nutria", "otter", ["mamifero", "acuatico"], { legs: 4, hasWings: false, vertebrado: true, dieta: "carnivoro" }),
+  animal("foca", "seal", ["mamifero", "acuatico"], { legs: 0, hasWings: false, vertebrado: true, dieta: "carnivoro" }),
+  animal("morsa", "walrus", ["mamifero", "acuatico"], { legs: 0, hasWings: false, vertebrado: true, dieta: "carnivoro" }),
+  animal("armadillo", "armadillo", ["mamifero", "salvaje"], { legs: 4, hasWings: false, vertebrado: true, dieta: "omnivoro" }),
+  animal("oso hormiguero", "anteater", ["mamifero", "salvaje"], { legs: 4, hasWings: false, vertebrado: true, dieta: "carnivoro" }),
+  animal("perezoso", "sloth", ["mamifero", "salvaje"], { legs: 4, hasWings: false, vertebrado: true, dieta: "herbivoro" }),
+  animal("tapir", "tapir", ["mamifero", "salvaje"], { legs: 4, hasWings: false, vertebrado: true, dieta: "herbivoro" }),
+  animal("bisonte", "bison", ["mamifero", "salvaje"], { legs: 4, hasWings: false, vertebrado: true, dieta: "herbivoro" }),
+  animal("alce", "moose", ["mamifero", "salvaje"], { legs: 4, hasWings: false, vertebrado: true, dieta: "herbivoro" }),
+  animal("reno", "reindeer", ["mamifero", "salvaje"], { legs: 4, hasWings: false, vertebrado: true, dieta: "herbivoro" }),
+  animal("cabra", "goat", ["mamifero", "domestico"], { legs: 4, hasWings: false, vertebrado: true, dieta: "herbivoro" }),
+  animal("oveja", "sheep", ["mamifero", "domestico"], { legs: 4, hasWings: false, vertebrado: true, dieta: "herbivoro" }),
+  animal("vaca", "cow", ["mamifero", "domestico"], { legs: 4, hasWings: false, vertebrado: true, dieta: "herbivoro" }),
+  animal("cerdo", "pig", ["mamifero", "domestico"], { legs: 4, hasWings: false, vertebrado: true, dieta: "omnivoro" }),
+  animal("caballo", "horse", ["mamifero", "domestico"], { legs: 4, hasWings: false, vertebrado: true, dieta: "herbivoro" }),
+  animal("burro", "donkey", ["mamifero", "domestico"], { legs: 4, hasWings: false, vertebrado: true, dieta: "herbivoro" }),
+  animal("conejo", "rabbit", ["mamifero", "domestico"], { legs: 4, hasWings: false, vertebrado: true, dieta: "herbivoro" }),
+  animal("hámster", "hamster", ["mamifero", "domestico"], { legs: 4, hasWings: false, vertebrado: true, dieta: "herbivoro" }),
+  animal("cuervo", "crow", ["ave", "salvaje"], { legs: 2, hasWings: true, vertebrado: true, dieta: "omnivoro" }, "alas"),
+  animal("paloma", "pigeon", ["ave", "salvaje"], { legs: 2, hasWings: true, vertebrado: true, dieta: "herbivoro" }, "alas"),
+  animal("gaviota", "seagull", ["ave", "salvaje"], { legs: 2, hasWings: true, vertebrado: true, dieta: "omnivoro" }, "alas"),
+  animal("cisne", "swan", ["ave", "acuatico"], { legs: 2, hasWings: true, vertebrado: true, dieta: "herbivoro" }, "alas"),
+  animal("pato", "duck", ["ave", "acuatico"], { legs: 2, hasWings: true, vertebrado: true, dieta: "omnivoro" }, "alas"),
+  animal("gallina", "hen", ["ave", "domestico"], { legs: 2, hasWings: true, vertebrado: true, dieta: "omnivoro" }),
+  animal("pavo", "turkey", ["ave", "domestico"], { legs: 2, hasWings: true, vertebrado: true, dieta: "omnivoro" }),
+  animal("loro", "parrot", ["ave", "domestico"], { legs: 2, hasWings: true, vertebrado: true, dieta: "omnivoro" }, "alas"),
+  animal("canario", "canary", ["ave", "domestico"], { legs: 2, hasWings: true, vertebrado: true, dieta: "herbivoro" }, "alas"),
+  animal("langosta", "lobster", ["invertebrado", "acuatico"], { legs: 8, hasWings: false, vertebrado: false, dieta: "carnivoro" }, "invertebrado"),
+  animal("cangrejo", "crab", ["invertebrado", "acuatico"], { legs: 8, hasWings: false, vertebrado: false, dieta: "omnivoro" }, "invertebrado"),
+  animal("camarón", "shrimp", ["invertebrado", "acuatico"], { legs: 8, hasWings: false, vertebrado: false, dieta: "omnivoro" }, "invertebrado"),
+  animal("erizo de mar", "sea urchin", ["invertebrado", "acuatico"], { legs: 0, hasWings: false, vertebrado: false, dieta: "herbivoro" }, "invertebrado"),
+  animal("gusano", "worm", ["invertebrado", "salvaje"], { legs: 0, hasWings: false, vertebrado: false, dieta: "omnivoro" }, "invertebrado"),
+  animal("araña", "spider", ["invertebrado", "artropodo"], { legs: 8, hasWings: false, vertebrado: false, dieta: "carnivoro" }, "invertebrado"),
+  animal("escorpión", "scorpion", ["invertebrado", "artropodo"], { legs: 8, hasWings: false, vertebrado: false, dieta: "carnivoro" }, "invertebrado"),
+  animal("ciempiés", "centipede", ["invertebrado", "artropodo"], { legs: 100, hasWings: false, vertebrado: false, dieta: "carnivoro" }, "invertebrado"),
+  animal("erizo (mamífero)", "hedgehog", ["mamifero", "salvaje"], { legs: 4, hasWings: false, vertebrado: true, dieta: "omnivoro" }),
+  animal("ornitorrinco", "platypus", ["mamifero", "acuatico"], { legs: 4, hasWings: false, vertebrado: true, dieta: "carnivoro" }, "invertebrado"),
+  animal("lagarto", "lizard", ["reptil", "salvaje"], { legs: 4, hasWings: false, vertebrado: true, dieta: "carnivoro" }),
+  animal("caimán", "caiman", ["reptil", "acuatico"], { legs: 4, hasWings: false, vertebrado: true, dieta: "carnivoro" }),
+  animal("boa", "boa constrictor", ["reptil", "salvaje"], { legs: 0, hasWings: false, vertebrado: true, dieta: "carnivoro" }),
+  animal("pitón", "python (snake)", ["reptil", "salvaje"], { legs: 0, hasWings: false, vertebrado: true, dieta: "carnivoro" }),
+  animal("axolote", "axolotl", ["anfibio", "acuatico"], { legs: 4, hasWings: false, vertebrado: true, dieta: "carnivoro" }, "invertebrado"),
+
+  // --- Biología vegetal: ampliación ---
+  ...[
+    "girasol silvestre,wild sunflower", "tulipán,tulip", "lirio,lily", "margarita,daisy",
+    "clavel,carnation", "jazmín,jasmine", "lavanda,lavender", "diente de león,dandelion",
+    "amapola,poppy", "azalea,azalea", "abeto,fir tree", "cedro,cedar tree",
+    "arce,maple tree", "olmo,elm tree", "eucalipto,eucalyptus tree", "ceiba,ceiba tree",
+    "mangle,mangrove", "papiro,papyrus", "aloe vera,aloe vera", "espino,hawthorn",
+    "hiedra,ivy", "brezo,heather", "trébol,clover", "ortiga,nettle",
+    "cebada,barley", "avena,oats", "centeno,rye", "sorgo,sorghum",
+    "quinoa,quinoa", "lenteja,lentil", "garbanzo,chickpea", "frijol,bean",
+    "espinaca,spinach", "lechuga,lettuce", "zanahoria,carrot", "tomate,tomato",
+    "cebolla,onion", "ajo,garlic", "chile (picante),chili pepper", "pepino,cucumber",
+    "calabaza,pumpkin", "naranja (fruta),orange (fruit)", "limón,lemon", "fresa,strawberry",
+    "sandía,watermelon", "piña,pineapple", "mango,mango", "aguacate,avocado",
+    "coco,coconut", "durazno,peach",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "biologia_vegetal", taxonomy: ["biologia", "planta", "concepto"], traits: { esPlanta: true } };
+  }),
 ];
