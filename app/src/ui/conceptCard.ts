@@ -1,5 +1,6 @@
 import type { Concept } from "../data/concepts";
 import { DOMAIN_HUES } from "../scene/particleField";
+import { fadeIn, fadeOut } from "./motion";
 
 const DOMAIN_LABELS: Record<string, string> = {
   matematicas: "Matemáticas",
@@ -74,29 +75,35 @@ export interface ConceptCardOptions {
   detailed?: boolean;
 }
 
+type Visibility = "none" | "hover" | "pinned";
+
 export function createConceptCard(
   options: ConceptCardOptions = {},
 ): ConceptCard {
   const { detailed = true } = options;
   const root = document.createElement("div");
   root.id = "concept-card";
-  root.style.display = "none";
+  root.style.opacity = "0";
   document.body.appendChild(root);
 
-  let pinned = false;
+  let visibility: Visibility = "none";
 
   function showHover(concept: Concept, x: number, y: number) {
-    if (pinned) return;
+    if (visibility === "pinned") return;
     root.className = "hover";
-    root.style.display = "flex";
+    root.style.pointerEvents = "";
     root.style.left = `${x + 18}px`;
     root.style.top = `${y + 18}px`;
     root.innerHTML = cardBody(concept, false);
+    if (visibility === "none") fadeIn(root, { duration: 220, rise: 6 });
+    visibility = "hover";
   }
 
   function hideHover() {
-    if (pinned) return;
-    root.style.display = "none";
+    if (visibility !== "hover") return;
+    visibility = "none";
+    root.style.pointerEvents = "none";
+    fadeOut(root, { duration: 150 });
   }
 
   function neighborsBlock(
@@ -138,15 +145,17 @@ export function createConceptCard(
     topK: number,
     onTopKChange: (topK: number) => void,
   ) {
-    pinned = true;
+    const wasPinned = visibility === "pinned";
+    visibility = "pinned";
     root.className = "pinned";
+    root.style.pointerEvents = "";
     root.style.left = "";
     root.style.top = "";
-    root.style.display = "flex";
     root.innerHTML =
       cardBody(concept, detailed) +
       neighborsBlock(neighbors, topK) +
       `<div class="hint">clic fuera o Esc para cerrar</div>`;
+    if (!wasPinned) fadeIn(root, { duration: 320, rise: 14 });
 
     const slider = root.querySelector<HTMLInputElement>("#topk-slider");
     const valueLabel = root.querySelector<HTMLSpanElement>(".topk-value");
@@ -161,8 +170,10 @@ export function createConceptCard(
   }
 
   function hidePinned() {
-    pinned = false;
-    root.style.display = "none";
+    if (visibility !== "pinned") return;
+    visibility = "none";
+    root.style.pointerEvents = "none";
+    fadeOut(root, { duration: 250 });
   }
 
   return {
@@ -171,6 +182,6 @@ export function createConceptCard(
     showPinned,
     hideHover,
     hidePinned,
-    isPinned: () => pinned,
+    isPinned: () => visibility === "pinned",
   };
 }

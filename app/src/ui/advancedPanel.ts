@@ -1,4 +1,5 @@
 import katex from "katex";
+import { drawTensorGraph } from "./motion";
 
 /**
  * Dimensión real del modelo de embeddings que usa Vectron
@@ -68,41 +69,60 @@ export interface AdvancedPanelBody {
   update: (tokenCount: number) => void;
 }
 
-/** Construye el cuerpo del panel (usa KaTeX) — se importa dinámicamente
- * desde main.ts sólo cuando el usuario abre "modo avanzado" por primera vez. */
+/**
+ * Construye la sección de matemáticas/tensores del modo Avanzado (usa
+ * KaTeX). No se oculta ni se colapsa: es una sección más del dock de
+ * Avanzado, siempre visible, importada de forma diferida sólo porque
+ * KaTeX es pesado — no como un panel que el usuario tenga que abrir.
+ */
 export function createAdvancedPanelBody(): AdvancedPanelBody {
   const root = document.createElement("div");
   root.id = "advanced-panel";
-  root.style.display = "none";
   root.innerHTML = `
     <div class="adv-scroll">
-      <h3>Mecanismo de atención — con las matemáticas reales</h3>
+      <h3>2 · De la palabra al vector — el pipeline real de Vectron</h3>
       <p class="adv-note">
-        Esto es exactamente cómo un Transformer calcula la atención, generalizado
-        a los <b>n</b> tokens de arriba. Vectron no ejecuta todavía este forward
-        pass en vivo sobre un modelo generativo — se muestra con las dimensiones
-        reales de su pipeline para enseñar el mecanismo, no una simulación
-        inventada.
+        Cada partícula del cubo llegó a su posición así: la palabra se mandó
+        a Workers AI (<code>@cf/baai/bge-base-en-v1.5</code>), que devolvió un
+        vector de 768 números (su embedding); ese vector de 768 dimensiones se
+        redujo a 3 con un PCA propio (rotación que conserva las direcciones de
+        mayor varianza); esas 3 coordenadas son la posición xyz que ves en el
+        cubo. Es el mismo proceso para las 153 palabras del dataset — por eso
+        conceptos relacionados (galaxia, tierra, universo) quedan cerca de
+        verdad, no por diseño manual.
+      </p>
+
+      <h3>3 · Mecanismo de atención — con las matemáticas reales</h3>
+      <p class="adv-note">
+        Esto es distinto del paso anterior: es cómo un <i>Transformer</i>
+        (el tipo de red detrás de un LLM generativo) calcula la atención,
+        generalizado a los <b>n</b> tokens de arriba. Vectron no ejecuta
+        todavía este forward pass en vivo sobre un modelo generativo — se
+        muestra con las dimensiones reales de su propio pipeline (768) para
+        enseñar el mecanismo, no como una simulación inventada.
       </p>
 
       <div class="adv-step">
         <div class="adv-formula" id="adv-f1"></div>
-        <p><b>n</b> = número de tokens actuales. 768 es la dimensión real del
-        modelo de embeddings de Vectron (<code>@cf/baai/bge-base-en-v1.5</code>
-        en Workers AI) — no la del Transformer original (ver nota).</p>
+        <p><b>n</b> = número de tokens actuales (arriba). 768 es la dimensión
+        real del modelo de embeddings de Vectron — no la del Transformer
+        original (ver nota al pie).</p>
       </div>
 
       <div class="adv-step">
         <div class="adv-formula" id="adv-f2"></div>
         <p>W<sup>Q</sup>, W<sup>K</sup>, W<sup>V</sup> ∈ ℝ<sup>768×768</sup> son
-        matrices de pesos aprendidas durante el entrenamiento.</p>
+        matrices de pesos aprendidas durante el entrenamiento — un parámetro
+        por celda de cada matriz, ajustado por descenso de gradiente, no
+        elegido a mano.</p>
       </div>
 
       <div class="adv-step">
         <div class="adv-formula" id="adv-f3"></div>
         <p>QK<sup>t</sup> mide la similitud entre cada par de tokens; softmax
         normaliza cada fila a una distribución de probabilidad; el resultado
-        pondera V según esa atención.</p>
+        pondera V según esa atención — así cada token "mira" a los demás
+        antes de seguir a la próxima capa.</p>
       </div>
 
       <div id="adv-graph"></div>
@@ -125,7 +145,6 @@ export function createAdvancedPanelBody(): AdvancedPanelBody {
       <p class="adv-todo">Próximamente: muestreo del siguiente token (temperatura, top-k, top-p) como cadena de Markov.</p>
     </div>
   `;
-  document.body.appendChild(root);
 
   root.querySelector("#adv-f1")!.innerHTML = tex("X \\in \\mathbb{R}^{n \\times 768}");
   root.querySelector("#adv-f2")!.innerHTML = tex(
@@ -141,6 +160,8 @@ export function createAdvancedPanelBody(): AdvancedPanelBody {
   function update(tokenCount: number) {
     currentN = Math.max(tokenCount, 1);
     graphEl.innerHTML = buildGraph(currentN);
+    const svg = graphEl.querySelector<SVGSVGElement>("svg.tensor-graph");
+    if (svg) drawTensorGraph(svg);
   }
   update(1);
 

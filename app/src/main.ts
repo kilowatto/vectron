@@ -9,11 +9,14 @@ import { fetchConcepts, fetchSimilar } from "./data/concepts";
 import { createConceptCard, type NeighborView } from "./ui/conceptCard";
 import { createTokenPanel } from "./ui/tokenPanel";
 import { getStoredMode, showModeSelect, createModeSwitcher } from "./ui/modeSelect";
+import { staggerIn } from "./ui/motion";
 
+const appEl = document.querySelector<HTMLDivElement>("#app")!;
 const canvas = document.querySelector<HTMLCanvasElement>("#scene")!;
 const backendTag = document.querySelector<HTMLSpanElement>("#backend-tag")!;
 const fpsLabel = document.querySelector<HTMLSpanElement>("#fps")!;
 const countLabel = document.querySelector<HTMLSpanElement>("#count")!;
+const dockEl = document.querySelector<HTMLDivElement>("#dock")!;
 
 async function main() {
   const mode = getStoredMode() ?? (await showModeSelect());
@@ -30,8 +33,11 @@ async function main() {
 
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.85;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setSize(window.innerWidth, window.innerHeight);
+
+  function stageSize(): { w: number; h: number } {
+    const rect = canvas.parentElement!.getBoundingClientRect();
+    return { w: rect.width, h: rect.height };
+  }
 
   const usingWebGPU =
     (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend ===
@@ -43,13 +49,11 @@ async function main() {
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(0x05070a, 0.22);
 
-  const camera = new THREE.PerspectiveCamera(
-    50,
-    window.innerWidth / window.innerHeight,
-    0.05,
-    50,
-  );
+  const { w: initW, h: initH } = stageSize();
+  const camera = new THREE.PerspectiveCamera(50, initW / initH, 0.05, 50);
   camera.position.set(2.1, 1.5, 3.3);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(initW, initH);
 
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
@@ -86,8 +90,9 @@ async function main() {
   field.concepts.forEach((c, i) => idToInstanceId.set(c.id, i));
 
   function pickInstance(clientX: number, clientY: number): number | null {
-    pointerNdc.x = (clientX / window.innerWidth) * 2 - 1;
-    pointerNdc.y = -(clientY / window.innerHeight) * 2 + 1;
+    const rect = canvas.getBoundingClientRect();
+    pointerNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    pointerNdc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(pointerNdc, camera);
     const hits = raycaster.intersectObject(field.mesh);
     return hits.length > 0 ? (hits[0].instanceId ?? null) : null;
@@ -171,8 +176,34 @@ async function main() {
     placeholder:
       mode === "principiante"
         ? "Escribe algo o toca un ejemplo…"
-        : undefined,
+        : mode === "avanzado"
+          ? "Escribe una frase — abajo verás cada paso hasta la atención"
+          : undefined,
+    mountTo: mode === "avanzado" ? dockEl : undefined,
   });
+  // El grafo de tensores y las matemáticas viven en el dock, siempre
+  // visibles (no detrás de un botón) — se cargan de forma diferida sólo
+  // porque KaTeX es pesado, no porque estén ocultas.
+  let advancedPanelUpdate: ((n: number) => void) | null = null;
+  if (mode === "avanzado") {
+    const { createAdvancedPanelBody } = await import("./ui/advancedPanel");
+    const panel = createAdvancedPanelBody();
+    panel.root.classList.add("docked");
+    dockEl.appendChild(panel.root);
+    advancedPanelUpdate = panel.update;
+
+    // Todo el contenido ya existe: ahora sí se abre el layout y se pinta
+    // el dock en cascada — nada aparece de golpe. Síncrono a propósito:
+    // ya hubo varios `await` antes de este punto (fetch, import, init de
+    // WebGPU), de sobra para que el navegador haya pintado el estado
+    // "cerrado" — no depende de que un requestAnimationFrame llegue a
+    // ejecutarse, que en una pestaña sin foco puede no pasar nunca.
+    appEl.classList.add("mode-avanzado");
+    staggerIn(dockEl, { step: 90, initialDelay: 150, duration: 550 });
+    const advScroll = panel.root.querySelector<HTMLElement>(".adv-scroll");
+    if (advScroll) staggerIn(advScroll, { step: 70, initialDelay: 500, duration: 500 });
+  }
+
   const wordIndex = new Map<string, number[]>();
   field.concepts.forEach((concept, instanceId) => {
     for (const w of [concept.word.es, concept.word.en]) {
@@ -194,31 +225,6 @@ async function main() {
     advancedPanelUpdate?.(tokens.length);
   });
 
-  // --- Modo avanzado: grafo de tensores + matemáticas de atención,
-  // parte integral de la experiencia "Avanzado" (no un extra oculto en
-  // los otros modos), cargado sólo al abrirlo (KaTeX no bloquea el bundle) ---
-  let advancedPanelUpdate: ((n: number) => void) | null = null;
-  let advancedRoot: HTMLDivElement | null = null;
-
-  if (mode === "avanzado") {
-    const advancedToggle = document.createElement("button");
-    advancedToggle.id = "advanced-toggle";
-    advancedToggle.textContent = "Σ grafo de tensores";
-    document.body.appendChild(advancedToggle);
-
-    advancedToggle.addEventListener("click", async () => {
-      if (!advancedRoot) {
-        const { createAdvancedPanelBody } = await import("./ui/advancedPanel");
-        const panel = createAdvancedPanelBody();
-        advancedRoot = panel.root;
-        advancedPanelUpdate = panel.update;
-      }
-      const visible = advancedRoot.style.display !== "none";
-      advancedRoot.style.display = visible ? "none" : "block";
-      advancedToggle.classList.toggle("active", !visible);
-    });
-  }
-
   const scenePass = pass(scene, camera);
   const scenePassColor = scenePass.getTextureNode("output");
   const bloomPass = bloom(scenePassColor, 0.32, 0.18, 0.45);
@@ -227,11 +233,15 @@ async function main() {
   renderPipeline.outputNode = scenePassColor.add(bloomPass);
 
   function onResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
+    const { w, h } = stageSize();
+    camera.aspect = w / h;
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(w, h);
   }
-  window.addEventListener("resize", onResize);
+  // Cubre tanto el resize de ventana como la transición CSS del layout de
+  // Avanzado (grid-template-columns, 0.7s) — dispara en cada frame del
+  // cambio, no sólo al final, así el canvas nunca se ve deformado.
+  new ResizeObserver(onResize).observe(canvas.parentElement!);
 
   let last = performance.now();
   let fpsAccum = 0;

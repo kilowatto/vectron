@@ -10,17 +10,25 @@
   </head>
   <body>
     <div id="app">
-      <canvas id="scene"></canvas>
-      <div id="hud">
-        <div id="hud-top">
-          <span class="brand">VECTRON</span>
-          <span class="dot">·</span>
-          <span class="tag" id="backend-tag">detectando GPU…</span>
+      <div id="stage">
+        <canvas id="scene"></canvas>
+        <div id="hud">
+          <div id="hud-top">
+            <span class="brand">VECTRON</span>
+            <span class="dot">·</span>
+            <span class="tag" id="backend-tag">detectando GPU…</span>
+          </div>
+          <div id="hud-bottom">
+            <span id="fps">-- fps</span>
+            <span class="dot">·</span>
+            <span id="count">-- partículas</span>
+          </div>
         </div>
-        <div id="hud-bottom">
-          <span id="fps">-- fps</span>
-          <span class="dot">·</span>
-          <span id="count">-- partículas</span>
+      </div>
+      <div id="dock">
+        <div class="dock-header">
+          <span class="brand">VECTRON</span>
+          <span class="tag">avanzado · matemática real, sin atajos</span>
         </div>
       </div>
     </div>

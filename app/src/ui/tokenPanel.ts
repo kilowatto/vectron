@@ -15,6 +15,10 @@ export interface TokenPanelOptions {
   /** Principiante: los chips no muestran el ID numérico del token. */
   showIds?: boolean;
   placeholder?: string;
+  /** Avanzado: se monta dentro del dock como sección, no flotante sobre body. */
+  mountTo?: HTMLElement;
+  /** Insertar como primer hijo de mountTo (para que quede arriba del resto del dock). */
+  prepend?: boolean;
 }
 
 export interface TokenPanel {
@@ -23,11 +27,12 @@ export interface TokenPanel {
 }
 
 export function createTokenPanel(options: TokenPanelOptions = {}): TokenPanel {
-  const { showToggle = true, showIds = true } = options;
+  const { showToggle = true, showIds = true, mountTo } = options;
 
   const root = document.createElement("div");
   root.id = "token-panel";
   root.innerHTML = `
+    ${mountTo ? `<h3 class="token-panel-title">1 · Tokenización</h3>` : ""}
     <div class="row">
       <input id="token-input" type="text" placeholder="${options.placeholder ?? "Escribe una frase o elige un ejemplo…"}" autocomplete="off" spellcheck="false" />
       ${
@@ -42,7 +47,14 @@ export function createTokenPanel(options: TokenPanelOptions = {}): TokenPanel {
     <div class="examples" id="examples"></div>
     <div class="tokens" id="tokens"></div>
   `;
-  document.body.appendChild(root);
+
+  if (mountTo) {
+    root.classList.add("docked");
+    if (options.prepend) mountTo.prepend(root);
+    else mountTo.appendChild(root);
+  } else {
+    document.body.appendChild(root);
+  }
 
   const input = root.querySelector<HTMLInputElement>("#token-input")!;
   const tokensEl = root.querySelector<HTMLDivElement>("#tokens")!;

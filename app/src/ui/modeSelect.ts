@@ -1,3 +1,5 @@
+import { fadeIn, fadeOut, staggerIn } from "./motion";
+
 export type Mode = "principiante" | "intermedio" | "avanzado";
 
 const STORAGE_KEY = "vectron_mode";
@@ -59,10 +61,18 @@ export function showModeSelect(): Promise<Mode> {
     `;
     document.body.appendChild(root);
 
+    const brand = root.querySelector<HTMLElement>(".mode-select-brand")!;
+    const sub = root.querySelector<HTMLElement>(".mode-select-sub")!;
+    const cardsWrap = root.querySelector<HTMLElement>(".mode-cards")!;
+    fadeIn(brand, { duration: 450, delay: 0 });
+    fadeIn(sub, { duration: 450, delay: 90 });
+    staggerIn(cardsWrap, { initialDelay: 220, step: 90, duration: 500 });
+
     root.querySelectorAll<HTMLButtonElement>(".mode-card").forEach((btn) => {
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", async () => {
         const mode = btn.dataset.mode as Mode;
         setStoredMode(mode);
+        await fadeOut(root, { duration: 380 });
         root.remove();
         resolve(mode);
       });
