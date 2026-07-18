@@ -153,7 +153,7 @@ async function handlePcaBasis(env: Env, request: Request): Promise<Response> {
 }
 
 /** Embeddings REALES en vivo (modo token de Avanzado): cada texto va a
- * Workers AI con el mismo modelo del dataset y regresa su vector 768-d
+ * Workers AI con el mismo modelo del dataset y regresa su vector 1024-d
  * crudo. El cliente proyecta con la base de PCA y calcula cosenos
  * localmente. */
 async function handleEmbed(env: Env, request: Request): Promise<Response> {
@@ -188,7 +188,7 @@ async function handleEmbed(env: Env, request: Request): Promise<Response> {
     );
   }
 
-  const result = (await env.AI.run("@cf/baai/bge-base-en-v1.5", {
+  const result = (await env.AI.run("@cf/baai/bge-m3", {
     text: texts as string[],
   })) as { data: number[][] };
 
@@ -270,11 +270,11 @@ async function handleSimilarByVector(env: Env, request: Request): Promise<Respon
   const vector = body.vector;
   if (
     !Array.isArray(vector) ||
-    vector.length !== 768 ||
+    vector.length !== 1024 ||
     !vector.every((x) => typeof x === "number" && Number.isFinite(x))
   ) {
     return Response.json(
-      { ok: false, error: "vector debe ser 768 números" },
+      { ok: false, error: "vector debe ser 1024 números" },
       { status: 400, headers: corsHeaders(request) },
     );
   }

@@ -66,17 +66,17 @@ const STRINGS = {
   tokenRowGpt: { es: "GPT · cl100k_base", en: "GPT · cl100k_base" },
   tokenRowSimple: { es: "Simplificado (no real)", en: "Simplified (not real)" },
   tokenRowBge: {
-    es: "BGE · bge-base-en-v1.5 — el modelo del cubo",
-    en: "BGE · bge-base-en-v1.5 — the cube's model",
+    es: "BGE WordPiece (bge-base-en-v1.5) — cortes de referencia",
+    en: "BGE WordPiece (bge-base-en-v1.5) — reference cuts",
   },
   tokenDisclaimer: {
-    es: "Cada fragmento se embebe aislado con BGE (números 100% reales del mismo modelo del cubo); el modelo real lee los tokens en contexto, con atención mutua — su posición aquí es una aproximación declarada. Los cortes de GPT también se embeben con BGE para ubicarlos en el mismo espacio.",
-    en: "Each fragment is embedded in isolation with BGE (100% real numbers from the same model as the cube); the real model reads tokens in context, with mutual attention — their position here is a declared approximation. GPT's cuts are also embedded with BGE so they can live in the same space.",
+    es: "Cada fragmento se embebe aislado con bge-m3 (números 100% reales, el mismo modelo del cubo); el modelo real lee los tokens en contexto, con atención mutua — su posición aquí es una aproximación declarada. Los cortes de esta fila usan el tokenizador WordPiece real de bge-base-en-v1.5, no el de bge-m3 (que usa SentencePiece/XLM-RoBERTa y todavía no está implementado aquí) — se muestran como referencia, no como el tokenizador exacto del cubo. Los cortes de GPT también se embeben con bge-m3 para ubicarlos en el mismo espacio.",
+    en: "Each fragment is embedded in isolation with bge-m3 (100% real numbers, the same model as the cube); the real model reads tokens in context, with mutual attention — their position here is a declared approximation. This row's cuts use bge-base-en-v1.5's real WordPiece tokenizer, not bge-m3's (which uses SentencePiece/XLM-RoBERTa and isn't implemented here yet) — shown as a reference, not the cube's exact tokenizer. GPT's cuts are also embedded with bge-m3 so they can live in the same space.",
   },
   tokenPhraseLabel: { es: "frase completa", en: "full phrase" },
   tokenCompareToggle: {
-    es: "comparar con BGE, el modelo real del cubo",
-    en: "compare with BGE, the cube's real model",
+    es: "comparar con el tokenizador WordPiece de BGE (referencia)",
+    en: "compare with BGE's WordPiece tokenizer (reference)",
   },
   tokenPanelToggleSimple: { es: "Simplificado", en: "Simplified" },
   examplePhrase1: {
@@ -140,8 +140,8 @@ const STRINGS = {
   hudUnitPrincipiante: { es: "palabras", en: "words" },
   hudUnitIntermedio: { es: "embeddings", en: "embeddings" },
   hudUnitAvanzado: {
-    es: "embeddings · ℝ⁷⁶⁸ · ~109M parámetros",
-    en: "embeddings · ℝ⁷⁶⁸ · ~109M parameters",
+    es: "embeddings · ℝ¹⁰²⁴ · ~600M parámetros",
+    en: "embeddings · ℝ¹⁰²⁴ · ~600M parameters",
   },
   hudWebgpu: { es: "WebGPU · compute activo", en: "WebGPU · compute active" },
   hudWebgl: { es: "WebGL · modo compatible", en: "WebGL · compatibility mode" },

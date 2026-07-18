@@ -29,7 +29,7 @@ export interface TokensChangeDetail {
  * |----------------|---------|------------|-----------------------------------------------------------|
  * | `hide-toggle`  | boolean | ausente    | si está presente, oculta el switch BPE/Simplificado y fuerza tokenizador simple. Fijar antes de insertar. |
  * | `hide-ids`     | boolean | ausente    | si está presente, los chips no muestran el ID numérico del token. Fijar antes de insertar. |
- * | `compare`      | boolean | ausente    | modo token de Avanzado: muestra DOS filas etiquetadas — la tokenización elegida (GPT cl100k / simplificada) y la del tokenizador REAL de BGE (el modelo del cubo) — más la nota de honestidad técnica. Fijar antes de insertar. |
+ * | `compare`      | boolean | ausente    | modo token de Avanzado: muestra DOS filas etiquetadas — la tokenización elegida (GPT cl100k / simplificada) y el tokenizador WordPiece REAL de bge-base-en-v1.5 (mostrado como referencia; el modelo que embebe el cubo es bge-m3, que usa SentencePiece — no el de esta fila) — más la nota de honestidad técnica. Fijar antes de insertar. |
  * | `placeholder`  | string  | frase genérica | placeholder del input. Reactivo: se puede cambiar en cualquier momento. |
  *
  * ### Métodos públicos

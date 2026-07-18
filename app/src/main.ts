@@ -246,7 +246,7 @@ async function main() {
       const chainObj = field.setChainLines(ordered);
       if (chainObj && ordered.length >= 2) {
         // Hover con similitud de coseno REAL por segmento: los vectores
-        // 768-d del dataset viven en Vectorize, así que se piden al
+        // 1024-d del dataset viven en Vectorize, así que se piden al
         // worker (una llamada por frase, no por segmento).
         const pairs: [number, number][] = [];
         for (let i = 0; i < ordered.length - 1; i++) {

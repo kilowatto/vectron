@@ -5,7 +5,7 @@ import { SEED_CONCEPTS } from "../src/data/seedConcepts";
 import { pcaReduce, normalizeToCube, type PcaBasis } from "./pca";
 
 const ACCOUNT_ID = "99c9300f175af0e76483b949f6c6acd1";
-const EMBEDDING_MODEL = "@cf/baai/bge-base-en-v1.5";
+const EMBEDDING_MODEL = "@cf/baai/bge-m3";
 const BATCH_SIZE = 20;
 const OUT_DIR = join(import.meta.dirname, "out");
 
@@ -105,7 +105,7 @@ async function main() {
   );
   writeFileSync(join(OUT_DIR, "vectors.ndjson"), vectorizeLines.join("\n") + "\n");
 
-  // --- 3) Client-facing dataset JSON (no raw 768-dim vectors) ---
+  // --- 3) Client-facing dataset JSON (no raw 1024-dim vectors) ---
   const clientDataset = withIds.map((c) => ({
     id: c.id,
     word: { es: c.wordEs, en: c.wordEn },
@@ -123,7 +123,7 @@ async function main() {
 
   console.log(`\nListo. Artefactos en ${OUT_DIR}:`);
   console.log("  concepts.sql      -> wrangler d1 execute vectron-db --remote --file=");
-  console.log("  vectors.ndjson    -> wrangler vectorize insert vectron-concepts --file=");
+  console.log("  vectors.ndjson    -> wrangler vectorize insert vectron-concepts-m3 --file=");
   console.log("  concepts.json     -> wrangler r2 object put vectron-dataset/concepts.json --file=");
   console.log("  pca_basis.json    -> wrangler r2 object put vectron-dataset/pca_basis.json --file=");
 }

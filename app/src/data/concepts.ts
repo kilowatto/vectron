@@ -59,7 +59,7 @@ export async function fetchPcaBasis(): Promise<PcaBasis | null> {
   return res.json();
 }
 
-/** Proyección de un embedding 768-d al cubo 3D con la base guardada —
+/** Proyección de un embedding 1024-d al cubo 3D con la base guardada —
  * exactamente la misma aritmética que seed.ts aplicó al dataset:
  * centrar con la media, producto punto con cada eje, escalar por eje. */
 export function projectWithBasis(vector: number[], basis: PcaBasis): [number, number, number] {
@@ -76,7 +76,7 @@ export function projectWithBasis(vector: number[], basis: PcaBasis): [number, nu
 }
 
 /** Embeddings reales en vivo — cada texto va a Workers AI con el mismo
- * modelo del dataset (bge-base-en-v1.5) y regresa su vector 768-d. */
+ * modelo del dataset (bge-m3) y regresa su vector 1024-d. */
 export async function embedTexts(texts: string[]): Promise<number[][] | null> {
   const res = await fetch(`${API_BASE}/api/embed`, {
     method: "POST",

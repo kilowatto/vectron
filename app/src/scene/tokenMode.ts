@@ -18,16 +18,20 @@ import { getStoredLang, t } from "../i18n";
 
 /**
  * Modo token (sólo Avanzado): la frase escrita se tokeniza con DOS
- * tokenizadores reales (BGE — el del modelo del cubo — y cl100k_base de
- * GPT, para comparar cortes), cada fragmento y la frase completa se
- * embeben EN VIVO con Workers AI (mismo modelo que el dataset), y se
+ * tokenizadores reales (el WordPiece real de bge-base-en-v1.5, mostrado
+ * como referencia — ya NO es el tokenizador del modelo del cubo desde
+ * la migración a bge-m3, ver bgeTokenizer.ts — y cl100k_base de GPT,
+ * para comparar cortes), cada fragmento y la frase completa se embeben
+ * EN VIVO con Workers AI (bge-m3, el mismo modelo que el dataset), y se
  * proyectan al mismo cubo con la base de PCA persistida por seed.ts.
  *
- * Todo número mostrado es real. La única aproximación — declarada en el
- * panel, no escondida — es que cada fragmento se embebe aislado, sin el
- * contexto de atención con que el modelo real lo leería dentro de la
- * frase. Los cortes de GPT además se embeben con BGE (el único modelo
- * de embeddings disponible), doble aproximación también declarada.
+ * Todo número mostrado es real. Las aproximaciones — declaradas en el
+ * panel, no escondidas — son: (1) cada fragmento se embebe aislado, sin
+ * el contexto de atención con que el modelo real lo leería dentro de la
+ * frase; (2) los cortes de esta fila usan el tokenizador de un modelo
+ * distinto (bge-base-en-v1.5) al que realmente embebe el cubo (bge-m3).
+ * Los cortes de GPT además se embeben con bge-m3 (el único embedder
+ * disponible), doble aproximación también declarada.
  */
 
 export interface TokenModeOptions {
@@ -319,7 +323,7 @@ export function setupTokenMode(options: TokenModeOptions): TokenMode {
 
   function tokenToConcept(p: LiveParticle): Concept {
     const modelLabel =
-      p.kind === "gpt" ? "cl100k_base (GPT)" : "bge-base-en-v1.5";
+      p.kind === "gpt" ? "cl100k_base (GPT)" : "bge-m3";
     return {
       id: -1,
       word: { es: p.fragment, en: p.fragment },
@@ -331,7 +335,7 @@ export function setupTokenMode(options: TokenModeOptions): TokenMode {
       distinctiveTrait: null,
       traits:
         p.kind === "frase"
-          ? { modelo: "bge-base-en-v1.5" }
+          ? { modelo: "bge-m3" }
           : { id_vocabulario: p.tokenId ?? -1, tokenizador: modelLabel },
       coords: p.coords,
       partOfSpeech: "sustantivo",

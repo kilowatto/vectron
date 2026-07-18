@@ -1,13 +1,23 @@
 import type { Token } from "./tokenizer";
 
 /**
- * Tokenizador REAL de `bge-base-en-v1.5` — el modelo que genera los
- * embeddings de las partículas del cubo. Es un BertTokenizer estándar
+ * Tokenizador REAL de `bge-base-en-v1.5` — un BertTokenizer estándar
  * (WordPiece, uncased): el vocab.txt servido en /bge-vocab.txt es el
  * archivo auténtico del modelo (descargado de su repo de HuggingFace,
  * 30,522 entradas) y el algoritmo de abajo es el WordPiece canónico de
  * BERT — greedy longest-match-first con continuaciones "##". Los IDs
  * que produce son los índices reales de ese vocabulario.
+ *
+ * Migración a bge-m3 (2026-07-19): el modelo que embebe las partículas
+ * del cubo ya NO es bge-base-en-v1.5, es bge-m3 (backbone XLM-RoBERTa,
+ * tokenizador SentencePiece — no WordPiece, vocabulario distinto). Este
+ * archivo se queda como está y se sigue usando en el panel, PERO ya no
+ * es "el tokenizador del cubo" — es un tokenizador WordPiece real y
+ * completo que se muestra como referencia (declarado así en el panel,
+ * ver `tokenRowBge`/`tokenDisclaimer` en i18n.ts). Implementar el
+ * tokenizador SentencePiece real de bge-m3 es trabajo pendiente, no
+ * hecho en esta migración (requiere el archivo sentencepiece.bpe.model
+ * de XLM-RoBERTa + un algoritmo distinto, no una extensión de este).
  *
  * Nota de fidelidad: `do_lower_case: true` en el tokenizer_config del
  * modelo — minúsculas y sin acentos ("Café" -> "cafe") es lo que el
