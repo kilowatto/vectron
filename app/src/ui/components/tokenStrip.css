@@ -20,12 +20,22 @@
   gap: 6px;
   padding: 12px 16px;
   border-radius: 14px;
-  background: rgba(10, 13, 17, 0.85);
-  border: 1px solid rgba(231, 226, 214, 0.16);
-  backdrop-filter: blur(10px);
   font-family: var(--font-mono);
-  /* Vacío (sin texto) no debe tapar nada — sólo aparece con contenido. */
+  /* Vacío (sin texto) no debe tapar ni mostrar nada — ni fondo, ni
+     borde, ni clics. El bug real: antes el fondo/borde vivían aquí
+     incondicionales, así que la franja se veía como una píldora vacía
+     flotando sobre el cubo incluso sin un solo token escrito (visible
+     apenas se dejó ver el cubo detrás durante el boot splash nuevo).
+     Ahora todo el "chrome" visual entra sólo cuando hay contenido. */
+  background: transparent;
+  border: 1px solid transparent;
   pointer-events: none;
+}
+
+:host(:has(.tokens:not(:empty))) {
+  background: rgba(10, 13, 17, 0.85);
+  border-color: rgba(231, 226, 214, 0.16);
+  backdrop-filter: blur(10px);
 }
 
 .tokens-zone:has(.tokens:not(:empty)) {
@@ -58,6 +68,17 @@
   font-size: 10.5px;
   letter-spacing: 0.03em;
   cursor: pointer;
+}
+
+/* Bug real: `display:flex` de arriba (regla de autor) le gana al
+   `display:none` por defecto que el navegador aplica al atributo
+   `hidden` (regla de autor siempre gana sobre la hoja de estilos del
+   navegador, sin importar especificidad) — el botón quedaba visible
+   con solo el chevron flotando, vacío, incluso sin texto escrito
+   (reportado por el usuario con captura). Esta regla restaura el
+   comportamiento real de `hidden`. */
+.bge-toggle[hidden] {
+  display: none;
 }
 
 .bge-toggle:hover {

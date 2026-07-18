@@ -4,11 +4,14 @@ Un cubo de luz donde el significado tiene coordenadas. Vectron es un visualizado
 
 Nace de una especificación conceptual ("un cubo oscuro flotante" con partículas mapeadas por significado) y se construye a escala real: embeddings genuinos reducidos a 3D, miles de conceptos, y un pipeline de RAG completo.
 
-📄 **Plan de desarrollo completo:** https://claude.ai/code/artifact/8e0caa6f-9e58-422d-8f77-4ac79224bc2a — arquitectura, modelo de datos, roadmap y las decisiones de producto detrás de cada elección.
+📄 **Plan maestro (vivo):** [`DOCs/02-master-plan.md`](./DOCs/02-master-plan.md) — arquitectura, 3 apps (Principiante / Intermedio / Avanzado), progreso DONE/NOW/LATER.  
+📦 **Plan original archivado:** [`DOCs/archive/2026-07-17-vectron-plan-original.html`](./DOCs/archive/2026-07-17-vectron-plan-original.html)
 
 ## Estado actual
 
-**Fase 0 — dirección visual.** Existe un prototipo del motor de partículas (`/app`) validando el look ("2026", no genérico) y un esqueleto de API en Cloudflare (`/worker`) con los bindings de datos ya provisionados. El dataset todavía es un generador de partículas de relleno — los conceptos reales llegan en Fase 1.
+**Más allá de Fase 0.** Hay dataset real (~2 263 conceptos), embeddings BGE + PCA, Vectorize, token lab en Avanzado, UI bilingüe ES/EN. Siguiente foco (NOW): tres shells reales bajo Principiante / Intermedio / Avanzado + RAG lite. Meta de conceptos: 15 000 (pausada hasta desbloquear).
+
+Ver progreso detallado en el plan maestro.
 
 ## Estructura
 

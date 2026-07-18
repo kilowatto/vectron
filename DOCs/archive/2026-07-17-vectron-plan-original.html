@@ -1,0 +1,552 @@
+<title>Vectron — Plan de Desarrollo</title>
+<style>
+  :root{
+    --bg:#EEF1F0;
+    --bg-raised:#E4E9E7;
+    --bg-sunken:#DCE3E0;
+    --text:#1A2226;
+    --text-dim:#57646B;
+    --accent:#9C5518;
+    --accent-soft:#9C55181A;
+    --accent-2:#1E7F86;
+    --rule:#C6CDC9;
+    --danger:#A8402F;
+    --danger-soft:#A8402F14;
+    --ok:#3E7A52;
+    --ok-soft:#3E7A5214;
+    --font-display:"Iowan Old Style","Palatino Linotype",Georgia,"Noto Serif",serif;
+    --font-body:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --font-mono:ui-monospace,"SF Mono","Cascadia Code","Roboto Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0B0F14;
+      --bg-raised:#121821;
+      --bg-sunken:#0E1319;
+      --text:#E7E2D6;
+      --text-dim:#8B98A1;
+      --accent:#D98A34;
+      --accent-soft:#D98A3422;
+      --accent-2:#4FB8C4;
+      --rule:#233039;
+      --danger:#D9695A;
+      --danger-soft:#D9695A1E;
+      --ok:#6FBE8C;
+      --ok-soft:#6FBE8C1E;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0B0F14; --bg-raised:#121821; --bg-sunken:#0E1319;
+    --text:#E7E2D6; --text-dim:#8B98A1;
+    --accent:#D98A34; --accent-soft:#D98A3422; --accent-2:#4FB8C4;
+    --rule:#233039; --danger:#D9695A; --danger-soft:#D9695A1E;
+    --ok:#6FBE8C; --ok-soft:#6FBE8C1E;
+  }
+  :root[data-theme="light"]{
+    --bg:#EEF1F0; --bg-raised:#E4E9E7; --bg-sunken:#DCE3E0;
+    --text:#1A2226; --text-dim:#57646B;
+    --accent:#9C5518; --accent-soft:#9C55181A; --accent-2:#1E7F86;
+    --rule:#C6CDC9; --danger:#A8402F; --danger-soft:#A8402F14;
+    --ok:#3E7A52; --ok-soft:#3E7A5214;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--font-body);
+    line-height:1.6;
+    font-size:16.5px;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--accent-2);text-decoration:none;border-bottom:1px solid currentColor;opacity:0.9;}
+  a:hover{opacity:1;}
+  ::selection{background:var(--accent-soft);}
+
+  .shell{max-width:1180px;margin:0 auto;padding:0 24px 120px;}
+
+  header.masthead{
+    padding:64px 0 40px;
+    border-bottom:1px solid var(--rule);
+    margin-bottom:40px;
+  }
+  .eyebrow{
+    font-family:var(--font-mono);
+    font-size:12px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:var(--accent);
+    margin:0 0 14px;
+  }
+  h1.title{
+    font-family:var(--font-display);
+    font-weight:600;
+    font-size:clamp(2.4rem,5vw,3.6rem);
+    letter-spacing:-0.01em;
+    margin:0 0 10px;
+    text-wrap:balance;
+  }
+  .subtitle{
+    font-size:1.05rem;
+    color:var(--text-dim);
+    max-width:640px;
+    margin:0 0 24px;
+    text-wrap:balance;
+  }
+  .metarow{
+    display:flex;
+    gap:28px;
+    flex-wrap:wrap;
+    font-family:var(--font-mono);
+    font-size:12.5px;
+    color:var(--text-dim);
+  }
+  .metarow strong{color:var(--text);font-weight:600;}
+
+  .layout{display:grid;grid-template-columns:230px 1fr;gap:56px;align-items:start;}
+  @media (max-width:880px){.layout{grid-template-columns:1fr;}}
+
+  nav.toc{position:sticky;top:24px;font-family:var(--font-mono);font-size:12.5px;}
+  nav.toc .toc-head{color:var(--text-dim);letter-spacing:.1em;text-transform:uppercase;font-size:11px;margin-bottom:10px;}
+  nav.toc ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px;}
+  nav.toc a{border-bottom:none;color:var(--text-dim);display:flex;gap:8px;}
+  nav.toc a:hover{color:var(--accent);}
+  nav.toc span.n{color:var(--accent);flex-shrink:0;}
+  @media (max-width:880px){
+    nav.toc{position:static;margin-bottom:8px;}
+    nav.toc ol{flex-direction:row;flex-wrap:wrap;gap:14px;}
+  }
+
+  main{max-width:720px;}
+  section{margin-bottom:56px;scroll-margin-top:24px;}
+  .sec-tag{
+    font-family:var(--font-mono);
+    font-size:12px;
+    color:var(--accent);
+    letter-spacing:.08em;
+    margin:0 0 6px;
+  }
+  h2{
+    font-family:var(--font-display);
+    font-size:1.7rem;
+    font-weight:600;
+    margin:0 0 18px;
+    text-wrap:balance;
+  }
+  h3{
+    font-family:var(--font-display);
+    font-size:1.2rem;
+    font-weight:600;
+    margin:28px 0 12px;
+  }
+  p{margin:0 0 16px;max-width:64ch;}
+  ul,ol{margin:0 0 16px;padding-left:22px;}
+  li{margin-bottom:8px;max-width:60ch;}
+  strong{font-weight:650;}
+  code{font-family:var(--font-mono);font-size:.9em;background:var(--bg-sunken);padding:2px 5px;border-radius:3px;}
+  pre code{background:none;padding:0;}
+
+  .lede{
+    font-size:1.15rem;
+    color:var(--text);
+    border-left:2px solid var(--accent);
+    padding-left:18px;
+    max-width:62ch;
+  }
+
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 24px;}
+  .chip{
+    font-family:var(--font-mono);
+    font-size:12px;
+    padding:5px 10px;
+    border-radius:3px;
+    background:var(--bg-raised);
+    border:1px solid var(--rule);
+    color:var(--text-dim);
+  }
+  .chip b{color:var(--text);font-weight:600;}
+
+  .decision-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin:0 0 28px;}
+  @media (max-width:560px){.decision-grid{grid-template-columns:1fr;}}
+  .decision{
+    background:var(--bg-raised);
+    border:1px solid var(--rule);
+    border-radius:6px;
+    padding:14px 16px;
+  }
+  .decision .k{font-family:var(--font-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin-bottom:6px;}
+  .decision .v{font-size:14.5px;line-height:1.45;}
+
+  table{width:100%;border-collapse:collapse;margin:0 0 24px;font-size:14.5px;}
+  th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--rule);vertical-align:top;}
+  th{font-family:var(--font-mono);font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-dim);font-weight:600;}
+  td.mono, th.mono{font-family:var(--font-mono);font-size:13px;font-variant-numeric:tabular-nums;}
+  .table-wrap{overflow-x:auto;margin:0 0 24px;border:1px solid var(--rule);border-radius:6px;}
+  .table-wrap table{margin:0;}
+  .table-wrap th,.table-wrap td{white-space:nowrap;}
+  .table-wrap td.wrap{white-space:normal;min-width:220px;}
+
+  .callout{
+    border-left:3px solid var(--accent);
+    background:var(--accent-soft);
+    padding:14px 18px;
+    border-radius:0 6px 6px 0;
+    margin:0 0 20px;
+    font-size:14.5px;
+  }
+  .callout.risk{border-color:var(--danger);background:var(--danger-soft);}
+  .callout.ok{border-color:var(--ok);background:var(--ok-soft);}
+  .callout .label{font-family:var(--font-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;color:var(--text-dim);}
+  .callout.risk .label{color:var(--danger);}
+  .callout.ok .label{color:var(--ok);}
+
+  .modes{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:0 0 24px;}
+  @media (max-width:700px){.modes{grid-template-columns:1fr;}}
+  .mode-card{background:var(--bg-raised);border:1px solid var(--rule);border-radius:8px;padding:18px;}
+  .mode-card h4{font-family:var(--font-display);font-size:1.05rem;margin:0 0 4px;}
+  .mode-card .tag{font-family:var(--font-mono);font-size:10.5px;color:var(--accent-2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;}
+  .mode-card ul{padding-left:18px;margin:0;font-size:13.5px;}
+  .mode-card li{margin-bottom:6px;}
+
+  pre.mermaid{
+    background:var(--bg-raised);
+    border:1px solid var(--rule);
+    border-radius:8px;
+    padding:18px;
+    overflow-x:auto;
+  }
+
+  hr.rule{border:none;border-top:1px solid var(--rule);margin:40px 0;}
+
+  footer{
+    font-family:var(--font-mono);
+    font-size:12px;
+    color:var(--text-dim);
+    border-top:1px solid var(--rule);
+    padding-top:24px;
+    margin-top:60px;
+  }
+</style>
+
+<div class="shell">
+  <header class="masthead">
+    <p class="eyebrow">Plan de desarrollo · kilowatto.com</p>
+    <h1 class="title">Vectron</h1>
+    <p class="subtitle">Un cubo de luz donde el significado tiene coordenadas. Visualizador 3D público, en tiempo real, de cómo un LLM convierte palabras en vectores — y de cómo un sistema RAG los usa para responder.</p>
+    <div class="metarow">
+      <span><strong>Estado</strong> — Borrador para revisión, v1</span>
+      <span><strong>Fecha</strong> — 17 jul 2026</span>
+      <span><strong>Origen</strong> — Especificación PDF + 28 decisiones de producto</span>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="toc">
+      <p class="toc-head">Contenido</p>
+      <ol>
+        <li><a href="#s01"><span class="n">01</span>Resumen</a></li>
+        <li><a href="#s02"><span class="n">02</span>Nombre y dominio</a></li>
+        <li><a href="#s03"><span class="n">03</span>Modos de uso</a></li>
+        <li><a href="#s04"><span class="n">04</span>Mapeo visual</a></li>
+        <li><a href="#s05"><span class="n">05</span>Arquitectura</a></li>
+        <li><a href="#s06"><span class="n">06</span>Modelo de datos</a></li>
+        <li><a href="#s07"><span class="n">07</span>Flujo funcional</a></li>
+        <li><a href="#s08"><span class="n">08</span>Costo cero</a></li>
+        <li><a href="#s09"><span class="n">09</span>Rendimiento</a></li>
+        <li><a href="#s10"><span class="n">10</span>Accesibilidad</a></li>
+        <li><a href="#s11"><span class="n">11</span>Roadmap</a></li>
+        <li><a href="#s12"><span class="n">12</span>Tensiones abiertas</a></li>
+        <li><a href="#s13"><span class="n">13</span>Código abierto</a></li>
+        <li><a href="#s14"><span class="n">14</span>Próximos pasos</a></li>
+      </ol>
+    </nav>
+
+    <main>
+      <section id="s01">
+        <p class="sec-tag">§01</p>
+        <h2>Resumen ejecutivo</h2>
+        <p class="lede">Vectron toma la idea del PDF original — un cubo oscuro donde cada palabra es una partícula posicionada por su significado — y la lleva a escala real: embeddings genuinos reducidos por UMAP, miles de conceptos precargados, un pipeline RAG completo con documentos, y tres niveles de profundidad que van desde "esto es una analogía" hasta las matemáticas reales de <em>Attention Is All You Need</em>.</p>
+        <p>Las 28 respuestas de la sesión anterior definen un producto serio, no una maqueta del PDF. Antes de entrar en detalle, aquí está el resumen de lo decidido:</p>
+        <div class="decision-grid">
+          <div class="decision"><div class="k">Alcance</div><div class="v">Herramienta educativa pública, código abierto, para todos los niveles (3 modos)</div></div>
+          <div class="decision"><div class="k">Idioma</div><div class="v">Bilingüe ES/EN con selector, dataset con ambas etiquetas por concepto</div></div>
+          <div class="decision"><div class="k">Embeddings</div><div class="v">Reales, reducidos a 3D vía UMAP/PCA — no coordenadas curadas a mano</div></div>
+          <div class="decision"><div class="k">RAG</div><div class="v">Completo: subir documento → chunking → retrieval → respuesta generada</div></div>
+          <div class="decision"><div class="k">Vocabulario</div><div class="v">Miles de conceptos precargados + generación dinámica para palabras nuevas</div></div>
+          <div class="decision"><div class="k">Motor 3D</div><div class="v">WebGPU con fallback automático a WebGL, sin framework de UI</div></div>
+          <div class="decision"><div class="k">Infraestructura</div><div class="v">Cloudflare de punta a punta: Workers, Vectorize, D1, R2, Workers AI</div></div>
+          <div class="decision"><div class="k">Presupuesto</div><div class="v">Cero por defecto — modo local WebLLM + free tiers, Claude como opción con cuota</div></div>
+          <div class="decision"><div class="k">Dispositivos</div><div class="v">Misma funcionalidad en móvil y escritorio, calidad adaptativa por tier de GPU</div></div>
+          <div class="decision"><div class="k">Licencia</div><div class="v">Código abierto en GitHub, documentación pedagógica extensa</div></div>
+        </div>
+        <div class="callout risk">
+          <div class="label">Tensión que hay que nombrar ya</div>
+          Esta lista completa, hecha con el nivel de calidad que describes, es un proyecto de 6–9 meses. Los 2–3 meses que definiste alcanzan para una <strong>Fase 1 impecable</strong> (seed curado de cientos de conceptos, motor 3D real, tokenización dual, similitud, RAG básico con WebLLM). El resto — taxonomía de 5000 conceptos, RAG premium con Claude, paridad total de rendimiento en gama baja — pasa a ser <strong>roadmap post-lanzamiento</strong>, no una promesa del día 1. Este documento marca esa línea explícitamente en cada sección para que decidas con esa información, no después de descubrirlo a mitad de camino.
+        </div>
+        <div class="callout ok">
+          <div class="label">Estado en vivo — 18 jul 2026</div>
+          Ya en producción en <a href="https://vectron.kilowatto.com" target="_blank">vectron.kilowatto.com</a> (repo público: <a href="https://github.com/kilowatto/vectron" target="_blank">github.com/kilowatto/vectron</a>): motor de partículas WebGPU con 153 conceptos reales (embeddings de Workers AI reducidos con PCA propio), tokenización dual (BPE real + simplificado), similitud de coseno real con líneas hacia los vecinos (Vectorize), el grafo de tensores del modo Avanzado con KaTeX, y los tres modos como pantallas de entrada distintas (no toggles — ver §03 para la corrección de rumbo). Pendiente de Fase 1: RAG con documentos y WebLLM.
+        </div>
+      </section>
+
+      <section id="s02">
+        <p class="sec-tag">§02</p>
+        <h2>Nombre y dominio</h2>
+        <p>Propongo <strong>Vectron</strong> — vector + electrón — como nombre del producto: conserva el ADN energético de <code>kilowatto</code> (electricidad, potencia, medición) y lo cruza con el vocabulario del proyecto (vectores, espacio latente). Suena a instrumento, no a app de IA genérica.</p>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Elemento</th><th class="wrap">Propuesta</th></tr>
+            <tr><td class="mono">Subdominio</td><td class="wrap"><code>vectron.kilowatto.com</code> — memorable, un solo salto de DNS, no compite con el dominio raíz</td></tr>
+            <tr><td class="mono">Alterna</td><td class="wrap"><code>lab.kilowatto.com/vectron</code> si prefieres agrupar futuros experimentos bajo un mismo "lab"</td></tr>
+            <tr><td class="mono">Repositorio</td><td class="wrap"><code>github.com/kilowatto/vectron</code></td></tr>
+          </table>
+        </div>
+      </section>
+
+      <section id="s03">
+        <p class="sec-tag">§03</p>
+        <h2>Tres modos, tres experiencias</h2>
+        <p><strong>Corrección de rumbo (18 jul 2026, dos rondas):</strong> la primera implementación puso los tres niveles como toggles/paneles sobre una sola vista (un switch "BPE real / Simplificado" y un botón "modo avanzado" que abría un panel). El usuario lo rechazó: cada modo debe sentirse como una app pensada para esa audiencia. Primera corrección: pantalla de selección de modo al entrar (persistida). Segunda ronda, más específica: incluso con la pantalla de selección, Avanzado seguía teniendo un botón "Σ grafo de tensores" que colapsaba/expandía el contenido matemático sobre la misma vista — el usuario lo rechazó también: <em>"no quiero estos botones para colapsar la información del avanzado, si no que sea una app nueva con su sección de la matemática, la gráfica de los tensores, las partículas, explicación detallada."</em> Regla general resultante: <strong>ningún contenido de un modo va detrás de un botón de mostrar/ocultar</strong> — si es parte del modo, vive permanentemente en su layout. Avanzado ya tiene esto resuelto (layout de dos columnas, todo visible); Principiante/Intermedio siguen con el patrón de panel flotante sobre pantalla completa y podrían necesitar el mismo tratamiento si surge la misma objeción.</p>
+        <div class="modes">
+          <div class="mode-card">
+            <h4>Principiante</h4>
+            <div class="tag">Intuición</div>
+            <ul>
+              <li>Analogías en lenguaje llano ("palabras parecidas quedan cerca")</li>
+              <li>Overlay opcional con ejes con nombre humano (animalidad, tamaño, entorno) recalculado sobre los embeddings reales</li>
+              <li>Tutorial guiado paso a paso, sin jerga</li>
+            </ul>
+          </div>
+          <div class="mode-card">
+            <h4>Intermedio</h4>
+            <div class="tag">Mecanismo</div>
+            <ul>
+              <li>Tokenización visible con IDs reales, tarjeta de vector crudo</li>
+              <li>Similitud de coseno con fórmula y top-N configurable</li>
+              <li>Explicación del pipeline RAG paso a paso con los chunks reales del documento subido</li>
+            </ul>
+          </div>
+          <div class="mode-card">
+            <h4>Avanzado</h4>
+            <div class="tag">Matemática real</div>
+            <ul>
+              <li>Ecuaciones de atención (Q·K<sup>T</sup>/√d) enlazadas a <em>Attention Is All You Need</em> (Vaswani et al., 2017)</li>
+              <li>Muestreo de siguiente token como cadena de Markov: temperatura, top-k, top-p con distribución visible</li>
+              <li>Comparación lado a lado: proyección UMAP real vs. proyección curada — mostrando qué se pierde al comprimir a 3D</li>
+            </ul>
+          </div>
+        </div>
+        <p>Uso completamente anónimo, sin cuentas: el "modo" es una preferencia local (localStorage), no un perfil de usuario.</p>
+      </section>
+
+      <section id="s04">
+        <p class="sec-tag">§04</p>
+        <h2>Mapeo semántico y codificación visual</h2>
+        <p>El PDF mapea 4 atributos fijos (animalidad, tamaño, entorno, patas, alas) porque su dataset era animales y objetos. Con miles de conceptos de dominios muy distintos — matemáticas, lenguajes de programación, biología, geografía, astronomía, materiales — un esquema de 4 ejes fijos no generaliza. Propongo un esquema de <strong>codificación por capas</strong>:</p>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Canal visual</th><th class="wrap">Qué codifica</th><th class="wrap">Por qué</th></tr>
+            <tr><td class="mono">Posición X/Y/Z</td><td class="wrap">Coordenadas reales de UMAP/PCA sobre el embedding — la cercanía real del modelo</td><td class="wrap">Es lo que de verdad hace un LLM; el modo Principiante puede re-proyectar con ejes curados como capa de ayuda, no como la verdad</td></tr>
+            <tr><td class="mono">Tono (Hue)</td><td class="wrap">Dominio raíz de la taxonomía — matemáticas, física, programación, biología animal, biología vegetal, materiales, geografía, astronomía, sociedad… (~16 tonos categóricos)</td><td class="wrap">Un tono por dominio da orientación instantánea en un cubo con miles de puntos</td></tr>
+            <tr><td class="mono">Saturación/Luminosidad</td><td class="wrap">Subcategoría o un atributo numérico continuo del dominio (ej. masa atómica, profundidad taxonómica, año)</td><td class="wrap">Reemplaza el RGB binario del PDF por un gradiente — más expresivo y accesible</td></tr>
+            <tr><td class="mono">Textura/forma de partícula</td><td class="wrap">El rasgo distintivo más relevante del dominio (alas en animales, "compilado vs. interpretado" en lenguajes, "metal vs. no metal" en materiales)</td><td class="wrap">Icono/forma en vez de solo color — no depende de distinguir tonos</td></tr>
+            <tr><td class="mono">Halo/pulso (shader)</td><td class="wrap">Relevancia dinámica: qué tan afín es el concepto al texto que el usuario acaba de escribir</td><td class="wrap">Convierte un atributo fijo del PDF en una señal útil en el momento, no un dato estático</td></tr>
+          </table>
+        </div>
+        <p>Cada partícula, al pasar el cursor o tocarla, siempre muestra una tarjeta con <strong>todos sus atributos en texto</strong> — el canal visual nunca es la única fuente de información (ver §10, Accesibilidad).</p>
+      </section>
+
+      <section id="s05">
+        <p class="sec-tag">§05</p>
+        <h2>Arquitectura técnica</h2>
+        <pre class="mermaid">
+flowchart LR
+  subgraph CLIENT["Navegador · Vite + TypeScript"]
+    UI["Interfaz 2D<br/>tokenizador · panel RAG"]
+    ENGINE["Motor 3D<br/>Three.js WebGPURenderer → WebGLRenderer"]
+    LOCAL["WebLLM local<br/>modo sin costo"]
+  end
+  subgraph EDGE["Cloudflare"]
+    WORKER["Worker · API"]
+    WAI["Workers AI<br/>embeddings + LLM chico"]
+    VEC[("Vectorize<br/>ANN / coseno")]
+    D1[("D1<br/>taxonomía + cuotas")]
+    R2[("R2<br/>dataset precargado")]
+  end
+  CLAUDE["Claude API<br/>respuesta RAG premium"]
+
+  UI --> WORKER
+  ENGINE <--> WORKER
+  LOCAL -.->|sin red, 0 costo| ENGINE
+  WORKER --> WAI
+  WORKER --> VEC
+  WORKER --> D1
+  WORKER --> R2
+  WORKER -.->|solo con cupo disponible| CLAUDE
+        </pre>
+        <h3>Por qué esta pila</h3>
+        <ul>
+          <li><strong>Three.js con <code>WebGPURenderer</code></strong> en vez de WebGPU puro: da el fallback a WebGL "gratis" y usa nodos TSL para shaders de partículas de aspecto contemporáneo (bloom, profundidad de campo, aberración cromática sutil) sin escribir dos pipelines de render a mano. Sigue siendo "sin framework" en el sentido que pediste — es una librería de render, no un framework de aplicación como React.</li>
+          <li><strong>Partículas en compute shaders (WGSL)</strong> cuando WebGPU está disponible: miles de partículas actualizándose en paralelo en la GPU, no en el hilo principal de JS.</li>
+          <li><strong>Cloudflare Workers AI</strong> para el modelo de embeddings (ej. <code>@cf/baai/bge-base-en-v1.5</code>) — corre en el edge, tiene cuota gratuita mensual, y evita depender de una API externa para la parte más usada del producto.</li>
+          <li><strong>Vectorize</strong> como base de datos vectorial real: el dataset precargado vive ahí para búsquedas de vecinos por coseno a escala (cientos a miles de puntos), y cada documento RAG crea un índice de sesión efímero.</li>
+          <li><strong>Claude</strong> se usa solo para generar la respuesta final de RAG (texto, no embeddings) cuando el usuario activa el modo premium — ver §08 para el control de costo.</li>
+        </ul>
+      </section>
+
+      <section id="s06">
+        <p class="sec-tag">§06</p>
+        <h2>Modelo de datos</h2>
+        <p>Evolución directa del JSON plano del PDF, con soporte bilingüe, taxonomía y trazabilidad del embedding de origen:</p>
+        <pre><code>{
+  "id": 1042,
+  "word": { "es": "rinoceronte", "en": "rhinoceros" },
+  "taxonomy": ["biologia", "animal", "mamifero", "herbivoro"],
+  "embedding": { "model": "@cf/baai/bge-base-en-v1.5", "dim": 768 },
+  "coords3d": [0.85, 0.72, -0.65],
+  "coordsCurated3d": [0.90, 0.60, -0.70],
+  "visual": {
+    "hueDomain": "biologia_animal",
+    "traits": { "legs": 4, "hasWings": false, "vertebrado": true },
+    "distinctiveTrait": "herbivoro"
+  }
+}</code></pre>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Almacén</th><th class="wrap">Contenido</th></tr>
+            <tr><td class="mono">R2</td><td class="wrap">Dataset precargado como <code>Float32Array</code> serializado + JSON de metadata — hidratación rápida del cliente sin round-trips</td></tr>
+            <tr><td class="mono">Vectorize</td><td class="wrap">Vectores de 768 dim del dataset (búsqueda de vecinos real) + índices efímeros por sesión de RAG</td></tr>
+            <tr><td class="mono">D1</td><td class="wrap">Árbol de taxonomía, contadores de cuota por IP/sesión, catálogo de frases de ejemplo</td></tr>
+          </table>
+        </div>
+      </section>
+
+      <section id="s07">
+        <p class="sec-tag">§07</p>
+        <h2>Flujo funcional actualizado</h2>
+        <ol>
+          <li><strong>Entrada y tokenización dual</strong> — el usuario escribe (o elige una frase de ejemplo). Un toggle alterna entre tokenizador BPE real (subpalabras auténticas, IDs reales) y un tokenizador simplificado por palabra completa, para comparar ambos.</li>
+          <li><strong>Inspección del embedding</strong> — tarjeta técnica con el vector crudo de 768 dimensiones (paginado/truncado visualmente) y su reducción a 3 dimensiones vía UMAP.</li>
+          <li><strong>Proyección animada</strong> — los tokens viajan al cubo como esferas de luz, interpolados en la GPU, y se posicionan en sus coordenadas reales.</li>
+          <li><strong>Similitud a escala</strong> — selección de un nodo traza líneas láser a sus vecinos: top-N (5 por defecto) más un slider que permite ampliar la búsqueda hasta cientos o miles de vecinos sobre el índice real de Vectorize, mostrando cómo decae la similitud con la distancia.</li>
+          <li><strong>Modo de atención</strong> — simulación visual (no cálculo real de un transformer) que muestra cómo las palabras vecinas "tironean" el vector según el contexto de la frase; en modo Avanzado se acompaña de la fórmula real de atención.</li>
+          <li><strong>RAG con documentos</strong> — el usuario sube un texto/PDF corto; se fragmenta en chunks, cada chunk se embebe y aparece como un racimo de partículas nuevo; al hacer una pregunta, los chunks recuperados se iluminan y viajan hacia el centro antes de que aparezca la respuesta generada.</li>
+        </ol>
+      </section>
+
+      <section id="s08">
+        <p class="sec-tag">§08</p>
+        <h2>Cómo mantener el costo en cero</h2>
+        <p>Pediste presupuesto mínimo/cero pero también RAG completo con LLM, embeddings reales y vocabulario dinámico ilimitado. Son compatibles si se separa lo que corre <strong>una vez</strong> de lo que corre <strong>por cada visita</strong>:</p>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Necesidad</th><th class="wrap">Estrategia de costo cero</th></tr>
+            <tr><td class="mono">Dataset precargado</td><td class="wrap">Se embebe <strong>una sola vez</strong> en tiempo de build/seed (miles de conceptos), no en cada visita. Costo: fijo y pequeño, no por usuario.</td></tr>
+            <tr><td class="mono">Palabra nueva no vista</td><td class="wrap">Embedding on-demand vía Workers AI (dentro de la cuota gratuita), con límite por IP (ej. 20/día) usando un contador en KV/Durable Object.</td></tr>
+            <tr><td class="mono">RAG con documentos</td><td class="wrap"><strong>Modo por defecto: WebLLM en el navegador</strong> (ej. Llama 3.2 1B o Phi-3-mini vía WebGPU) — el usuario descarga el modelo una vez y todo corre local, uso ilimitado, cero llamadas al servidor. Coincide con tu idea de "modelo local más poderoso si el usuario lo descarga".</td></tr>
+            <tr><td class="mono">RAG "premium" con Claude</td><td class="wrap">Toggle explícito, apagado por defecto, con cuota diaria estricta por sesión. Se activa solo si más adelante decides asignarle presupuesto real.</td></tr>
+          </table>
+        </div>
+        <div class="callout ok">
+          <div class="label">Resultado</div>
+          En estado estable, el costo variable por visitante es ~$0: todo lo pesado (dataset, modelo RAG) es precómputo o corre en el propio dispositivo del usuario. El único gasto que puede crecer con tráfico viral es Workers AI/Vectorize para palabras nuevas — vale la pena poner una alerta de billing en $0 desde el día uno.
+        </div>
+      </section>
+
+      <section id="s09">
+        <p class="sec-tag">§09</p>
+        <h2>Rendimiento adaptativo, no "versión ligera"</h2>
+        <p>Pediste paridad total entre móvil y escritorio. La forma de lograrlo sin sacrificar el look "2026" en equipos potentes es un <strong>benchmark de arranque</strong>, no una app distinta para móvil:</p>
+        <ul>
+          <li>Al cargar, una prueba de ~300ms mide el frame time de un lote de referencia de partículas y las capacidades del adaptador WebGPU (o extensión de depuración WebGL como fallback de detección).</li>
+          <li>Clasifica el dispositivo en tier <strong>Alto / Medio / Bajo</strong> y ajusta densidad de partículas (ej. 100k / 20k / 5k), resolución de post-procesado y si la física de partículas corre en compute shader o en JS.</li>
+          <li>Es el mismo código y las mismas funciones en todos los tiers — cambia la <em>cantidad</em>, no la <em>capacidad</em>: nadie pierde el modo Avanzado ni el RAG por estar en un teléfono de gama media.</li>
+        </ul>
+      </section>
+
+      <section id="s10">
+        <p class="sec-tag">§10</p>
+        <h2>Accesibilidad</h2>
+        <p>El esquema RGB del PDF (rojo/verde/azul según número de patas) falla para usuarios con daltonismo — justo el tipo de usuario que "cualquier persona debe entender" en tu segunda respuesta. La codificación por capas de §04 ya lo resuelve porque ningún atributo depende de un solo canal:</p>
+        <ul>
+          <li>Paleta categórica accesible (no rojo/verde puro) para los tonos de dominio.</li>
+          <li>Forma/textura de partícula como redundancia del atributo distintivo, no solo color.</li>
+          <li>Tarjeta de texto completa siempre disponible al interactuar con cualquier partícula.</li>
+          <li><code>prefers-reduced-motion</code> respetado: las animaciones de proyección se vuelven cortes instantáneos con el mismo resultado final.</li>
+        </ul>
+      </section>
+
+      <section id="s11">
+        <p class="sec-tag">§11</p>
+        <h2>Roadmap y cronograma</h2>
+        <pre class="mermaid">
+gantt
+    dateFormat YYYY-MM-DD
+    title Roadmap propuesto
+    section Fase 0 · Direccion visual
+    Mockups y prototipo de shader        :f0, 2026-07-20, 10d
+    section Fase 1 · MVP nucleo
+    Dataset curado + tokenizador dual    :f1a, after f0, 14d
+    Motor 3D WebGPU con fallback WebGL   :f1b, after f0, 18d
+    Proyeccion animada + similitud top-N :f1c, after f1a, 10d
+    section Fase 2 · IA real
+    Embeddings reales + reduccion UMAP   :f2a, after f1c, 12d
+    RAG con documentos y WebLLM          :f2b, after f2a, 16d
+    Modo avanzado con matematicas        :f2c, after f2a, 10d
+    section Fase 3 · Post-lanzamiento
+    Taxonomia ampliada a 5000 conceptos  :f3a, after f2b, 21d
+    Paridad total en gama baja de moviles:f3b, after f2c, 14d
+    Documentacion OSS y comunidad        :f3c, after f3a, 7d
+        </pre>
+        <p>Fases 0–1 caben con margen en 2–3 meses y ya son un producto real y demostrable. Fase 2 parcial (RAG con WebLLM, modo Avanzado) es alcanzable si Fase 1 no se alarga. Fase 3 completa — la taxonomía de 5000 conceptos y el RAG premium con Claude — es honestamente trabajo de los meses siguientes al lanzamiento, no del sprint inicial.</p>
+      </section>
+
+      <section id="s12">
+        <p class="sec-tag">§12</p>
+        <h2>Tensiones abiertas</h2>
+        <div class="callout risk">
+          <div class="label">Alcance vs. tiempo</div>
+          La combinación completa (embeddings reales + UMAP, RAG completo, 5000 conceptos, 3 modos con matemática avanzada, paridad móvil total, motor WebGPU de vanguardia) es un proyecto de 6–9 meses a tiempo completo. Recomiendo fijar explícitamente qué entra en el V1 de 2–3 meses (Fase 0–1 de §11) antes de escribir código, para no descubrir el desfase a la mitad.
+        </div>
+        <div class="callout risk">
+          <div class="label">Taxonomía de 5000 conceptos</div>
+          Curar manualmente 5000 conceptos con atributos consistentes es, en sí mismo, un proyecto de datos. Recomiendo generar el primer borrador con asistencia de un LLM y validar por muestreo humano, no concepto por conceto.
+        </div>
+        <div class="callout risk">
+          <div class="label">"Sin framework" + UI rica</div>
+          Tres modos, panel RAG, tarjetas técnicas e i18n bilingüe son bastante estado de UI para mantener a mano en vanilla TS. Propongo mantener el motor 3D y el core sin framework (como pediste), pero permitir una capa muy ligera de reactividad nativa (signals o <code>Lit</code>) solo para los paneles 2D — es una decisión abierta, no una que tome por ti.
+        </div>
+      </section>
+
+      <section id="s13">
+        <p class="sec-tag">§13</p>
+        <h2>Código abierto y documentación</h2>
+        <p>Dijiste que el repo debe "esforzarse" en documentación pedagógica. Estructura propuesta:</p>
+        <ul>
+          <li><strong>README</strong> con GIF del cubo en acción, no solo instrucciones de instalación.</li>
+          <li><strong><code>/docs</code></strong> con un ADR (Architecture Decision Record) por decisión importante de este documento — así una futura contribución entiende el "por qué", no solo el "qué".</li>
+          <li><strong>GitHub Discussions</strong> habilitado para preguntas de la comunidad educativa, separado de Issues (bugs/features).</li>
+          <li><strong>GitHub Actions</strong>: lint + build + un smoke test que verifica que el fallback WebGL renderiza sin errores.</li>
+          <li>Licencia MIT, <code>CONTRIBUTING.md</code> con guía de cómo añadir nuevos conceptos al dataset (formato, taxonomía, validación).</li>
+        </ul>
+      </section>
+
+      <section id="s14">
+        <p class="sec-tag">§14</p>
+        <h2>Próximos pasos inmediatos</h2>
+        <ol>
+          <li>Confirmar el nombre <strong>Vectron</strong> y el subdominio, o proponer alternativas.</li>
+          <li>Fase 0: te muestro 2–3 direcciones visuales concretas (no solo descripción — prototipos reales del shader de partículas) para elegir antes de comprometer el resto del desarrollo. Ideas de partida: un panel de "osciloscopio" tipo instrumento eléctrico, un "cielo nocturno" donde los conceptos son constelaciones navegables, o una estética de "sala de máquinas" con líneas de plano técnico y acentos de cobre — evitando el look genérico de gradiente morado/negro-con-verde-ácido que ya empalaga en producto de IA.</li>
+          <li>Cerrar contigo, por escrito, el corte exacto del V1 (qué vive en Fase 0–1, qué es roadmap) usando este documento como base.</li>
+          <li>Crear el repo, activar Cloudflare (Workers, Vectorize, D1, R2, Workers AI) con alertas de billing en $0 configuradas antes de escribir la primera línea de código.</li>
+        </ol>
+      </section>
+
+      <hr class="rule" />
+      <footer>
+        Vectron · Plan de desarrollo v1 · Basado en las Especificaciones Técnicas del Visualizador Vectorial 3D para LLMs + 28 decisiones de producto, 17 jul 2026.
+      </footer>
+    </main>
+  </div>
+</div>

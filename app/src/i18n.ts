@@ -155,6 +155,14 @@ const STRINGS = {
   colorKeyLabelIntermedio: { es: "dominios", en: "domains" },
   colorKeyLabelAvanzado: { es: "domain hues", en: "domain hues" },
 
+  // --- P5: vx-boot-splash ---
+  bootShell: { es: "iniciando…", en: "starting…" },
+  bootDataset: { es: "cargando conceptos…", en: "loading concepts…" },
+  bootGpu: { es: "preparando GPU…", en: "preparing GPU…" },
+  bootTokenizers: { es: "cargando tokenizadores…", en: "loading tokenizers…" },
+  bootWarm: { es: "calentando motor…", en: "warming up engine…" },
+  bootReady: { es: "listo", en: "ready" },
+
   // --- P4: vx-kind-legend ---
   kindLegendNotable: { es: "luz grande = destacado", en: "big light = notable" },
   kindLegendNeighbors: { es: "vecinos (coseno real)", en: "neighbors (real cosine)" },

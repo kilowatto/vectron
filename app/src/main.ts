@@ -23,9 +23,12 @@ import type { VxKindLegend } from "./ui/components/kindLegend";
 import "./ui/components/kindLegend";
 import type { VxColorKey, DomainIsolateDetail } from "./ui/components/colorKey";
 import "./ui/components/colorKey";
+import type { VxBootSplash } from "./ui/components/bootSplash";
+import "./ui/components/bootSplash";
 import { getStoredLang, setStoredLang, t } from "./i18n";
 import { fadeIn, fadeOut, tweenNumber } from "./ui/motion";
-import { tokenizeSimple } from "./tokenizer";
+import { tokenizeSimple, tokenizeBPE } from "./tokenizer";
+import { tokenizeBGE } from "./bgeTokenizer";
 import { fetchCosinePairs, type PartOfSpeech } from "./data/concepts";
 import { setupTokenMode } from "./scene/tokenMode";
 
@@ -62,6 +65,12 @@ function pickMode(): Promise<Mode> {
 async function main() {
   let lang = getStoredLang();
   let appReady = false;
+  // Declaradas arriba (no en su punto de uso original) porque el loop de
+  // render arranca DURANTE el boot splash ahora — spinField necesita
+  // leer estas dos ya en los primeros frames, mucho antes de que
+  // card/tokenMode existan de verdad más abajo.
+  let card: VxConceptCard | null = null;
+  let liveTokenCount = 0;
 
   // El switcher de idioma vive en dos sitios: dentro del shadow DOM de
   // <vx-mode-select> (antes de elegir modo — ahí no hay nada más
@@ -83,18 +92,24 @@ async function main() {
     void applyMode(currentMode);
   });
 
-  const initialMode = getStoredMode() ?? (await pickMode());
+  // P5 — splash con progreso ponderado (ver DOCs/03 §6): el costo real
+  // de dataset+GPU+tokenizers se paga UNA vez, al frente, antes incluso
+  // de mostrar mode-select — así nadie ve "cargando…" plano ni el
+  // "funciona-después-de-romperse" de un tokenizer que llega tarde en
+  // Avanzado. Pesos: Shell 5 · Dataset 35 · GPU 25 · Tokenizers 20 ·
+  // Warm 10 · Ready 5 = 100.
+  const splash = document.createElement("vx-boot-splash") as VxBootSplash;
+  document.body.appendChild(splash);
 
-  const switcher = document.createElement("vx-mode-switcher");
-  document.body.appendChild(switcher);
-  const langSwitcher = document.createElement("vx-lang-switcher");
-  langSwitcher.setAttribute("current", lang);
-  document.body.appendChild(langSwitcher);
+  splash.setProgress(5, t("bootShell", lang));
 
-  countLabel.textContent = t("hudLoading", lang);
+  splash.setProgress(5, t("bootDataset", lang));
   const concepts = await fetchConcepts();
+  splash.setProgress(40, t("bootDataset", lang));
 
+  splash.setProgress(40, t("bootGpu", lang));
   const engine = await createEngine(canvas);
+  splash.setProgress(65, t("bootGpu", lang));
 
   const CUBE_EDGE_OPACITY = 0.12;
   const cubeEdgeMaterial = new THREE.LineBasicMaterial({
@@ -119,6 +134,56 @@ async function main() {
     },
   });
   engine.scene.add(field.group);
+  field.revealProgressively(0); // arranca vacío — se puebla durante el resto del boot
+
+  // El render arranca AQUÍ, no al final: así el cubo ya gira y se va
+  // poblando de partículas detrás del splash mientras cargan
+  // tokenizadores (idea pedida por el usuario). `card` y `liveTokenCount`
+  // todavía no tienen su valor final — se declaran arriba y esta closure
+  // los lee por referencia, ya resueltos cuando el usuario llegue a
+  // interactuar (mucho después de que termine el splash).
+  engine.start(
+    (dt) => {
+      if (!card?.isPinned() && liveTokenCount === 0) spinField(field, dt);
+    },
+    (fps) => {
+      fpsLabel.textContent = `${fps} fps`;
+    },
+  );
+
+  // Prefetch de los DOS tokenizadores reales (BPE ~1.7MB, vocab BGE
+  // ~300KB) — memoizados en sus propios módulos, así que esta llamada
+  // "gratis" con texto vacío es lo que hace que Avanzado nunca tenga
+  // que esperar un fetch tardío la primera vez que alguien escribe ahí.
+  // Corre en paralelo con la animación de poblado (no depende de ella):
+  // ambas deben terminar antes de dar por listo el arranque.
+  splash.setProgress(65, t("bootTokenizers", lang));
+  const revealDone = new Promise<void>((resolve) => {
+    const start = performance.now();
+    const durationMs = 2200;
+    function step() {
+      const elapsed = Math.min((performance.now() - start) / durationMs, 1);
+      field.revealProgressively(elapsed);
+      splash.setProgress(65 + elapsed * 35, t(elapsed < 0.6 ? "bootTokenizers" : "bootWarm", lang));
+      if (elapsed < 1) requestAnimationFrame(step);
+      else resolve();
+    }
+    requestAnimationFrame(step);
+  });
+  await Promise.all([tokenizeBPE(" "), tokenizeBGE(" "), revealDone]);
+
+  splash.setProgress(100, t("bootReady", lang));
+  await splash.finish(); // fade out ANTES de mode-select — nunca se superponen
+
+  const initialMode = getStoredMode() ?? (await pickMode());
+
+  const switcher = document.createElement("vx-mode-switcher");
+  document.body.appendChild(switcher);
+  const langSwitcher = document.createElement("vx-lang-switcher");
+  langSwitcher.setAttribute("current", lang);
+  document.body.appendChild(langSwitcher);
+
+  countLabel.textContent = t("hudLoading", lang);
 
   // P4 — chrome discreto: rail de zoom + leyenda de tipos + llave de
   // colores (ver DOCs/05-hud-legends-zoom-colors.md). Se crean UNA vez
@@ -159,7 +224,7 @@ async function main() {
     );
   }
 
-  const card = document.createElement("vx-concept-card") as VxConceptCard;
+  card = document.createElement("vx-concept-card") as VxConceptCard;
   stageEl.appendChild(card);
 
   // Vuelo suave de cámara hacia la partícula fijada (y de regreso al
@@ -203,7 +268,6 @@ async function main() {
 
   // HUD: base por modo + sufijo de tokens vivos (modo token, Avanzado).
   let baseCountText = "";
-  let liveTokenCount = 0;
   function renderCountLabel() {
     countLabel.textContent =
       liveTokenCount > 0 ? `${baseCountText} + ${liveTokenCount} tokens` : baseCountText;
@@ -373,7 +437,7 @@ async function main() {
     switcher.setAttribute("current", mode);
     backendTag.textContent = engine.usingWebGPU ? t("hudWebgpu", lang) : t("hudWebgl", lang);
 
-    card.configure({ simple: mode === "principiante", lang });
+    card!.configure({ simple: mode === "principiante", lang }); // runApplyMode sólo corre tras asignar card, arriba
     interaction.setDefaultTopK(mode === "principiante" ? 5 : 6);
     interaction.reset(); // suelta el pin ANTES del morph — mismo orden que "cancela al empezar" (06 §6)
     tokenMode.setEnabled(mode === "avanzado");
@@ -382,7 +446,10 @@ async function main() {
     field.setSearchHighlights([]); // suelta cualquier dominio aislado del modo anterior
     // P2: mitosis (nacen las que entran) / fusión (las que salen se
     // comen hacia una vecina) en vez del corte instantáneo de antes —
-    // ver DOCs/06-mode-morph-cells.md. Nunca tarda más de ~1.15s.
+    // ver DOCs/06-mode-morph-cells.md. Duración dinámica según cuántas
+    // partículas hay que animar (1-10s) — ajustado con feedback directo
+    // del usuario: el tope fijo de 1s original hacía que las
+    // transiciones grandes terminaran de golpe en vez de en ola pareja.
     const reducedMotion =
       typeof matchMedia !== "undefined" &&
       matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -426,18 +493,6 @@ async function main() {
 
   await applyMode(initialMode);
   appReady = true;
-
-  engine.start(
-    (dt) => {
-      // La rotación automática se pausa mientras algo está fijado o hay
-      // tokens vivos de tu frase — sin esto, atinarle con el cursor a
-      // una partícula específica es una cacería (se mueve ~4px/s).
-      if (!card.isPinned() && liveTokenCount === 0) spinField(field, dt);
-    },
-    (fps) => {
-      fpsLabel.textContent = `${fps} fps`;
-    },
-  );
 }
 
 main().catch((err) => {

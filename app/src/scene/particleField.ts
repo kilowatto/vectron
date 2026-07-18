@@ -92,13 +92,24 @@ export interface ParticleField {
    * InstancedMesh, que sigue teniendo TODOS los conceptos siempre.
    * Devuelve cuántas quedaron visibles (para el HUD). */
   setPartOfSpeechFilter: (allowed: Set<PartOfSpeech>) => number;
+  /** P5 boot splash: revela una fracción (0-1) de las partículas en un
+   * orden fijo (mismo shuffle re-usado en cada llamada), el resto a
+   * escala 0 — así el cubo se puebla poco a poco mientras carga en vez
+   * de aparecer todo de golpe al terminar. Cualquier filtro real
+   * posterior (setPartOfSpeechFilter/morphToPartOfSpeechFilter) lo
+   * sobreescribe sin conflicto, es puramente cosmético de arranque. */
+  revealProgressively: (fraction: number) => void;
   /** P2: la versión "viva" del filtro anterior — en vez de un corte
    * instantáneo, las partículas que entran nacen por mitosis desde la
    * más cercana (mismo dominio primero) que ya se veía, y las que salen
-   * se comen hacia su vecina más cercana antes de desaparecer. Nunca
-   * más de 1000ms de punta a punta (ver DOCs/06-mode-morph-cells.md).
-   * La primera llamada (sin filtro previo) es instantánea — no hay
-   * nada de qué nacer/morir todavía. */
+   * se comen hacia su vecina más cercana antes de desaparecer. Duración
+   * dinámica según cuántas partículas hay que animar — 1 a 10 segundos,
+   * nunca más (ajustado 2026-07-19 con feedback directo viéndolo en
+   * producción: el tope fijo de 1000ms original hacía que transiciones
+   * grandes como Principiante->Avanzado terminaran de golpe en vez de
+   * una ola pareja; ver DOCs/06-mode-morph-cells.md). La primera
+   * llamada (sin filtro previo) es instantánea — no hay nada de qué
+   * nacer/morir todavía. */
   morphToPartOfSpeechFilter: (
     allowed: Set<PartOfSpeech>,
     opts?: { reducedMotion?: boolean },
@@ -180,6 +191,20 @@ export function createParticleField(
     return visible;
   }
 
+  let revealOrder: number[] | null = null;
+  function revealProgressively(fraction: number): void {
+    if (!revealOrder) revealOrder = shuffled(concepts.map((_, i) => i));
+    const showCount = Math.round(count * Math.min(Math.max(fraction, 0), 1));
+    const shown = new Set(revealOrder.slice(0, showCount));
+    concepts.forEach((concept, i) => {
+      dummy.position.set(concept.coords[0], concept.coords[1], concept.coords[2]);
+      dummy.scale.setScalar(shown.has(i) ? baseScaleOf(concept) : 0);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+  }
+
   // P2 — mode morph (mitosis/fusión). `currentAllowed` es null hasta la
   // primera llamada real: sin un filtro previo no hay "padres" ni
   // "presas" que animar, así que ese primer corte es instantáneo.
@@ -225,18 +250,37 @@ export function createParticleField(
     id: number;
     kind: "mitosis" | "fusion";
     anchor: number; // padre (mitosis) o depredador (fusión)
-    start: number; // ms dentro del presupuesto de 1000ms
+    start: number; // ms dentro del presupuesto dinámico (ver dynamicBudget)
     duration: number;
   }
 
+  // Cuántas morphs pueden estar "en vuelo" a la vez — compartido entre
+  // el cálculo del presupuesto dinámico y el scheduler de abajo.
+  const CONCURRENCY_CAP = 32;
+
+  // Presupuesto DINÁMICO (feedback directo del usuario viendo la morph
+  // en producción, 2026-07-19: "al final aparecen muchas de golpe" —
+  // el tope fijo de 1000ms original, con cientos de partículas entrando
+  // de golpe (Principiante->Avanzado con el léxico P3 ya son ~700+),
+  // no le daba tiempo al tope de concurrencia de terminarlas a todas
+  // antes del hard-deadline, así que el remanente se snapeaba de un
+  // jalón). Se escala con cuántas partículas hay que animar — pocas
+  // siguen sintiéndose rápidas, muchas se estiran, nunca más de 10s.
+  function dynamicBudget(itemCount: number): number {
+    const AVG_DURATION = 350;
+    const raw = (itemCount * AVG_DURATION) / CONCURRENCY_CAP;
+    return Math.min(10000, Math.max(1000, raw));
+  }
+
   // Gaps aleatorios entre inicios (no un metrónomo fijo) y, si la
-  // cadena cruda se saldría de 1000ms, se comprime proporcionalmente
-  // — la aleatoriedad relativa entre gaps se conserva, sólo la escala
-  // se achica (ver DOCs/06-mode-morph-cells.md §4).
+  // cadena cruda se saldría del presupuesto, se comprime proporcional-
+  // mente — la aleatoriedad relativa entre gaps se conserva, sólo la
+  // escala se achica (ver DOCs/06-mode-morph-cells.md §4).
   function buildSchedule(
     ids: number[],
     kind: "mitosis" | "fusion",
     anchors: Map<number, number>,
+    budget: number,
   ): MorphItem[] {
     const order = shuffled(ids.filter((id) => anchors.has(id)));
     const items: MorphItem[] = [];
@@ -255,10 +299,9 @@ export function createParticleField(
     const last = items[items.length - 1];
     if (last) {
       const lastEnd = last.start + last.duration;
-      const BUDGET = 1000;
-      if (lastEnd > BUDGET) {
+      if (lastEnd > budget) {
         const avgDur = items.reduce((s, it) => s + it.duration, 0) / items.length;
-        const scale = Math.max(0, BUDGET - avgDur) / Math.max(last.start, 1);
+        const scale = Math.max(0, budget - avgDur) / Math.max(last.start, 1);
         for (const it of items) it.start *= scale;
       }
     }
@@ -320,9 +363,10 @@ export function createParticleField(
       mesh.setMatrixAt(id, dummy.matrix);
     }
 
+    const budget = dynamicBudget(entering.length + leaving.length);
     const allItems = [
-      ...buildSchedule(entering, "mitosis", parentOf),
-      ...buildSchedule(leaving, "fusion", predatorOf),
+      ...buildSchedule(entering, "mitosis", parentOf, budget),
+      ...buildSchedule(leaving, "fusion", predatorOf, budget),
     ];
     mesh.instanceMatrix.needsUpdate = true;
     if (allItems.length === 0) return { visibleCount };
@@ -332,11 +376,33 @@ export function createParticleField(
       const started = new Array<boolean>(allItems.length).fill(false);
       const startTimes = new Array<number>(allItems.length);
       const t0 = performance.now();
-      const CONCURRENCY_CAP = 32;
-      // Margen de gracia corto sobre el presupuesto de 1000ms — si por
-      // el tope de concurrencia algo se quedó sin arrancar o a medias,
-      // salta a su pose final en vez de alargar la espera de verdad.
-      const HARD_DEADLINE = 1150;
+      // Margen de gracia corto sobre el presupuesto — si por el tope de
+      // concurrencia algo se quedó sin arrancar o a medias, salta a su
+      // pose final en vez de alargar la espera de verdad.
+      const HARD_DEADLINE = budget + 150;
+
+      // Red de seguridad real (bug encontrado en producción 2026-07-19):
+      // este bucle depende de requestAnimationFrame, que Chrome PAUSA
+      // por completo en una pestaña en segundo plano/sin foco — a
+      // diferencia de setTimeout, que sigue disparando (aunque
+      // limitado). Sin esto, cambiar de pestaña a media transición
+      // dejaba el modo colgado para siempre (HARD_DEADLINE nunca se
+      // evaluaba porque tick() nunca volvía a correr) — mismo tipo de
+      // bug que ya se arregló una vez para fadeOut() en motion.ts, aquí
+      // no existía ninguna protección. resolveOnce() es idempotente:
+      // lo que llegue primero (rAF o el timer) gana, lo demás es no-op.
+      let settled = false;
+      function resolveOnce() {
+        if (settled) return;
+        settled = true;
+        clearTimeout(safetyTimer);
+        resolve({ visibleCount });
+      }
+      const safetyTimer = setTimeout(() => {
+        for (const item of allItems) finalize(item);
+        mesh.instanceMatrix.needsUpdate = true;
+        resolveOnce();
+      }, HARD_DEADLINE + 2000);
 
       function finalize(item: MorphItem) {
         const c = concepts[item.id];
@@ -348,7 +414,7 @@ export function createParticleField(
 
       function tick() {
         if (seq !== morphSeq) {
-          resolve({ visibleCount }); // otro morph más nuevo lo reemplazó
+          resolveOnce(); // otro morph más nuevo lo reemplazó
           return;
         }
         const elapsed = performance.now() - t0;
@@ -356,7 +422,7 @@ export function createParticleField(
         if (elapsed >= HARD_DEADLINE) {
           for (const item of allItems) finalize(item);
           mesh.instanceMatrix.needsUpdate = true;
-          resolve({ visibleCount });
+          resolveOnce();
           return;
         }
 
@@ -408,7 +474,7 @@ export function createParticleField(
         if (pending) {
           requestAnimationFrame(tick);
         } else {
-          resolve({ visibleCount });
+          resolveOnce();
         }
       }
       requestAnimationFrame(tick);
@@ -589,6 +655,7 @@ export function createParticleField(
     setTokenFocus,
     getFocusedIds,
     setPartOfSpeechFilter,
+    revealProgressively,
     morphToPartOfSpeechFilter,
     setSimilarityLines,
     setChainLines,

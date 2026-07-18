@@ -1,0 +1,43 @@
+:host {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* Arriba, no centrado — el cubo se va poblando de partículas detrás
+     mientras carga (idea del usuario), la marca+porcentaje no deben
+     tapar esa vista. */
+  justify-content: flex-start;
+  padding-top: max(64px, calc(env(safe-area-inset-top) + 40px));
+  gap: 10px;
+  /* El chiste completo es ver el cubo encenderse detrás — el velo sólo
+     respalda el texto en una franja angosta arriba, el resto de la
+     pantalla queda 100% transparente, sin tapar nada del poblado. */
+  background: linear-gradient(to bottom, rgba(5, 7, 10, 0.55) 0%, rgba(5, 7, 10, 0) 22%);
+  pointer-events: none;
+}
+
+.brand {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: var(--accent);
+}
+
+.pct {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
+.phase {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--dim);
+}
