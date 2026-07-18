@@ -2256,4 +2256,55 @@ export const SEED_CONCEPTS: SeedConcept[] = [
 
   // --- Biología animal: el cuy, sugerido por el usuario ---
   animal("cuy", "guinea pig", ["mamifero", "roedor"], { legs: 4, hasWings: false, vertebrado: true, dieta: "herbivoro" }),
+
+  // --- Hogar: ampliación — más habitaciones ---
+  ...[
+    "baño (habitación),bathroom", "regadera,shower", "inodoro,toilet",
+    "lavabo,bathroom sink", "tina,bathtub", "jardín,garden", "patio,patio",
+    "garaje,garage", "oficina (habitación),home office", "escritorio,desk",
+    "librero,bookshelf", "balcón,balcony", "terraza,terrace", "sótano,basement",
+    "ático,attic", "pasillo,hallway", "escalera,staircase", "puerta,door",
+    "ventana,window", "techo,ceiling", "piso (superficie),floor (surface)", "pared,wall",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "hogar", taxonomy: ["hogar", "estructura"], traits: { tipo: "estructura" } };
+  }),
+
+  // --- Transporte (dominio nuevo) ---
+  ...[
+    "automóvil,car", "camión,truck", "autobús,bus", "tren,train", "avión,airplane",
+    "barco,ship", "motocicleta,motorcycle", "metro (transporte),subway", "taxi,taxi",
+    "helicóptero,helicopter", "camioneta,pickup truck", "patín,rollerskate",
+    "carretera,highway", "autopista,freeway", "semáforo,traffic light",
+    "aeropuerto,airport", "estación de tren,train station", "puerto (transporte),port",
+    "gasolina,gasoline", "neumático,tire", "motor,engine", "volante,steering wheel",
+    "freno,brake", "asiento,seat", "cinturón de seguridad,seatbelt",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "transporte", taxonomy: ["transporte", "concepto"], traits: { tipo: "transporte" } };
+  }),
+
+  // --- Ropa (dominio nuevo) ---
+  ...[
+    "camisa,shirt", "pantalón,pants", "vestido,dress", "falda,skirt",
+    "chaqueta,jacket", "abrigo,coat", "suéter,sweater", "sombrero,hat", "gorra,cap",
+    "bufanda,scarf", "guantes,gloves", "calcetines,socks",
+    "cinturón (ropa),belt (clothing)", "corbata,tie", "traje,suit", "pijama,pajamas",
+    "bata,robe", "short,shorts", "bikini,bikini", "uniforme,uniform",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "ropa", taxonomy: ["ropa", "concepto"], traits: { tipo: "ropa" } };
+  }),
+
+  // --- Clima (dominio nuevo) ---
+  ...[
+    "lluvia,rain", "nieve,snow", "viento,wind", "tormenta,storm", "huracán,hurricane",
+    "tornado,tornado", "niebla,fog", "granizo,hail", "arcoíris,rainbow",
+    "relámpago,lightning", "trueno,thunder", "sequía,drought", "inundación,flood",
+    "clima,weather", "temperatura ambiente,ambient temperature", "humedad,humidity",
+    "nube,cloud", "helada,frost", "ola de calor,heat wave",
+  ].map((pair) => {
+    const [es, en] = pair.split(",");
+    return { wordEs: es, wordEn: en, domain: "clima", taxonomy: ["clima", "concepto"], traits: { tipo: "clima" } };
+  }),
 ];

@@ -110,6 +110,9 @@ const STRINGS = {
   domainPersonajes: { es: "Personajes", en: "Notable People" },
   domainEmociones: { es: "Emociones", en: "Emotions" },
   domainHogar: { es: "Hogar", en: "Home" },
+  domainTransporte: { es: "Transporte", en: "Transportation" },
+  domainRopa: { es: "Ropa", en: "Clothing" },
+  domainClima: { es: "Clima", en: "Weather" },
 
   // --- HUD ---
   hudLoading: { es: "cargando…", en: "loading…" },
