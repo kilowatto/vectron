@@ -17,7 +17,11 @@
 | [06-mode-morph-cells.md](./06-mode-morph-cells.md) | Mode switch: cell division / fusion (no pop-in/out) | Cambio de modo: mitosis / fusión |
 | [07-concept-growth-plan.md](./07-concept-growth-plan.md) | Entity wave: presidents, banks, cars, weather, spatial, polysemy (planning only) | Ola de entidades: presidentes, bancos, coches, clima… (solo plan) |
 | [08-lexicon-verbs-adjectives-infra.md](./08-lexicon-verbs-adjectives-infra.md) | **4k verbs + 4k adjectives**, tenses, CF Vectorize/KV/AI | **4k verbos + 4k adjetivos**, tiempos, stack CF |
-| [09-funcion-pack.md](./09-funcion-pack.md) | `funcion` word pack (P0 seed list) — articles, prepositions, conjunctions, pronouns, copulas — closed & ready | Pack de palabras `funcion` (lista de siembra P0) — cerrado y listo |
+| [09-funcion-pack.md](./09-funcion-pack.md) | P0 `funcion` pack — articles, copulas… (closed, ready to seed) | Pack P0 `funcion` — artículos, cópulas… (cerrado, listo) |
+| [10-intermedio-licenciatura.md](./10-intermedio-licenciatura.md) | **Intermedio** undergrad AI curriculum + Transformer graphics boundary — pedagogy still valid, container superseded by `13` | **Intermedio** currículo licenciatura + límite gráficas Transformer — pedagogía vigente, contenedor reemplazado por `13` |
+| [11-screen-specs.md](./11-screen-specs.md) | **Screen specs** (code-aware) — legends/chrome still valid; Intermedio dock content superseded by `13` | **Pantallas** (según código) — leyendas/chrome vigentes; contenido del dock de Intermedio reemplazado por `13` |
+| [12-context-window-lab.md](./12-context-window-lab.md) | **Context window lab** — 500-token demo, ChatGPT Thinking/Claude scale, working-memory metaphor; placement superseded by `13` | **Lab ventana de contexto** — demo 500 tokens, escala ChatGPT Thinking/Claude, memoria de trabajo; ubicación reemplazada por `13` |
+| [13-intermedio-3d-journey-implementation.md](./13-intermedio-3d-journey-implementation.md) | **Canonical Intermedio implementation blueprint** — Cube, Transformer, Context Chamber, compaction, RAG | **Plan canónico de implementación Intermedio** — Cubo, Transformer, Cámara, compactación y RAG |
 | [archive/](./archive/) | Snapshots of what was already built / old plans | Instantáneas de lo construido / planes viejos |
 
 ## Quick start for agents / Inicio rápido para agentes

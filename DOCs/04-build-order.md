@@ -2,7 +2,7 @@
 
 **Status:** Living · rethought 2026-07-18  
 **Supersedes:** earlier “ASAP then everything” sketch in this file  
-**Sources of truth:** [`02-master-plan.md`](./02-master-plan.md) · [`03`](./03-gui-responsive-avanzado-loading.md) · [`05`](./05-hud-legends-zoom-colors.md) · [`06`](./06-mode-morph-cells.md) · locked POS matrix · collaboration rules  
+**Sources of truth:** [`02-master-plan.md`](./02-master-plan.md) · [`03`](./03-gui-responsive-avanzado-loading.md) · [`05`](./05-hud-legends-zoom-colors.md) · [`06`](./06-mode-morph-cells.md) · [`13`](./13-intermedio-3d-journey-implementation.md) (Intermedio, canonical) · locked POS matrix · collaboration rules  
 
 ---
 
@@ -36,7 +36,7 @@ P3    densify ≥4k verbs + ≥4k adjs (lemmas; forms in D1/KV) ← needs P2 · 
 P4    zoom rail + kind legend + color key
 P5    boot splash + weighted loader + cache
 P6    three shells (P / I / A layouts)
-P6.5  Intermedio licenciatura curriculum + chrome-legend consolidation ← see `10`/`11`/`12`, moved AHEAD of P7 (2026-07-18 decision)
+P6.5  Intermedio 3D journey (Cube · Transformer · RAG) ← canonical blueprint `13` (supersedes the flat-dock version of `10`/`11`/`12`, see archive), moved AHEAD of P7 (2026-07-18 decision)
 P7    Math Arena slices (Cosine→PCA→Softmax→Attention)
 P8    RAG lite (WebLLM)
 P9    grow toward 15k (coverage stays green)
@@ -63,7 +63,7 @@ Parallelism allowed:
 | **P4** | Readable chrome | Zoom rail; kind glyphs; domain color peek — discrete, 3-mode copy | `05` |
 | **P5** | Calm cold start | Splash + progress; tokenizers prefetched; IDB/ETag cache | `03` §6 |
 | **P6** | Three apps | Distinct shells under Principiante / Intermedio / Avanzado names | `02`/`03` |
-| **P6.5** | Intermedio licenciatura | Chrome-legend merge (no more floating-over-dock bug) + Modules A-G (tokens→coseno→next-token→arcs→context lab→RAG stub→failure modes) | `10`/`11`/`12` |
+| **P6.5** | Intermedio 3D journey | Chrome-legend merge (DONE) + component groundwork (DONE) + `Cube·Transformer·RAG` surfaces with a 3D Context Chamber (NOW, per `13`'s own Phase 0-6) | `10`/`11`/`12`/`13` |
 | **P7** | Math Arena | Permanent lab; Cosine first → … → Attention; mobile Cubo\|Matemáticas | `03` |
 | **P8** | RAG | Question → neighbors → local answer | `02` |
 | **P9** | Scale | Toward 15k; every new hero phrase passes coverage | — |
@@ -165,50 +165,66 @@ Principiante wonder / Intermedio pipeline dock / Avanzado cube|math frame (math 
 
 ---
 
-### P6.5 — Intermedio licenciatura curriculum (moved ahead of P7)
+### P6.5 — Intermedio 3D journey (moved ahead of P7)
 
 Decisión 2026-07-18: este trabajo pasa a ser prioridad sobre Math
-Arena — el currículo de Intermedio no depende de P7, puede ir primero
-sin bloquear nada. Ver [`10-intermedio-licenciatura.md`](./10-intermedio-licenciatura.md) (currículo),
-[`11-screen-specs.md`](./11-screen-specs.md) (auditoría de pantallas/chrome) y
-[`12-context-window-lab.md`](./12-context-window-lab.md) (evolución del Módulo E).
+Arena — Intermedio no depende de P7, puede ir primero sin bloquear
+nada. **Blueprint canónico:** [`13-intermedio-3d-journey-implementation.md`](./13-intermedio-3d-journey-implementation.md)
+— reemplaza la arquitectura de dock plano descrita en
+[`10-intermedio-licenciatura.md`](./10-intermedio-licenciatura.md)/[`11-screen-specs.md`](./11-screen-specs.md)/[`12-context-window-lab.md`](./12-context-window-lab.md)
+(esa versión quedó archivada en
+[`archive/2026-07-18-intermedio-flat-dock-modules-prototype.md`](./archive/2026-07-18-intermedio-flat-dock-modules-prototype.md)).
+El contenido pedagógico de `10` (qué enseña cada módulo, qué es
+real/ilustrativo) sigue vigente — lo que cambió es el CONTENEDOR: ya
+no es un dock plano sobre un Cubo único, son **tres superficies
+hermanas** `Cubo · Transformer · RAG`, con la Cámara de Contexto 3D
+como capítulo *Contexto* dentro de Transformer (nunca una 4ª app).
 
-**Fase 1 — chrome/leyendas (DONE):**
+**Ya construido (chrome/leyendas + componentes base) — sigue siendo
+la base, NO se reescribe, se promueve/reubica según `13`:**
 - `vx-chrome-legend` fusiona `vx-color-key` + `vx-kind-legend` (un solo
-  pill colapsable, dominios+tipos en el mismo sheet).
-- Montaje contextual por shell: Intermedio ≥1024px al PIE del dock
-  (`#side-pane`, flujo normal); cualquier otro shell flota sobre
-  `#cube-pane` únicamente (nunca sobre Math Arena ni el dock).
-- Móvil ≤640px ya no oculta la leyenda (`display:none`) — pill
-  colapsado, mismo criterio que desktop.
+  pill colapsable) — sin cambios, ortogonal a la arquitectura de
+  superficies.
 - `vx-zoom-rail` y `vx-concept-card` montados dentro de `#cube-pane`
-  (`position:absolute`, no fixed al viewport) — el card fijado ya no
-  puede terminar sobre el dock/Math Arena en ningún shell.
-- z-index alineado al ledger de `11` §4.
+  (`position:absolute`) — sin cambios.
+- `vx-next-token-bars`, `vx-attention-arcs`, `vx-context-lab` (antes
+  `vx-context-meter`), `vx-rag-stub` — existen y funcionan como
+  tarjetas de dock; `13` los PROMUEVE a vistas de escenario completo
+  dentro de Transformer/RAG, no los reescribe desde cero.
+- Dos pares de polisemia reales en el dataset (`banco`, `hoja`) —
+  siguen siendo el contenido del capítulo de fallos.
 
-**Fase 2 — currículo A-G (DONE, primera pasada):**
-- A (tokens) y B (coseno) — ya existían (composer/strip + tarjeta con
-  vecinos reales); no necesitaron componente nuevo.
-- C `vx-next-token-bars` — softmax real sobre logits de vocabulario de
-  demostración fijo (declarado); slider de temperatura funcional.
-- D `vx-attention-arcs` — tira 2D (canvas) de tokens reales con arcos
-  de peso ilustrativo determinista (declarado, no heatmap PhD — eso
-  sigue siendo exclusivo de Avanzado/Math Arena).
-- E `vx-context-lab` (evoluciona el `vx-context-meter` inicial per
-  `12`) — ventana de laboratorio de 500 tokens ARTIFICIAL con cinta
-  que se apaga al desbordar, botón de demo, comparador log contra
-  GPT-5 (~400k) / Claude Sonnet 5 (1M) reales; bge-m3 (8 192, real)
-  sólo como nota al pie.
-- F `vx-rag-stub` — recuperación 100% real (embedTexts + Vectorize),
-  respuesta declarada como plantilla (sin generador conectado, P8).
-- G — dos pares de polisemia reales agregados al dataset (`banco`,
-  `hoja`) + nota explicativa; pendiente del reseed combinado para
-  tener embeddings/coords propios.
+**Correcciones de verdad pendientes (Fase 0 de `13`, 1-2 días):**
+- `vx-context-lab` apaga tokens por posición/conteo cuando se
+  desborda — el FIFO correcto debe expulsar **turnos** completos más
+  antiguos, no tokens sueltos por índice. Bug real señalado por `13`.
+- La comparación de escala usaba GPT-5 API (~400k) como fila
+  principal — `13` corrige: **ChatGPT Thinking = 256k** (128k entrada
+  + 128k salida máxima, notas de OpenAI) es el número correcto de
+  producto; GPT-5 API queda como nota al pie, no protagonista.
+- Falta el modelo de estado por turno/rol (`ContextTurn`/`ContextState`/
+  `ContextController`, ver `13` §5) — hoy `contextLab.ts` sólo guarda
+  un arreglo plano de tokens.
 
-**Pendiente:** verificación mobile real (el entorno de pruebas
-disponible no pudo forzar un viewport angosto de verdad); pulir copy
-ES/EN de los módulos nuevos con más uso; Módulo F con generador real
-cuando WebLLM (P8) esté listo.
+**Fases 1-6 (arquitectura de superficies + Cámara 3D + Distilador +
+journey Transformer/RAG + pulido) — ver `13` §19 para el detalle
+completo de cada fase, no duplicado aquí:**
+
+| Fase (`13`) | Foco | Estimado |
+|-------------|------|----------|
+| 0 | Correcciones de verdad (FIFO, cifras, etiquetas, modelo de turnos) | 1-2 días |
+| 1 | Arquitectura de información: nav `Cubo·Transformer·RAG`, dock contextual, superficies móviles pares | 3-5 días |
+| 2 | Cámara de Contexto 3D (MVP): vasija, nivel, gotas instanciadas, reject/FIFO | 4-7 días |
+| 3 | Destilador de contexto: selección de turnos, cápsula-resumen, lección MANGO-47 | 4-6 días |
+| 4 | Journey Transformer: rail, atención/bloques/predicción a tamaño de escenario | 5-8 días |
+| 5 | Journey RAG: documentos preparados → Vectorize real → respuesta generada opcional | 5-10 días |
+| 6 | Pulido visual + calidad adaptativa | 5-10 días |
+
+Primera versión robusta estimada: 4-7 semanas enfocadas (según si se
+incluye RAG/generación real).
+
+**Pendiente además:** verificación mobile real (el entorno de pruebas
+disponible no pudo forzar un viewport angosto de verdad).
 
 ---
 
@@ -277,7 +293,7 @@ Ya no basta “poner palabras”. El orden tiene que respetar: matriz POS, frase
 | **P4** | Chrome legible | Zoom + tipos + colores |
 | **P5** | Boot calmado | Splash + cache |
 | **P6** | Tres apps | Layouts distintos P/I/A |
-| **P6.5** | Licenciatura Intermedio | Leyendas fusionadas + módulos A-G (`10`/`11`/`12`), antes de P7 |
+| **P6.5** | Journey 3D Intermedio | Leyendas fusionadas + componentes base (DONE) → superficies `Cubo·Transformer·RAG` + Cámara 3D (blueprint canónico `13`), antes de P7 |
 | **P7** | Math Arena | Coseno→…→Attention |
 | **P8** | RAG | Pregunta→vecinos→respuesta |
 | **P9** | 15k | Con cobertura verde |

@@ -5,7 +5,8 @@
 **Archives / Archivos:**  
 - [`archive/2026-07-17-vectron-plan-original.html`](./archive/2026-07-17-vectron-plan-original.html)  
 - [`archive/2026-07-18-three-apps-plan-pre-merge.md`](./archive/2026-07-18-three-apps-plan-pre-merge.md)  
-- [`archive/2026-07-18-monolithic-modes-prototype.md`](./archive/2026-07-18-monolithic-modes-prototype.md)
+- [`archive/2026-07-18-monolithic-modes-prototype.md`](./archive/2026-07-18-monolithic-modes-prototype.md)  
+- [`archive/2026-07-18-intermedio-flat-dock-modules-prototype.md`](./archive/2026-07-18-intermedio-flat-dock-modules-prototype.md)
 
 **Merge decisions (2026-07-18 quiz + user clarification):**
 
@@ -82,8 +83,11 @@ Vectron is a public 3D meaning-map: real embeddings become particles in a cube; 
 **Principiante — Wonder map**  
 Guided aha ≤90s. Plain-language neighbors. Example phrases. No IDs. Particles as a sky of ideas.
 
-**Intermedio — Mechanism lab**  
-Visible tokenization (real IDs), cosine neighbors, pipeline legend, then RAG chapter when ready.
+**Intermedio — Mechanism lab (Licenciatura en IA)**  
+**Closed 2026-07-18 (supersedes the flat-dock version — see [`archive/2026-07-18-intermedio-flat-dock-modules-prototype.md`](./archive/2026-07-18-intermedio-flat-dock-modules-prototype.md)):** one laboratory, **three peer surfaces** — `Cube` (tokens → embeddings → cosine neighbors), `Transformer` (Input → **Context** → Attention → Blocks → Prediction, looping), `RAG` (external archive → chunks → retrieve → Context → Transformer). The 3D **Context Chamber** is **not** a fourth app — it is the *Context* chapter inside Transformer, and is never presented as the same data space as the meaning cube. One composer + one conversation state feed all three surfaces. Correct undergrad vocabulary; every illustrative computation stays labeled; context = working memory for *this* conversation, never permanent model memory.  
+**Not** PhD Attention heatmaps / KaTeX \(QK^\top/\sqrt{d_k}\) — that is Avanzado Math Arena.  
+Canonical implementation blueprint (surfaces, chapters, 3D chamber, phases): [`13-intermedio-3d-journey-implementation.md`](./13-intermedio-3d-journey-implementation.md).  
+Curriculum content this builds on (module-level pedagogy, still valid — now distributed across the three surfaces instead of one dock): [`10-intermedio-licenciatura.md`](./10-intermedio-licenciatura.md).
 
 **Avanzado — Instrument (PhD ceiling)**  
 Live dual tokenizers (BGE WordPiece vs GPT cl100k), live Workers AI embeds, persisted PCA projection, Vectorize-by-vector, quotas, line-hover cos(θ), reproducibility.  
@@ -302,7 +306,9 @@ Decisiones cerradas: OSS educativo, bilingüe ES/EN, embeddings reales + PCA, RA
 | **Intermedio** | Universidad | Dibujar: texto → tokens → embedding → vecinos → (RAG) | Términos correctos + tooltips |
 | **Avanzado** | PhD / ML / ciencia de datos seria | Distinguir real vs PCA vs no modelado | Obligatoria; aproximaciones **declaradas** |
 
-**Avanzado** = instrumento con techo PhD (hoy token lab; **Math Arena** diseñada en [`03-gui-responsive-avanzado-loading.md`](./03-gui-responsive-avanzado-loading.md): desktop cubo+math permanentes; móvil Cubo|Matemáticas; loader ponderado). Sin botón que oculte toda la matemática.
+**Principiante** = mapa de asombro.  
+**Intermedio** = un laboratorio, **tres superficies hermanas** (cerrado 2026-07-18, reemplaza la versión de un solo dock — ver [`archive/2026-07-18-intermedio-flat-dock-modules-prototype.md`](./archive/2026-07-18-intermedio-flat-dock-modules-prototype.md)): `Cubo` (tokens→embeddings→vecinos coseno), `Transformer` (Entrada→**Contexto**→Atención→Bloques→Predicción, en bucle), `RAG` (archivo externo→chunks→recuperar→Contexto→Transformer). La **Cámara de Contexto** 3D no es una cuarta app — es el capítulo Contexto dentro de Transformer, y nunca se presenta como el mismo espacio de datos que el cubo de significado. Un composer + un estado de conversación alimentan las tres superficies. Blueprint canónico de implementación: [`13-intermedio-3d-journey-implementation.md`](./13-intermedio-3d-journey-implementation.md). Currículo pedagógico base (sigue válido, ahora repartido entre las tres superficies): [`10-intermedio-licenciatura.md`](./10-intermedio-licenciatura.md). Heatmap/KaTeX = Avanzado.  
+**Avanzado** = instrumento PhD (token lab + Math Arena en [`03`](./03-gui-responsive-avanzado-loading.md)). Sin botón que oculte toda la matemática.
 
 No revivir POS (sustantivo/adjetivo/verbo) como pedagogía de los tres niveles.
 
