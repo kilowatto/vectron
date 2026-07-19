@@ -113,6 +113,23 @@ async function main() {
   const concepts = await fetchConcepts();
   splash.setProgress(40, t("bootDataset", lang));
 
+  // Bug de UX real reportado en vivo (grabaciones de pantalla): para
+  // quien ya tiene un modo guardado de una visita anterior, el boot
+  // revelaba SIEMPRE el dataset completo y luego, apenas terminaba el
+  // splash, applyMode lo achicaba de golpe al subconjunto real del
+  // modo — un "crece mucho y luego se encoge" que Avanzado casi no
+  // sufre (su subconjunto es casi todo el dataset) pero Principiante/
+  // Intermedio sí, y se leía como que algo se rompía. Si ya hay un
+  // modo guardado, el universo de la revelación es DIRECTAMENTE el de
+  // ese modo — el boot crece derecho hacia su tamaño final.
+  const bootStoredMode = getStoredMode();
+  const bootAllowedIds = bootStoredMode
+    ? concepts.reduce<number[]>((ids, c, i) => {
+        if (MODE_POS[bootStoredMode].has(c.partOfSpeech)) ids.push(i);
+        return ids;
+      }, [])
+    : undefined;
+
   splash.setProgress(40, t("bootGpu", lang));
   const engine = await createEngine(canvas);
   splash.setProgress(65, t("bootGpu", lang));
@@ -144,7 +161,7 @@ async function main() {
     },
   });
   engine.scene.add(field.group);
-  field.revealProgressively(0); // arranca vacío — se puebla durante el resto del boot
+  field.revealProgressively(0, bootAllowedIds); // arranca vacío — se puebla durante el resto del boot
   countLabel.textContent = "0 embeddings";
 
   // El render arranca AQUÍ, no al final: así el cubo ya gira y se va
@@ -176,11 +193,12 @@ async function main() {
   const revealDone = new Promise<void>((resolve) => {
     const start = performance.now();
     const durationMs = 2200;
+    const revealTotal = bootAllowedIds?.length ?? concepts.length;
     function step() {
       const elapsed = Math.min((performance.now() - start) / durationMs, 1);
-      field.revealProgressively(elapsed);
+      field.revealProgressively(elapsed, bootAllowedIds);
       splash.setProgress(65 + elapsed * 35, t(elapsed < 0.6 ? "bootTokenizers" : "bootWarm", lang));
-      const shown = Math.round(elapsed * concepts.length);
+      const shown = Math.round(elapsed * revealTotal);
       countLabel.textContent = `${shown.toLocaleString(lang === "en" ? "en-US" : "es-MX")} embeddings`;
       if (elapsed < 1) requestAnimationFrame(step);
       else resolve();

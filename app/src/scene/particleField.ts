@@ -102,8 +102,12 @@ export interface ParticleField {
    * escala 0 — así el cubo se puebla poco a poco mientras carga en vez
    * de aparecer todo de golpe al terminar. Cualquier filtro real
    * posterior (setPartOfSpeechFilter/morphToPartOfSpeechFilter) lo
-   * sobreescribe sin conflicto, es puramente cosmético de arranque. */
-  revealProgressively: (fraction: number) => void;
+   * sobreescribe sin conflicto, es puramente cosmético de arranque.
+   * `allowedIds`, si se da, restringe el universo revelado a esos ids
+   * — para bootear directo al tamaño del modo guardado, sin el
+   * "crece y luego se encoge" de revelar todo el dataset primero (ver
+   * comentario completo junto a la implementación). */
+  revealProgressively: (fraction: number, allowedIds?: number[]) => void;
   /** P2: la versión "viva" del filtro anterior — en vez de un corte
    * instantáneo, las partículas que entran nacen por mitosis desde la
    * más cercana (mismo dominio primero) que ya se veía, y las que salen
@@ -199,9 +203,26 @@ export function createParticleField(
   }
 
   let revealOrder: number[] | null = null;
-  function revealProgressively(fraction: number): void {
-    if (!revealOrder) revealOrder = shuffled(concepts.map((_, i) => i));
-    const showCount = Math.round(count * Math.min(Math.max(fraction, 0), 1));
+  let revealPool: number[] | null = null;
+  /**
+   * Bug de UX real reportado en vivo con grabaciones de pantalla: el
+   * boot revelaba SIEMPRE el dataset completo (8 053) sin importar el
+   * modo guardado, y apenas terminaba el splash, applyMode lo achicaba
+   * de golpe al subconjunto real del modo (~2 188 en Principiante) —
+   * un "crece mucho y luego se encoge" que se sentía como que algo se
+   * rompía, aunque técnicamente nunca hubo ningún error. Avanzado casi
+   * no lo notaba porque su subconjunto ya es casi todo el dataset.
+   * `allowedIds`, si se da, restringe el universo de la revelación a
+   * exactamente lo que el modo guardado va a mostrar — el boot crece
+   * derecho hacia su tamaño final, sin sobrepasar y encogerse.
+   */
+  function revealProgressively(fraction: number, allowedIds?: number[]): void {
+    const pool = allowedIds ?? concepts.map((_, i) => i);
+    if (!revealOrder || revealPool !== allowedIds) {
+      revealPool = allowedIds ?? null;
+      revealOrder = shuffled(pool);
+    }
+    const showCount = Math.round(pool.length * Math.min(Math.max(fraction, 0), 1));
     const shown = new Set(revealOrder.slice(0, showCount));
     concepts.forEach((concept, i) => {
       dummy.position.set(concept.coords[0], concept.coords[1], concept.coords[2]);
