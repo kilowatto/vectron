@@ -40,6 +40,12 @@ interface GeneratedItem {
 }
 
 const TEXT_MODEL = "@cf/meta/llama-3.1-70b-instruct";
+// Pedido explícito del usuario (10,000+ términos): categorías con
+// count alto (100-200) desbordarían max_tokens en una sola llamada —
+// fragmenta en pedidos de máx 40, pasándole al modelo lo que ya se
+// generó EN ESTA MISMA categoría (no sólo lo que ya existe en D1) para
+// que no se repita entre fragmentos.
+const MAX_PER_CALL = 40;
 
 function extractJsonArray(text: string): unknown[] {
   const start = text.indexOf("[");
@@ -80,14 +86,29 @@ export class GenerateConceptsWorkflow extends WorkflowEntrypoint<Env, GeneratePa
     }> = [];
 
     for (const cat of event.payload.categories) {
-      const items = await step.do(
-        `generar ${cat.key}`,
-        {
-          retries: { limit: 4, delay: "5 seconds", backoff: "exponential" },
-          timeout: "3 minutes",
-        },
-        async () => {
-          const prompt = `Genera EXACTAMENTE ${cat.count} conceptos reales para esta categoría: ${cat.promptHint}
+      const catGenerated: GeneratedItem[] = [];
+      const numChunks = Math.ceil(cat.count / MAX_PER_CALL);
+
+      for (let chunk = 0; chunk < numChunks; chunk++) {
+        const askFor = Math.min(MAX_PER_CALL, cat.count - catGenerated.length);
+        if (askFor <= 0) break;
+        // Cap a 150 nombres en la exclusión — de sobra para que el
+        // modelo no repita, sin inflar el prompt sin límite en
+        // categorías de varios cientos.
+        const excludeList = catGenerated.map((i) => i.wordEs).slice(-150);
+
+        const items = await step.do(
+          `generar ${cat.key} parte ${chunk}`,
+          {
+            retries: { limit: 4, delay: "5 seconds", backoff: "exponential" },
+            timeout: "3 minutes",
+          },
+          async () => {
+            const excludeNote =
+              excludeList.length > 0
+                ? `\nNO repitas ninguna de estas, ya las generamos antes en esta misma categoría: ${excludeList.join(", ")}.`
+                : "";
+            const prompt = `Genera EXACTAMENTE ${askFor} conceptos reales para esta categoría: ${cat.promptHint}${excludeNote}
 
 Reglas estrictas:
 - Cada entrada debe ser una palabra o nombre real y verificable, NUNCA inventado.
@@ -97,22 +118,25 @@ Reglas estrictas:
 - Responde SOLO con un array JSON válido, sin texto antes ni después, sin markdown, con esta forma exacta:
 [{"wordEs":"...","wordEn":"...","distinctiveTrait":"..."}]`;
 
-          const result = (await this.env.AI.run(TEXT_MODEL, {
-            messages: [{ role: "user", content: prompt }],
-            temperature: 0.2,
-            max_tokens: 4096,
-          })) as { response: string };
+            const result = (await this.env.AI.run(TEXT_MODEL, {
+              messages: [{ role: "user", content: prompt }],
+              temperature: 0.3,
+              max_tokens: 4096,
+            })) as { response: string };
 
-          const raw = extractJsonArray(result.response);
-          const valid = raw.filter(isGeneratedItem);
-          if (valid.length === 0) {
-            throw new Error(`0 entradas válidas para ${cat.key} — respuesta: ${result.response.slice(0, 300)}`);
-          }
-          return valid;
-        },
-      );
+            const raw = extractJsonArray(result.response);
+            const valid = raw.filter(isGeneratedItem);
+            if (valid.length === 0) {
+              throw new Error(`0 entradas válidas para ${cat.key} parte ${chunk} — respuesta: ${result.response.slice(0, 300)}`);
+            }
+            return valid;
+          },
+        );
 
-      for (const item of items) {
+        catGenerated.push(...items);
+      }
+
+      for (const item of catGenerated) {
         const key = item.wordEs.trim().toLowerCase();
         if (seenThisRun.has(key)) continue;
         seenThisRun.add(key);
