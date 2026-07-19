@@ -313,6 +313,43 @@ body {
   gap: 6px;
 }
 
+.dock-note b {
+  color: var(--ink);
+}
+
+/* Controles de la demo de la Cámara de Contexto (main.ts,
+   `chamberDemoEl`) — mismo look que los botones de <vx-context-lab>,
+   pero en luz de página (no Shadow DOM), así que necesitan su propia
+   regla en vez de heredar de un componente. */
+.controls-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dock-note button {
+  background: none;
+  border: 1px solid rgba(231, 226, 214, 0.2);
+  border-radius: 6px;
+  padding: 5px 10px;
+  color: var(--dim);
+  font-family: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.dock-note button:hover {
+  color: var(--ink);
+  border-color: rgba(231, 226, 214, 0.4);
+}
+
+.dock-note button.active {
+  background: var(--accent);
+  color: #1a0f04;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
 /* Intermedio — cada superficie (Cubo/Transformer/RAG) agrupa su propio
    contenido dentro de #side-pane; sólo una está visible a la vez (ver
    applyIntermediateSurfaceVisibility en main.ts). Mismo gap que el

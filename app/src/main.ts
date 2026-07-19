@@ -47,6 +47,12 @@ import { tokenizeSimple, tokenizeBPE } from "./tokenizer";
 import { tokenizeBGE } from "./bgeTokenizer";
 import { fetchCosinePairs, type PartOfSpeech } from "./data/concepts";
 import { setupTokenMode } from "./scene/tokenMode";
+import { createContextChamber } from "./scene/contextChamber";
+import {
+  createContextController,
+  CONTEXT_PROFILES,
+  type ContextRole,
+} from "./intermediate/contextController";
 
 // Principiante=sustantivos+función, Intermedio=+adjetivos, Avanzado=+verbos
 // (matriz POS cerrada 2026-07-19, ver DOCs/02-master-plan.md §03). Las
@@ -178,6 +184,121 @@ async function main() {
   field.revealProgressively(0, bootAllowedIds); // arranca vacío — se puebla durante el resto del boot
   countLabel.textContent = "0 embeddings";
 
+  // Cámara de Contexto 3D (DOCs/13 §2.7/§6, Phase 2) — vive lejos del
+  // cubo semántico a propósito (anti-goal explícito: nunca el mismo
+  // espacio de datos) y arranca invisible; sólo se muestra/enfoca
+  // cuando Intermedio está en la superficie Transformer (ver
+  // setContextChamberActive más abajo, después de que exista
+  // `intermediateSurface`).
+  const contextChamber = createContextChamber(engine.renderer, engine.usingWebGPU ? "high" : "low");
+  contextChamber.group.position.set(9, 0, 0);
+  contextChamber.group.visible = false;
+  engine.scene.add(contextChamber.group);
+
+  // Único ContextController compartido entre el chamber 3D y cualquier
+  // demo de turnos en el dock (DOCs/13 §5.2: "neither calculates
+  // overflow independently") — capacidad/política de laboratorio por
+  // default, ajustable si Phase 6 agrega el selector de perfil real.
+  const contextController = createContextController({
+    capacity: CONTEXT_PROFILES.lab.capacity,
+    responseReserve: CONTEXT_PROFILES.lab.responseReserve,
+    policy: "fifo",
+  });
+  const applyContextSnapshot = () => {
+    const state = contextController.getState();
+    contextChamber.setSnapshot(contextController.getSnapshot(), state.capacity, state.responseReserve);
+  };
+  contextController.subscribe(applyContextSnapshot);
+  applyContextSnapshot();
+
+  // Control de la demo (turnos de ejemplo + política) — un solo
+  // elemento persistente, reparentado dentro del panel Transformer
+  // cada vez que el dock se remonta (mismo patrón que
+  // `intermediateSurfaceNav`), para no re-suscribirse al controller en
+  // cada cambio de modo y acumular listeners fantasma sobre DOM
+  // desconectado.
+  const DEMO_TURNS: { role: ContextRole; es: string; en: string }[] = [
+    { role: "user", es: "¿Qué es una ventana de contexto?", en: "What is a context window?" },
+    {
+      role: "assistant",
+      es: "Es la mesa de trabajo que el modelo puede ver para esta respuesta — no es memoria permanente.",
+      en: "It's the working desk the model can see for this reply — not permanent memory.",
+    },
+    { role: "user", es: "¿Se puede quedar sin espacio?", en: "Can it run out of space?" },
+    {
+      role: "assistant",
+      es: "Sí — cuando se llena, los turnos más viejos se expulsan o se compactan.",
+      en: "Yes — when it fills up, the oldest turns get evicted or compacted.",
+    },
+    { role: "user", es: "Guarda esta clave: MANGO-47.", en: "Remember this key: MANGO-47." },
+    { role: "assistant", es: "Anotado: MANGO-47.", en: "Noted: MANGO-47." },
+  ];
+  let demoTurnIndex = 0;
+
+  const chamberDemoEl = document.createElement("div");
+  chamberDemoEl.className = "dock-note";
+  const chamberUsageEl = document.createElement("p");
+  const chamberControlsEl = document.createElement("div");
+  chamberControlsEl.className = "controls-row";
+  const sendTurnBtn = document.createElement("button");
+  sendTurnBtn.type = "button";
+  const resetChamberBtn = document.createElement("button");
+  resetChamberBtn.type = "button";
+  const rejectPolicyBtn = document.createElement("button");
+  rejectPolicyBtn.type = "button";
+  const fifoPolicyBtn = document.createElement("button");
+  fifoPolicyBtn.type = "button";
+  chamberControlsEl.append(sendTurnBtn, resetChamberBtn, rejectPolicyBtn, fifoPolicyBtn);
+
+  function renderChamberDemoCopy() {
+    chamberDemoEl.innerHTML = "";
+    const title = document.createElement("p");
+    title.innerHTML = `<b>${t("contextChamberLabel", lang)}</b>`;
+    const intro = document.createElement("p");
+    intro.textContent = t("contextChamberIntro", lang);
+    chamberDemoEl.append(title, intro, chamberUsageEl, chamberControlsEl);
+    sendTurnBtn.textContent = t("contextChamberSendTurn", lang);
+    resetChamberBtn.textContent = t("contextChamberReset", lang);
+    rejectPolicyBtn.textContent = t("contextChamberPolicyReject", lang);
+    fifoPolicyBtn.textContent = t("contextChamberPolicyFifo", lang);
+    renderChamberUsage();
+  }
+
+  function renderChamberUsage() {
+    const state = contextController.getState();
+    const snapshot = contextController.getSnapshot();
+    const budget = Math.max(0, state.capacity - state.responseReserve);
+    chamberUsageEl.textContent = t("contextChamberUsage", lang)
+      .replace("{used}", snapshot.used.toLocaleString())
+      .replace("{budget}", budget.toLocaleString());
+    rejectPolicyBtn.classList.toggle("active", state.policy === "reject");
+    fifoPolicyBtn.classList.toggle("active", state.policy === "fifo");
+  }
+  contextController.subscribe(renderChamberUsage);
+
+  sendTurnBtn.addEventListener("click", () => {
+    const example = DEMO_TURNS[demoTurnIndex % DEMO_TURNS.length];
+    demoTurnIndex++;
+    const text = lang === "en" ? example.en : example.es;
+    void tokenizeBGE(text).then((bgeTokens) => {
+      contextController.append({
+        id: `demo-${demoTurnIndex}-${text.length}`,
+        role: example.role,
+        text,
+        tokens: bgeTokens.map((tok) => tok.text),
+        createdAt: demoTurnIndex,
+      });
+    });
+  });
+  resetChamberBtn.addEventListener("click", () => {
+    demoTurnIndex = 0;
+    contextController.reset();
+  });
+  rejectPolicyBtn.addEventListener("click", () => contextController.setPolicy("reject"));
+  fifoPolicyBtn.addEventListener("click", () => contextController.setPolicy("fifo"));
+
+  renderChamberDemoCopy();
+
   // El render arranca AQUÍ, no al final: así el cubo ya gira y se va
   // poblando de partículas detrás del splash mientras cargan
   // tokenizadores (idea pedida por el usuario). `card` y `liveTokenCount`
@@ -185,12 +306,13 @@ async function main() {
   // los lee por referencia, ya resueltos cuando el usuario llegue a
   // interactuar (mucho después de que termine el splash).
   engine.start(
-    () => {
+    (dt) => {
       // Bug real corregido (ver engine.ts): el giro automático ahora es
       // controls.autoRotate (gira la cámara alrededor de
       // controls.target, no el grupo alrededor del origen del mundo) —
       // aquí sólo se prende/apaga con la misma condición de antes.
       engine.controls.autoRotate = !card?.isPinned() && liveTokenCount === 0;
+      if (contextChamber.group.visible) contextChamber.update(dt);
     },
     (fps) => {
       fpsLabel.textContent = `${fps} fps`;
@@ -347,6 +469,21 @@ async function main() {
     if (ragPanelEl) ragPanelEl.hidden = intermediateSurface !== "rag";
     stageEl.dataset.intermedioSurface = intermediateSurface;
     placeIntermediateSurfaceNav();
+    setContextChamberActive(currentMode === "intermedio" && intermediateSurface === "transformer");
+  }
+
+  // DOCs/13 anti-goal explícito: "Cubo y Cámara nunca se presentan como
+  // el mismo espacio de datos" — activar la cámara oculta el cubo (y su
+  // malla de aristas) en vez de superponerlos, y reusa `flyTo` (ya
+  // existe para volar a una partícula fijada) para encuadrarla.
+  let contextChamberActive = false;
+  function setContextChamberActive(active: boolean) {
+    if (active === contextChamberActive) return;
+    contextChamberActive = active;
+    contextChamber.group.visible = active;
+    field.group.visible = !active;
+    cubeEdges.visible = !active;
+    flyTo(active ? contextChamber.group.position.clone() : null);
   }
 
   // Los tres paneles (Módulos A/B+G en Cubo, C/D/E en Transformer, F en
@@ -380,6 +517,8 @@ async function main() {
     // Orden = capítulos de DOCs/13 §2.7: Contexto → Atención → Predicción.
     const contextLab = document.createElement("vx-context-lab") as VxContextLab;
     transformerPanel.appendChild(contextLab);
+    renderChamberDemoCopy();
+    transformerPanel.appendChild(chamberDemoEl);
     const attentionArcs = document.createElement("vx-attention-arcs") as VxAttentionArcs;
     transformerPanel.appendChild(attentionArcs);
     const nextTokenBars = document.createElement("vx-next-token-bars") as VxNextTokenBars;
@@ -820,6 +959,10 @@ async function main() {
   async function runApplyModeChrome(mode: Mode) {
     currentMode = mode;
     allowedPos = MODE_POS[mode];
+    // Fuera de Intermedio la Cámara de Contexto nunca debe quedar
+    // activa (Principiante/Avanzado no la conocen) — restaura el cubo
+    // sin esperar a que Intermedio la desactive por su cuenta.
+    if (mode !== "intermedio") setContextChamberActive(false);
     // Pedido explícito 2026-07-19: el switcher deslizaba su pastilla
     // (y el composer/tokenStrip se desvanecían al remontarse) en una
     // duración fija, desacoplada de cuánto tarda en realidad la ola de

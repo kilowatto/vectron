@@ -186,6 +186,17 @@ const STRINGS = {
     es: "Cómo se mira, se atiende y se predice el siguiente token dentro del modelo — capítulos Contexto → Atención → Predicción.",
     en: "How the model looks at, attends to, and predicts the next token — chapters Context → Attention → Prediction.",
   },
+  // --- Cámara de Contexto 3D (DOCs/13 §2.7/§9, Phase 2) ---
+  contextChamberLabel: { es: "Cámara de contexto (3D)", en: "Context chamber (3D)" },
+  contextChamberIntro: {
+    es: "Conversación simulada, turnos y tokens reales: cada turno es una gota. Cuando ya no cabe, FIFO expulsa el turno más viejo — nunca el más nuevo.",
+    en: "Simulated conversation, real turns and tokens: each turn is a drop. When it stops fitting, FIFO evicts the oldest turn — never the newest.",
+  },
+  contextChamberSendTurn: { es: "enviar turno de ejemplo", en: "send example turn" },
+  contextChamberReset: { es: "vaciar cámara", en: "empty chamber" },
+  contextChamberPolicyReject: { es: "rechazar", en: "reject" },
+  contextChamberPolicyFifo: { es: "FIFO", en: "FIFO" },
+  contextChamberUsage: { es: "{used} / {budget} tokens", en: "{used} / {budget} tokens" },
   ragDockIntro: {
     es: "Recuperar antes de generar: una pregunta trae trozos reales de un archivo externo a la mesa de trabajo, en vez de que el modelo invente.",
     en: "Retrieve before generating: a question brings real chunks from an external file to the working desk, instead of the model making things up.",
