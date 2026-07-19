@@ -49,6 +49,11 @@ export interface LiveToken {
   label: string;
   kind: "bge" | "gpt" | "frase";
   vector: number[];
+  /** Coordenadas REALES de la partícula ya proyectada (mismo
+   * projectWithBasis que main.ts usa para dibujarla) — para que Math
+   * Arena/PCA pueda comparar su propio cálculo contra la posición de
+   * verdad en vez de recalcular con una base distinta. */
+  coords: [number, number, number];
 }
 
 export interface TokenMode {
@@ -490,6 +495,7 @@ export function setupTokenMode(options: TokenModeOptions): TokenMode {
       label: p.kind === "frase" ? t("tokenPhraseLabel", getStoredLang()) : p.fragment,
       kind: p.kind,
       vector: p.vector,
+      coords: p.coords,
     }));
   }
 

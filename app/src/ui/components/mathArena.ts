@@ -1,5 +1,5 @@
 import { getStoredLang, t, type Lang } from "../../i18n";
-import { cosineLocal } from "../../data/concepts";
+import { cosineLocal, fetchPcaBasis, type PcaBasis } from "../../data/concepts";
 import { attachShadow } from "./shadow";
 import css from "./mathArena.css?inline";
 
@@ -9,6 +9,10 @@ type Tab = (typeof TABS)[number];
 export interface MathArenaToken {
   label: string;
   vector: number[];
+  /** Coordenadas reales ya proyectadas de esta partícula (ver
+   * tokenMode.ts LiveToken) — la pestaña PCA compara su propio
+   * recálculo contra esto, no contra un número aparte. */
+  coords: [number, number, number];
 }
 
 /**
@@ -20,11 +24,19 @@ export interface MathArenaToken {
  * bge-m3 reales que ya vive tokenMode.ts (no otro embed nuevo) — el
  * resto de pestañas siguen siendo el placeholder hasta su turno.
  */
+let pcaBasisPromise: Promise<PcaBasis | null> | null = null;
+function loadPcaBasisOnce(): Promise<PcaBasis | null> {
+  if (!pcaBasisPromise) pcaBasisPromise = fetchPcaBasis();
+  return pcaBasisPromise;
+}
+
 export class VxMathArena extends HTMLElement {
   #activeTab: Tab = "Cosine";
   #tokens: MathArenaToken[] = [];
   #selA = 0;
   #selB = 1;
+  #selPca = 0;
+  #pcaBasis: PcaBasis | null = null;
   #tabsEl!: HTMLDivElement;
   #panelEl!: HTMLDivElement;
 
@@ -39,6 +51,10 @@ export class VxMathArena extends HTMLElement {
     this.#panelEl = root.querySelector(".panel")!;
     this.#renderTabs();
     this.#renderPanel();
+    void loadPcaBasisOnce().then((basis) => {
+      this.#pcaBasis = basis;
+      if (this.#activeTab === "PCA") this.#renderPanel();
+    });
   }
 
   /** main.ts llama esto con los embeddings vivos de tokenMode.ts (P7,
@@ -48,7 +64,8 @@ export class VxMathArena extends HTMLElement {
     this.#tokens = tokens;
     if (this.#selA >= tokens.length) this.#selA = 0;
     if (this.#selB >= tokens.length) this.#selB = Math.min(1, tokens.length - 1);
-    if (this.#activeTab === "Cosine") this.#renderPanel();
+    if (this.#selPca >= tokens.length) this.#selPca = 0;
+    if (this.#activeTab === "Cosine" || this.#activeTab === "PCA") this.#renderPanel();
   }
 
   #renderTabs() {
@@ -56,7 +73,7 @@ export class VxMathArena extends HTMLElement {
     this.#tabsEl.innerHTML = TABS.map(
       (tab) =>
         `<button type="button" class="tab${tab === this.#activeTab ? " active" : ""}" data-tab="${tab}">${
-          tab === "Cosine" ? t("mathArenaTabCosine", lang) : tab
+          tab === "Cosine" ? t("mathArenaTabCosine", lang) : tab === "PCA" ? t("mathArenaTabPca", lang) : tab
         }</button>`,
     ).join("");
     this.#tabsEl.querySelectorAll<HTMLButtonElement>(".tab").forEach((btn) => {
@@ -71,6 +88,8 @@ export class VxMathArena extends HTMLElement {
   #renderPanel() {
     if (this.#activeTab === "Cosine") {
       this.#renderCosinePanel();
+    } else if (this.#activeTab === "PCA") {
+      this.#renderPcaPanel();
     } else {
       this.#renderPlaceholder();
     }
@@ -131,6 +150,62 @@ export class VxMathArena extends HTMLElement {
     this.#panelEl.querySelector(".sel-b")!.addEventListener("change", (e) => {
       this.#selB = Number((e.target as HTMLSelectElement).value);
       this.#renderCosinePanel();
+    });
+  }
+
+  #renderPcaPanel() {
+    const lang: Lang = getStoredLang();
+    if (this.#tokens.length === 0) {
+      this.#panelEl.innerHTML = `<div class="empty">${t("mathArenaCosineEmpty", lang)}</div>`;
+      return;
+    }
+    if (!this.#pcaBasis) {
+      this.#panelEl.innerHTML = `<div class="empty">${t("mathArenaPcaLoading", lang)}</div>`;
+      return;
+    }
+    const basis = this.#pcaBasis;
+    const tok = this.#tokens[this.#selPca];
+    const options = this.#tokens
+      .map((t2, i) => `<option value="${i}" ${i === this.#selPca ? "selected" : ""}>${t2.label}</option>`)
+      .join("");
+
+    // Mismo cálculo real que projectWithBasis (data/concepts.ts) —
+    // repetido aquí paso a paso, a propósito, para mostrar cada parte
+    // en vez de sólo el resultado final ya empacado en una función.
+    const rawDots = basis.components.map((comp) => {
+      let dot = 0;
+      for (let i = 0; i < tok.vector.length; i++) dot += (tok.vector[i] - basis.mean[i]) * comp[i];
+      return dot;
+    });
+    const scaled = rawDots.map((d, c) =>
+      basis.maxAbs[c] > 0
+        ? Math.max(-basis.cubeScale, Math.min(basis.cubeScale, (d / basis.maxAbs[c]) * basis.cubeScale))
+        : 0,
+    );
+    const axisLabel = ["x", "y", "z"];
+
+    this.#panelEl.innerHTML = `
+      <p class="intro">${t("mathArenaPcaIntro", lang)}</p>
+      <div class="pickers">
+        <select class="sel-pca">${options}</select>
+      </div>
+      <div class="formula">
+        ${axisLabel
+          .map(
+            (axis, c) =>
+              `${axis} = (v − media) · eje${c + 1} = ${rawDots[c].toFixed(3)} → <b>${scaled[c].toFixed(3)}</b>`,
+          )
+          .join("<br/>")}
+      </div>
+      <div class="vectors">
+        <div class="vec-row"><span class="vec-label">${t("mathArenaPcaComputed", lang)}</span><span class="vec-preview">[${scaled.map((v) => v.toFixed(3)).join(", ")}]</span></div>
+        <div class="vec-row"><span class="vec-label">${t("mathArenaPcaReal", lang)}</span><span class="vec-preview">[${tok.coords.map((v) => v.toFixed(3)).join(", ")}]</span></div>
+      </div>
+      <p class="footnote">${t("mathArenaPcaFootnote", lang)}</p>
+    `;
+    this.#panelEl.querySelector(".sel-pca")!.addEventListener("change", (e) => {
+      this.#selPca = Number((e.target as HTMLSelectElement).value);
+      this.#renderPcaPanel();
     });
   }
 }
