@@ -56,7 +56,16 @@ async function main() {
   }
 
   console.log("Reduciendo a 3D con PCA…");
-  const CUBE_SCALE = 1.25;
+  // 1.25 -> 1.9 (factor ~1.52): el dataset casi se triplicó (2 263 ->
+  // 6 722) desde que se fijó el valor original — mismo volumen de cubo
+  // con 3x más partículas significa 3x más traslape real en el
+  // espacio, no sólo un problema de blending aditivo (ver
+  // particleField.ts/engine.ts, ajustados en la misma pasada con el
+  // mismo factor: aristas del cubo, distancias de cámara/órbita, y las
+  // distancias de flyTo en main.ts). El tamaño de la partícula
+  // (IcosahedronGeometry) se queda igual a propósito — más espacio +
+  // mismo tamaño de partícula es justo lo que separa más al hacer zoom.
+  const CUBE_SCALE = 1.9;
   const pca = pcaReduce(embeddings, 3);
   const { points: reduced, maxAbs } = normalizeToCube(pca.points, CUBE_SCALE);
 

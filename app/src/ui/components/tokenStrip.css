@@ -42,6 +42,19 @@
   pointer-events: auto;
 }
 
+/* P6 — hijo de flujo normal dentro del dock/consola, no overlay (ver
+   composer.css para la misma idea del lado del input). */
+:host([dock]) {
+  position: static;
+  left: auto;
+  right: auto;
+  top: auto;
+  margin-inline: 0 !important;
+  width: 100%;
+  max-height: none;
+  border-radius: 10px;
+}
+
 .tokens-zone {
   display: flex;
   flex-direction: column;

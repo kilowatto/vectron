@@ -163,6 +163,25 @@ const STRINGS = {
   bootWarm: { es: "calentando motor…", en: "warming up engine…" },
   bootReady: { es: "listo", en: "ready" },
 
+  // --- P6: vx-math-arena + vx-surface-toggle ---
+  mathArenaComingSoon: { es: "Math Arena — próximamente", en: "Math Arena — coming soon" },
+  mathArenaNote: {
+    es: "Atención, softmax, coseno, PCA y muestreo con números y fórmulas reales, en vivo con tu frase — P7.",
+    en: "Attention, softmax, cosine, PCA and sampling with live real numbers and formulas from your sentence — P7.",
+  },
+  surfaceCube: { es: "Cubo", en: "Cube" },
+  surfaceMath: { es: "Matemáticas", en: "Math" },
+  pipelineDockText: { es: "1 · Texto", en: "1 · Text" },
+  pipelineDockTokens: { es: "2 · Tokens + IDs", en: "2 · Tokens + IDs" },
+  pipelineDockEmbedding: {
+    es: "3 · Cada token se embebe en ℝ¹⁰²⁴ (bge-m3, números reales)",
+    en: "3 · Each token embeds into ℝ¹⁰²⁴ (bge-m3, real numbers)",
+  },
+  pipelineDockNeighbors: {
+    es: "4 · Fija una partícula en el cubo para ver sus vecinos reales",
+    en: "4 · Pin a particle in the cube to see its real neighbors",
+  },
+
   // --- P4: vx-kind-legend ---
   kindLegendNotable: { es: "luz grande = destacado", en: "big light = notable" },
   kindLegendNeighbors: { es: "vecinos (coseno real)", en: "neighbors (real cosine)" },

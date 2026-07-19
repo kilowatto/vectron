@@ -47,10 +47,121 @@ body {
   inset: 0;
 }
 
+/* P6 — tres shells (ver DOCs/03 §3, decisión explícita del usuario de
+   reconstruir dock/split pese a que una versión anterior lo había
+   revertido): Principiante sigue siendo una sola columna full-bleed
+   (default de abajo); Intermedio agrega una columna dock fija en
+   escritorio; Avanzado agrega una columna Math Arena con separador
+   arrastrable + una fila de consola de tokens de ancho completo. El
+   ResizeObserver de engine.ts ya escucha `canvas.parentElement`
+   (#cube-pane) — cuando la columna cambia de ancho, el cubo se
+   reproyecta solo, sin cablear nada nuevo. */
 #stage {
   position: absolute;
   inset: 0;
   height: 100%;
+  display: grid;
+  grid-template-areas: "cube";
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+}
+
+#cube-pane {
+  position: relative;
+  grid-area: cube;
+  min-width: 0;
+  overflow: hidden;
+}
+
+#sash,
+#side-pane,
+#console-pane {
+  display: none;
+}
+
+/* El dock (Intermedio) y el Math Arena (Avanzado) viven en la MISMA
+   esquina superior derecha que <vx-lang-switcher> + <vx-mode-switcher>
+   (ambos position:fixed al viewport, no a esta columna) — sin este
+   despeje se les montan encima. Misma fórmula ya probada en
+   tokenStrip.css para ese mismo choque en el layout full-bleed. */
+#side-pane {
+  padding-top: max(clamp(100px, 15vw, 128px), calc(env(safe-area-inset-top) + 90px));
+  padding-inline: 16px;
+  padding-bottom: 16px;
+  gap: 14px;
+}
+
+/* Intermedio — dock de pipeline permanente, sólo en escritorio (ver
+   §3.2: "no forzar un dock de 50% en portrait"). Bajo el breakpoint,
+   Intermedio se ve igual que Principiante — sin dock. */
+@media (min-width: 1024px) {
+  #stage[data-mode="intermedio"] {
+    grid-template-areas: "cube side";
+    grid-template-columns: 1fr 360px;
+  }
+
+  #stage[data-mode="intermedio"] #side-pane {
+    display: flex;
+    flex-direction: column;
+    grid-area: side;
+    background: rgba(8, 10, 13, 0.92);
+    border-left: 1px solid rgba(231, 226, 214, 0.12);
+    overflow-y: auto;
+  }
+}
+
+/* Avanzado — split cube|Math Arena con separador arrastrable, más una
+   fila de consola de tokens de ancho completo abajo (ver §3.3: "Token
+   console (full width): dual tokenizer + disclaimer"). Bajo el
+   breakpoint colapsa a "Math como pestaña" — aquí, a las dos
+   superficies pares Cubo|Matemáticas vía <vx-surface-toggle>. */
+@media (min-width: 1100px) {
+  #stage[data-mode="avanzado"] {
+    grid-template-areas:
+      "cube sash side"
+      "console console console";
+    grid-template-columns: var(--avanzado-cube, 58%) 6px 1fr;
+    grid-template-rows: 1fr auto;
+  }
+
+  #stage[data-mode="avanzado"] #sash {
+    display: block;
+    grid-area: sash;
+    cursor: col-resize;
+    background: rgba(231, 226, 214, 0.08);
+  }
+
+  #stage[data-mode="avanzado"] #sash:hover,
+  #stage[data-mode="avanzado"] #sash.dragging {
+    background: var(--accent);
+  }
+
+  #stage[data-mode="avanzado"] #side-pane {
+    display: flex;
+    grid-area: side;
+  }
+
+  #stage[data-mode="avanzado"] #console-pane {
+    display: flex;
+    grid-area: console;
+    max-height: 28vh;
+    overflow-y: auto;
+    border-top: 1px solid rgba(231, 226, 214, 0.12);
+    background: rgba(8, 10, 13, 0.92);
+  }
+}
+
+/* Avanzado angosto — el Math Arena no vive en una columna, vive como
+   superficie hermana full-bleed que se navega con <vx-surface-toggle>
+   (ver §3.3 "dual surface, not a weak toggle"): nunca superpuesto a
+   medias, o está o no está. */
+@media (max-width: 1099px) {
+  #stage[data-mode="avanzado"][data-surface="math"] #side-pane {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+  }
 }
 
 #scene {
@@ -112,4 +223,27 @@ body {
 #backend-tag {
   font-size: 9px;
   opacity: 0.45;
+}
+
+/* Principiante — "Wonder" (ver DOCs/03 §3.1): HUD sólo marca, sin fps
+   (dev-ish, no aporta al asombro) — el conteo de abajo se queda porque
+   ya habla en "palabras" (t.hudUnitPrincipiante), no en jerga. */
+#stage[data-mode="principiante"] #fps,
+#stage[data-mode="principiante"] #hud-bottom .dot {
+  display: none;
+}
+
+/* P6 — contenido del dock/consola (ver mountComposerAndStrip en
+   main.ts): la nota de pipeline vive junto al composer/strip
+   reparentados, con el mismo tono discreto que el disclaimer del
+   token-strip. */
+.dock-note {
+  padding: 12px 16px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--dim);
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }

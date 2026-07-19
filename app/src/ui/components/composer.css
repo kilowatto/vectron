@@ -29,6 +29,22 @@
   font-family: var(--font-mono);
 }
 
+/* P6 — dentro del dock de Intermedio o la consola de Avanzado (ver
+   main.ts `mountComposerAndStrip`) este componente es un hijo de flujo
+   normal, no un overlay flotante — mismo :host, sin transform
+   involucrado esta vez, así que no choca con el bug de fadeIn() de
+   arriba (ese era sólo por el `translateX` de centrado, que aquí no
+   existe). */
+:host([dock]) {
+  position: static;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  margin-inline: 0 !important;
+  width: 100%;
+  border-radius: 10px;
+}
+
 .row {
   display: flex;
   gap: 10px;

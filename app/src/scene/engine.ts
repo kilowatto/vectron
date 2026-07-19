@@ -38,7 +38,11 @@ export async function createEngine(canvas: HTMLCanvasElement): Promise<Engine> {
 
   const { w: initW, h: initH } = stageSizeOf(canvas);
   const camera = new THREE.PerspectiveCamera(50, initW / initH, 0.05, 50);
-  camera.position.set(2.1, 1.5, 3.3);
+  // Escalado ×1.52 junto con CUBE_SCALE en seed.ts (1.25->1.9): el cubo
+  // real ahora ocupa más volumen, la cámara/órbita tienen que crecer en
+  // la misma proporción o quedarían calibradas para un cubo que ya no
+  // existe (ver seed.ts para el motivo completo — dataset casi 3x).
+  camera.position.set(3.2, 2.3, 5.0);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(initW, initH);
 
@@ -48,17 +52,17 @@ export async function createEngine(canvas: HTMLCanvasElement): Promise<Engine> {
   // Navegación fina entre partículas: acercamiento mucho mayor que el
   // original (0.35 vs 1.8) y el zoom de la rueda va HACIA el cursor,
   // no hacia el centro — es lo que hace posible "bucear" a un clúster.
-  controls.minDistance = 0.35;
-  controls.maxDistance = 6.5;
+  controls.minDistance = 0.53;
+  controls.maxDistance = 9.9;
   controls.zoomToCursor = true;
 
   const scenePass = pass(scene, camera);
   const scenePassColor = scenePass.getTextureNode("output");
-  // threshold subido (0.45->0.62): con miles de partículas, zonas
-  // densas de traslape aditivo llegaban al umbral de bloom sólo por
-  // acumulación, no por brillo real — eso es lo que blanqueaba el
-  // cubo. strength bajado un poco también (0.32->0.24).
-  const bloomPass = bloom(scenePassColor, 0.24, 0.18, 0.62);
+  // Segunda pasada (dataset ~3x desde la última vez, ver
+  // particleField.ts baseScaleOf): threshold 0.62->0.74, strength
+  // 0.24->0.2 — mismo motivo, las zonas densas siguen llegando al
+  // umbral de bloom por pura acumulación de traslape, no brillo real.
+  const bloomPass = bloom(scenePassColor, 0.2, 0.18, 0.74);
   const renderPipeline = new THREE.RenderPipeline(renderer);
   renderPipeline.outputNode = scenePassColor.add(bloomPass);
 

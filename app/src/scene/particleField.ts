@@ -54,12 +54,17 @@ export const DOMAIN_HUES: Record<string, number> = {
   // cópulas) — gris-azulado neutro a propósito: no son un "tema", son la
   // gramática que conecta a los demás dominios.
   gramatica: 0x8a94a6,
-  // P3 — léxico de clase abierta sin tema (ver DOCs/08 §5.0): dos tonos
-  // primos entre sí pero distinguibles (verbos = acción, más cálido;
-  // adjetivos = cualidad, más frío), deliberadamente parecidos a
-  // `cualidades_y_acciones` (mismo tipo de contenido, dominio distinto).
-  lexico_verbal: 0xe0a458,
-  lexico_adjetival: 0xf0e6d2,
+  // P3 — léxico de clase abierta sin tema (ver DOCs/08 §5.0). Bug real
+  // corregido 2026-07-19: los tonos originales (0xe0a458/0xf0e6d2) eran
+  // cremas casi blancos — inofensivo cuando estos dos dominios eran
+  // ~160 conceptos legacy, pero tras el crecimiento paralelo pasaron a
+  // ser, juntos, ~2/3 de TODO el dataset (4 372 de 6 722) — el cubo se
+  // veía "lavado a blanco" de verdad (no por traslape aditivo, colores
+  // planos incluso en partículas aisladas, visto en capturas reales).
+  // Mismo criterio de saturación que el resto de la paleta de abajo,
+  // no cremas pastel: verbos = acción cálida, adjetivos = cualidad fría.
+  lexico_verbal: 0xc1502e,
+  lexico_adjetival: 0x6b5b95,
   // Modo token (Avanzado): partículas efímeras de tu frase, no dataset.
   token_vivo: 0x39ff6a,
 };
@@ -159,11 +164,12 @@ export function createParticleField(
   const mesh = new THREE.InstancedMesh(geometry, material, count);
   const dummy = new THREE.Object3D();
 
-  // Más chicas que antes: a miles de partículas, el traslape en pantalla
-  // de blending aditivo (colores que se SUMAN, no se tapan) empieza a
-  // verse blanco/gris en las zonas densas — bajar el tamaño reduce
-  // cuántas se traslapan por pixel sin perder el efecto de brillo.
-  const baseScaleOf = (concept: Concept) => (concept.distinctiveTrait ? 1.0 : 0.62);
+  // Segunda pasada del mismo ajuste (dataset creció de ~2.3k a ~6.7k
+  // conceptos desde la última vez, sobre todo léxico masivo genérico
+  // que además es semánticamente denso — el PCA lo apretuja más que el
+  // dataset temático anterior, agravando el mismo blanqueo por
+  // traslape aditivo). Más chicas otra vez.
+  const baseScaleOf = (concept: Concept) => (concept.distinctiveTrait ? 0.82 : 0.5);
 
   concepts.forEach((concept, i) => {
     const hue = DOMAIN_HUES[concept.domain] ?? FALLBACK_HUE;
@@ -500,10 +506,8 @@ export function createParticleField(
   geometry.setAttribute("instanceHighlight", highlightAttribute);
   geometry.setAttribute("instanceFocus", focusAttribute);
 
-  // Bajado de 0.75 — con miles de partículas el brillo de borde de cada
-  // una se acumula con las vecinas (blending aditivo) y termina
-  // "quemando" a blanco zonas densas del cubo.
-  const glowStrength = uniform(0.5);
+  // Segunda pasada (ver baseScaleOf arriba, mismo motivo): 0.5 -> 0.42.
+  const glowStrength = uniform(0.42);
   const instanceColor = attribute<"vec3">("instanceColor", "vec3");
   const instancePhase = attribute<"float">("instancePhase", "float");
   const instanceHighlight = attribute<"float">("instanceHighlight", "float");
@@ -520,12 +524,12 @@ export function createParticleField(
 
   material.colorNode = Fn(() => {
     const base = color(instanceColor);
-    // 0.22 -> 0.14: el "piso" de brillo ambiente de cada partícula es lo
-    // que más se acumula en zonas densas (siempre está encendido, a
-    // diferencia del rim/highlight que son condicionales) — bajarlo es
-    // lo que más ayuda contra el blanqueo por traslape.
+    // 0.22 -> 0.14 -> 0.10: el "piso" de brillo ambiente de cada
+    // partícula es lo que más se acumula en zonas densas (siempre está
+    // encendido, a diferencia del rim/highlight que son condicionales)
+    // — bajarlo es lo que más ayuda contra el blanqueo por traslape.
     const glow = base.mul(
-      float(0.14).add(rim.mul(glowStrength)).add(instanceHighlight),
+      float(0.1).add(rim.mul(glowStrength)).add(instanceHighlight),
     );
     return vec3(glow).mul(pulse).mul(instanceFocus);
   })();

@@ -25,6 +25,9 @@ import type { VxColorKey, DomainIsolateDetail } from "./ui/components/colorKey";
 import "./ui/components/colorKey";
 import type { VxBootSplash } from "./ui/components/bootSplash";
 import "./ui/components/bootSplash";
+import "./ui/components/mathArena";
+import type { VxSurfaceToggle, SurfaceChangeDetail, Surface } from "./ui/components/surfaceToggle";
+import "./ui/components/surfaceToggle";
 import { getStoredLang, setStoredLang, t } from "./i18n";
 import { fadeIn, fadeOut, tweenNumber } from "./ui/motion";
 import { tokenizeSimple, tokenizeBPE } from "./tokenizer";
@@ -48,6 +51,9 @@ const canvas = document.querySelector<HTMLCanvasElement>("#scene")!;
 const backendTag = document.querySelector<HTMLSpanElement>("#backend-tag")!;
 const fpsLabel = document.querySelector<HTMLSpanElement>("#fps")!;
 const countLabel = document.querySelector<HTMLSpanElement>("#count")!;
+const sashEl = document.querySelector<HTMLDivElement>("#sash")!;
+const sidePaneEl = document.querySelector<HTMLDivElement>("#side-pane")!;
+const consolePaneEl = document.querySelector<HTMLDivElement>("#console-pane")!;
 
 /** Muestra <vx-mode-select> y resuelve cuando el usuario elige un modo. */
 function pickMode(): Promise<Mode> {
@@ -117,8 +123,12 @@ async function main() {
     transparent: true,
     opacity: CUBE_EDGE_OPACITY,
   });
+  // 2.8 -> 4.26 (×1.52, mismo factor que CUBE_SCALE en seed.ts): las
+  // aristas dibujadas tienen que crecer junto con el cubo real de
+  // coordenadas o las partículas empiezan a desbordarse visualmente
+  // fuera de la caja.
   const cubeEdges = new THREE.LineSegments(
-    new THREE.EdgesGeometry(new THREE.BoxGeometry(2.8, 2.8, 2.8)),
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(4.26, 4.26, 4.26)),
     cubeEdgeMaterial,
   );
   engine.scene.add(cubeEdges);
@@ -230,6 +240,88 @@ async function main() {
   card = document.createElement("vx-concept-card") as VxConceptCard;
   stageEl.appendChild(card);
 
+  // P6 — tres shells reales (ver DOCs/03 §3): Intermedio agrega un dock
+  // fijo en escritorio, Avanzado agrega un Math Arena con separador
+  // arrastrable + consola de ancho completo. `canvas.parentElement` es
+  // ahora #cube-pane (ver index.html) — el ResizeObserver de engine.ts
+  // ya lo escucha, así que angostar la columna del cubo reproyecta la
+  // cámara sola, sin cablear nada más.
+  const DESKTOP_INTERMEDIO = "(min-width: 1024px)";
+  const DESKTOP_AVANZADO = "(min-width: 1100px)";
+  const isDockLayout = (mode: Mode) =>
+    (mode === "intermedio" && matchMedia(DESKTOP_INTERMEDIO).matches) ||
+    (mode === "avanzado" && matchMedia(DESKTOP_AVANZADO).matches);
+
+  const AVANZADO_SASH_KEY = "vectron_avanzado_sash";
+  function applySashWidth(pct: number) {
+    stageEl.style.setProperty("--avanzado-cube", `${pct}%`);
+  }
+  {
+    const stored = Number(localStorage.getItem(AVANZADO_SASH_KEY));
+    applySashWidth(Number.isFinite(stored) && stored >= 30 && stored <= 75 ? stored : 58);
+  }
+  let sashDragging = false;
+  sashEl.addEventListener("pointerdown", (e) => {
+    sashDragging = true;
+    sashEl.classList.add("dragging");
+    sashEl.setPointerCapture(e.pointerId);
+  });
+  sashEl.addEventListener("pointermove", (e) => {
+    if (!sashDragging) return;
+    const pct = Math.min(75, Math.max(30, (e.clientX / window.innerWidth) * 100));
+    applySashWidth(pct);
+  });
+  function endSashDrag() {
+    if (!sashDragging) return;
+    sashDragging = false;
+    sashEl.classList.remove("dragging");
+    const pct = parseFloat(stageEl.style.getPropertyValue("--avanzado-cube"));
+    if (Number.isFinite(pct)) localStorage.setItem(AVANZADO_SASH_KEY, String(pct));
+  }
+  sashEl.addEventListener("pointerup", endSashDrag);
+  sashEl.addEventListener("pointercancel", endSashDrag);
+
+  // Avanzado angosto: Cubo|Matemáticas son superficies hermanas, no un
+  // toggle débil (ver DOCs/03 §3.3) — el cubo sigue montado y girando
+  // detrás, el Math Arena sólo se le pone encima a pantalla completa.
+  let mobileSurface: Surface = "cube";
+  const surfaceToggle = document.createElement("vx-surface-toggle") as VxSurfaceToggle;
+  surfaceToggle.setAttribute("current", mobileSurface);
+  surfaceToggle.addEventListener("vx-surface-change", (event) => {
+    mobileSurface = (event as CustomEvent<SurfaceChangeDetail>).detail.surface;
+    surfaceToggle.setAttribute("current", mobileSurface);
+    stageEl.dataset.surface = mobileSurface;
+  });
+
+  function applyShellLayout(mode: Mode) {
+    stageEl.dataset.mode = mode;
+    sidePaneEl.replaceChildren();
+    consolePaneEl.replaceChildren();
+
+    if (mode === "avanzado") {
+      sidePaneEl.appendChild(document.createElement("vx-math-arena"));
+      if (!matchMedia(DESKTOP_AVANZADO).matches) {
+        stageEl.dataset.surface = mobileSurface;
+        if (!surfaceToggle.isConnected) stageEl.appendChild(surfaceToggle);
+      } else if (surfaceToggle.isConnected) {
+        surfaceToggle.remove();
+        delete stageEl.dataset.surface;
+      }
+    } else if (surfaceToggle.isConnected) {
+      surfaceToggle.remove();
+      delete stageEl.dataset.surface;
+    }
+  }
+
+  // Redistribuir en vivo si la ventana cruza un breakpoint sin cambiar
+  // de modo (ej. rotar una tablet) — reusa runApplyMode en vez de
+  // duplicar la lógica de reparentar composer/strip.
+  for (const query of [DESKTOP_INTERMEDIO, DESKTOP_AVANZADO]) {
+    matchMedia(query).addEventListener("change", () => {
+      if (appReady) void applyMode(currentMode);
+    });
+  }
+
   // Vuelo suave de cámara hacia la partícula fijada (y de regreso al
   // centro al soltar): mueve el target de OrbitControls Y la cámara
   // conservando la dirección de vista actual — después del vuelo, orbitar
@@ -241,8 +333,10 @@ async function main() {
     const camera = engine.camera;
     const dest = worldPos ?? new THREE.Vector3(0, 0, 0);
     const currentDist = camera.position.distanceTo(controls.target);
-    // Acercarse al fijar; al volver al centro, quedarse a distancia de vista general.
-    const targetDist = worldPos ? Math.min(currentDist, 1.15) : Math.max(currentDist, 3.2);
+    // Acercarse al fijar; al volver al centro, quedarse a distancia de
+    // vista general. 1.15/3.2 -> 1.75/4.86 (×1.52, mismo factor que
+    // CUBE_SCALE — ver seed.ts).
+    const targetDist = worldPos ? Math.min(currentDist, 1.75) : Math.max(currentDist, 4.86);
     const dir = camera.position.clone().sub(controls.target).normalize();
     const fromT = controls.target.clone();
     const fromC = camera.position.clone();
@@ -390,8 +484,27 @@ async function main() {
       }
       tokenMode.setText(text);
     });
-    stageEl.appendChild(composer);
-    stageEl.appendChild(strip);
+    if (isDockLayout(mode)) {
+      // P6: hijos de flujo normal dentro del dock (Intermedio) o la
+      // consola de ancho completo (Avanzado) — no overlays flotantes.
+      composer.setAttribute("dock", "");
+      strip.setAttribute("dock", "");
+      const target = mode === "intermedio" ? sidePaneEl : consolePaneEl;
+      if (mode === "intermedio") {
+        target.appendChild(composer);
+        target.appendChild(strip);
+        const note = document.createElement("div");
+        note.className = "dock-note";
+        note.innerHTML = `<p>${t("pipelineDockEmbedding", lang)}</p><p>${t("pipelineDockNeighbors", lang)}</p>`;
+        target.appendChild(note);
+      } else {
+        target.appendChild(strip);
+        target.appendChild(composer);
+      }
+    } else {
+      stageEl.appendChild(composer);
+      stageEl.appendChild(strip);
+    }
     fadeIn(composer, { duration: 420, rise: 16 });
     fadeIn(strip, { duration: 420, rise: -16 });
     return { composer, strip };
@@ -485,6 +598,7 @@ async function main() {
       composer.remove();
       tokenStrip.remove();
     }
+    applyShellLayout(mode);
     ({ composer, strip: tokenStrip } = mountComposerAndStrip(mode));
   }
 
