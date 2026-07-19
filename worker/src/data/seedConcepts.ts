@@ -13643,4 +13643,32 @@ export const SEED_CONCEPTS: SeedConcept[] = [
     { wordEs: "Indie", wordEn: "Indie", domain: "musica", taxonomy: ["musica", "generos", "concepto"], distinctiveTrait: "Música independiente", traits: { tipo: "genero_musical", lema: true }, partOfSpeech: "sustantivo" as const },
   ],
 
+  // Generado por Workers AI vía GenerateConceptsWorkflow (colores, presidentes,
+  // numeros, dias, meses, formas geometricas) — 2026-07-19, 22 conceptos,
+  // ya dedupeados contra el dataset existente al momento de generarse.
+  ...[
+    { wordEs: "Hypsilophodon", wordEn: "Hypsilophodon", domain: "biologia_animal", taxonomy: ["biologia_animal", "dinosaurios", "concepto"], distinctiveTrait: "Dedos con garras", traits: { tipo: "dinosaurio", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "Allosaurus", wordEn: "Allosaurus", domain: "biologia_animal", taxonomy: ["biologia_animal", "dinosaurios", "concepto"], distinctiveTrait: "Depredador de gran tamaño", traits: { tipo: "dinosaurio", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "arácnido", wordEn: "arachnid", domain: "biologia_animal", taxonomy: ["biologia_animal", "insectos", "concepto"], distinctiveTrait: "ocho patas", traits: { tipo: "insecto_o_artropodo", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "milpiés", wordEn: "millipede", domain: "biologia_animal", taxonomy: ["biologia_animal", "insectos", "concepto"], distinctiveTrait: "muchas patas", traits: { tipo: "insecto_o_artropodo", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "escarabajo rinoceronte", wordEn: "rhinoceros beetle", domain: "biologia_animal", taxonomy: ["biologia_animal", "insectos", "concepto"], distinctiveTrait: "cuerno grande", traits: { tipo: "insecto_o_artropodo", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "saltamontes de espiga", wordEn: "katydid", domain: "biologia_animal", taxonomy: ["biologia_animal", "insectos", "concepto"], distinctiveTrait: "alas largas", traits: { tipo: "insecto_o_artropodo", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "polilla de la seda", wordEn: "silk moth", domain: "biologia_animal", taxonomy: ["biologia_animal", "insectos", "concepto"], distinctiveTrait: "seda suave", traits: { tipo: "insecto_o_artropodo", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "escorpión de mar", wordEn: "sea scorpion", domain: "biologia_animal", taxonomy: ["biologia_animal", "insectos", "concepto"], distinctiveTrait: "aguijón venenoso", traits: { tipo: "insecto_o_artropodo", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "grillo", wordEn: "cricket", domain: "biologia_animal", taxonomy: ["biologia_animal", "insectos", "concepto"], distinctiveTrait: "canto nocturno", traits: { tipo: "insecto_o_artropodo", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "tortuga marina", wordEn: "sea turtle", domain: "biologia_animal", taxonomy: ["biologia_animal", "vida_marina", "concepto"], distinctiveTrait: "caparazón protector", traits: { tipo: "animal_marino", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "Ofiuro", wordEn: "brittle star", domain: "biologia_animal", taxonomy: ["biologia_animal", "vida_marina", "concepto"], distinctiveTrait: "brazos delgados", traits: { tipo: "animal_marino", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "gusano de mar", wordEn: "sea worm", domain: "biologia_animal", taxonomy: ["biologia_animal", "vida_marina", "concepto"], distinctiveTrait: "cuerpo alargado", traits: { tipo: "animal_marino", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "caracol de mar", wordEn: "sea snail", domain: "biologia_animal", taxonomy: ["biologia_animal", "vida_marina", "concepto"], distinctiveTrait: "concha protectora", traits: { tipo: "animal_marino", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "Hércules", wordEn: "Hercules", domain: "ciencia", taxonomy: ["ciencia", "astronomia", "concepto"], distinctiveTrait: "Héroe mitológico", traits: { tipo: "constelacion", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "Jorge Luis Borges", wordEn: "Jorge Luis Borges", domain: "personajes", taxonomy: ["personajes", "literatura", "concepto"], distinctiveTrait: "Padre del realismo mágico", traits: { tipo: "persona", cargo: "escritor", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "Fiódor Dostoyevski", wordEn: "Fyodor Dostoevsky", domain: "personajes", taxonomy: ["personajes", "literatura", "concepto"], distinctiveTrait: "Padre de la literatura rusa", traits: { tipo: "persona", cargo: "escritor", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "Vladimir Nabokov", wordEn: "Vladimir Nabokov", domain: "personajes", taxonomy: ["personajes", "literatura", "concepto"], distinctiveTrait: "Novelas de época", traits: { tipo: "persona", cargo: "escritor", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "Isaac Asimov", wordEn: "Isaac Asimov", domain: "personajes", taxonomy: ["personajes", "literatura", "concepto"], distinctiveTrait: "Padre de la ciencia ficción", traits: { tipo: "persona", cargo: "escritor", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "Ray Bradbury", wordEn: "Ray Bradbury", domain: "personajes", taxonomy: ["personajes", "literatura", "concepto"], distinctiveTrait: "Padre de la ciencia ficción", traits: { tipo: "persona", cargo: "escritor", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "Harper Lee", wordEn: "Harper Lee", domain: "personajes", taxonomy: ["personajes", "literatura", "concepto"], distinctiveTrait: "Novelas de época", traits: { tipo: "persona", cargo: "escritor", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "Ernest Hemingway", wordEn: "Ernest Hemingway", domain: "personajes", taxonomy: ["personajes", "literatura", "concepto"], distinctiveTrait: "Novelas de época", traits: { tipo: "persona", cargo: "escritor", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "George Orwell", wordEn: "George Orwell", domain: "personajes", taxonomy: ["personajes", "literatura", "concepto"], distinctiveTrait: "Novelas de época", traits: { tipo: "persona", cargo: "escritor", lema: true }, partOfSpeech: "sustantivo" as const },
+  ],
+
 ];
