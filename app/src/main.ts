@@ -31,6 +31,7 @@ import type { VxRagStub } from "./ui/components/ragStub";
 import "./ui/components/ragStub";
 import type { VxBootSplash } from "./ui/components/bootSplash";
 import "./ui/components/bootSplash";
+import type { VxMathArena } from "./ui/components/mathArena";
 import "./ui/components/mathArena";
 import type { VxSurfaceToggle, SurfaceChangeDetail, Surface } from "./ui/components/surfaceToggle";
 import "./ui/components/surfaceToggle";
@@ -344,7 +345,8 @@ async function main() {
     consolePaneEl.replaceChildren();
 
     if (mode === "avanzado") {
-      sidePaneEl.appendChild(document.createElement("vx-math-arena"));
+      mathArenaEl = document.createElement("vx-math-arena") as VxMathArena;
+      sidePaneEl.appendChild(mathArenaEl);
       if (!matchMedia(DESKTOP_AVANZADO).matches) {
         stageEl.dataset.surface = mobileSurface;
         if (!surfaceToggle.isConnected) stageEl.appendChild(surfaceToggle);
@@ -352,9 +354,12 @@ async function main() {
         surfaceToggle.remove();
         delete stageEl.dataset.surface;
       }
-    } else if (surfaceToggle.isConnected) {
-      surfaceToggle.remove();
-      delete stageEl.dataset.surface;
+    } else {
+      mathArenaEl = null; // sidePaneEl.replaceChildren() de arriba ya lo quitó del DOM
+      if (surfaceToggle.isConnected) {
+        surfaceToggle.remove();
+        delete stageEl.dataset.surface;
+      }
     }
   }
 
@@ -460,6 +465,11 @@ async function main() {
     onCountChange: (n) => {
       liveTokenCount = n;
       renderCountLabel();
+      // P7 Cosine (DOCs/03 §4.3 "reuse live vectors"): Math Arena usa
+      // los MISMOS embeddings reales de tokenMode, no pide otro embed
+      // nuevo — se refresca cada vez que la lista de tokens vivos
+      // cambia (mismo momento en que ya cambia el conteo del HUD).
+      mathArenaEl?.setLiveTokens(tokenMode.getLiveTokens());
     },
     onFocusPoint: flyTo,
   });
@@ -635,6 +645,7 @@ async function main() {
   }
 
   let composer: VxComposer | null = null;
+  let mathArenaEl: VxMathArena | null = null;
   let tokenStrip: VxTokenStrip | null = null;
   let currentMode: Mode = initialMode;
 

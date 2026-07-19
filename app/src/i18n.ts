@@ -178,6 +178,20 @@ const STRINGS = {
   },
   surfaceCube: { es: "Cubo", en: "Cube" },
   surfaceMath: { es: "Matemáticas", en: "Math" },
+  // --- P7: vx-math-arena, pestaña Cosine (primera rebanada real) ---
+  mathArenaTabCosine: { es: "Coseno", en: "Cosine" },
+  mathArenaCosineEmpty: {
+    es: "Escribe una frase (Avanzado) para tener al menos dos embeddings vivos que comparar.",
+    en: "Type a phrase (Avanzado) to have at least two live embeddings to compare.",
+  },
+  mathArenaCosineIntro: {
+    es: "Los mismos embeddings bge-m3 reales de tu frase (ℝ¹⁰²⁴) — elige dos y compara su similitud de coseno real, con la fórmula y los números de verdad.",
+    en: "The same real bge-m3 embeddings from your phrase (ℝ¹⁰²⁴) — pick two and compare their real cosine similarity, with the actual formula and numbers.",
+  },
+  mathArenaCosineFootnote: {
+    es: "A y B se muestran truncados a 6 de 1024 dimensiones para que quepan en pantalla — el cálculo usa el vector completo.",
+    en: "A and B are shown truncated to 6 of 1024 dimensions to fit on screen — the calculation uses the full vector.",
+  },
   pipelineDockText: { es: "1 · Texto", en: "1 · Text" },
   pipelineDockTokens: { es: "2 · Tokens + IDs", en: "2 · Tokens + IDs" },
   // DOCs/10-intermedio-licenciatura.md: currículo de licenciatura, no

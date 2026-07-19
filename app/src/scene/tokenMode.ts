@@ -45,11 +45,21 @@ export interface TokenModeOptions {
   onFocusPoint?: (worldPos: THREE.Vector3) => void;
 }
 
+export interface LiveToken {
+  label: string;
+  kind: "bge" | "gpt" | "frase";
+  vector: number[];
+}
+
 export interface TokenMode {
   setEnabled(on: boolean): void;
   /** Texto actual del panel — con debounce interno (~600ms). */
   setText(text: string): void;
   clear(): void;
+  /** Snapshot de los embeddings vivos ahora mismo — para Math Arena
+   * (P7, pestaña Cosine): reusar los MISMOS vectores reales en vez de
+   * pedir otros nuevos (DOCs/03 §4.3 "reuse live vectors"). */
+  getLiveTokens(): LiveToken[];
 }
 
 type Kind = "bge" | "gpt" | "frase";
@@ -475,5 +485,13 @@ export function setupTokenMode(options: TokenModeOptions): TokenMode {
     }
   });
 
-  return { setEnabled, setText, clear };
+  function getLiveTokens(): LiveToken[] {
+    return particles.map((p) => ({
+      label: p.kind === "frase" ? t("tokenPhraseLabel", getStoredLang()) : p.fragment,
+      kind: p.kind,
+      vector: p.vector,
+    }));
+  }
+
+  return { setEnabled, setText, clear, getLiveTokens };
 }

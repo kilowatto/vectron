@@ -27,14 +27,27 @@
   color: var(--dim);
   background: rgba(231, 226, 214, 0.06);
   border: 1px solid rgba(231, 226, 214, 0.1);
+  font-family: inherit;
+  cursor: pointer;
 }
 
-/* Sólo la primera pestaña "activa" para dar la sensación de tira
-   permanente ya viva — ninguna es clicable todavía, el contenido real
-   (heatmaps/KaTeX/sliders) es P7. */
+.tab:hover {
+  color: var(--ink);
+}
+
+/* P7: Cosine ya es clicable/real — el resto sigue siendo el
+   placeholder hasta su turno (orden explícito del doc: Cosine+PCA
+   primero, reusando vectores vivos, → Softmax → Attention → Sampling). */
 .tab.active {
   color: var(--accent);
   border-color: rgba(217, 138, 52, 0.4);
+}
+
+.panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .placeholder {
@@ -56,4 +69,128 @@
   font-size: 10.5px;
   color: var(--dim);
   line-height: 1.5;
+}
+
+.empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--dim);
+  text-align: center;
+  padding: 0 12px;
+}
+
+.intro {
+  font-size: 11px;
+  color: var(--dim);
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+
+.pickers {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.pickers select {
+  flex: 1;
+  min-width: 0;
+  background: rgba(231, 226, 214, 0.06);
+  border: 1px solid rgba(231, 226, 214, 0.16);
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 12px;
+}
+
+.vs {
+  color: var(--dim);
+  flex-shrink: 0;
+}
+
+.formula {
+  font-size: 12px;
+  color: var(--ink);
+  background: rgba(231, 226, 214, 0.05);
+  border: 1px solid rgba(231, 226, 214, 0.12);
+  border-radius: 8px;
+  padding: 12px 14px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.formula b {
+  color: var(--accent);
+  font-size: 14px;
+}
+
+.bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.bar {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(231, 226, 214, 0.1);
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4fb8c4, var(--accent));
+  border-radius: 4px;
+  transition: width 0.2s ease;
+}
+
+.bar-value {
+  font-size: 12px;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  width: 56px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.vectors {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vec-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 10px;
+}
+
+.vec-label {
+  color: var(--dim);
+  letter-spacing: 0.03em;
+}
+
+.vec-preview {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.footnote {
+  margin-top: 14px;
+  font-size: 9.5px;
+  color: var(--dim);
+  opacity: 0.75;
+  font-style: italic;
+  line-height: 1.4;
 }
