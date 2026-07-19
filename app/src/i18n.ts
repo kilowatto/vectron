@@ -180,13 +180,80 @@ const STRINGS = {
   surfaceMath: { es: "Matemáticas", en: "Math" },
   pipelineDockText: { es: "1 · Texto", en: "1 · Text" },
   pipelineDockTokens: { es: "2 · Tokens + IDs", en: "2 · Tokens + IDs" },
-  pipelineDockEmbedding: {
-    es: "3 · Cada token se embebe en ℝ¹⁰²⁴ (bge-m3, números reales)",
-    en: "3 · Each token embeds into ℝ¹⁰²⁴ (bge-m3, real numbers)",
+  // DOCs/10-intermedio-licenciatura.md: currículo de licenciatura, no
+  // el paper de Attention — vocabulario correcto, sin álgebra.
+  pipelineDockIntro: {
+    es: "1-2 · Tu texto se corta en tokens con ID real (arriba). 3 · Cada token se embebe en ℝ¹⁰²⁴ (bge-m3, números reales).",
+    en: "1-2 · Your text is cut into tokens with a real ID (above). 3 · Each token embeds into ℝ¹⁰²⁴ (bge-m3, real numbers).",
   },
   pipelineDockNeighbors: {
     es: "4 · Fija una partícula en el cubo para ver sus vecinos reales",
     en: "4 · Pin a particle in the cube to see its real neighbors",
+  },
+  failureModesNote: {
+    es: "G · Fallos reales: la misma palabra puede ser dos conceptos distintos (polisemia) — prueba a escribir \"banco\" o \"hoja\" arriba y mira dos partículas separadas encenderse. Cuando los vecinos son débiles, la respuesta puede \"sonar bien\" y estar mal — eso es alucinación.",
+    en: "G · Real failure modes: the same word can be two different concepts (polysemy) — try typing \"banco\" or \"hoja\" above and watch two separate particles light up. When neighbors are weak, an answer can \"sound right\" and be wrong — that's hallucination.",
+  },
+  // --- Módulo E: vx-context-lab (DOCs/12-context-window-lab.md) ---
+  contextLabLabel: { es: "E · laboratorio de ventana de contexto", en: "E · context window lab" },
+  contextLabContract: {
+    es: "La ventana de contexto es todo lo que el modelo puede ver a la vez para responder: tu mensaje, el historial, herramientas… y su propia respuesta. No es su memoria para siempre. No es lo que aprendió en el entrenamiento.",
+    en: "The context window is everything the model can see at once to answer: your message, history, tools… and its own reply. It's not permanent memory. It's not what it learned during training.",
+  },
+  contextLabLabWindow: {
+    es: "ventana de laboratorio (500) — artificial, para que sientas el límite",
+    en: "lab window (500) — artificial so you can feel the limit",
+  },
+  contextLabPasteLong: { es: "pegar texto largo", en: "paste long text" },
+  contextLabReset: { es: "reiniciar", en: "reset" },
+  contextLabOverflowNote: {
+    es: "Estos tokens ya no entran. El modelo no los ve.",
+    en: "These tokens no longer fit. The model doesn't see them.",
+  },
+  contextLabEmpty: { es: "escribe algo arriba para llenar la mesa", en: "type something above to fill the desk" },
+  contextLabCompareHead: { es: "comparar escritorios reales (≈ jul 2026)", en: "compare real desks (≈ jul 2026)" },
+  contextLabModelLab: { es: "lab (aquí)", en: "lab (here)" },
+  contextLabModelGpt5: { es: "GPT-5 (familia)", en: "GPT-5 (family)" },
+  contextLabModelClaude: { es: "Claude Sonnet 5", en: "Claude Sonnet 5" },
+  contextLabTermWindow: { es: "ventana de contexto", en: "context window" },
+  contextLabTermWindowDesc: {
+    es: "mesa de trabajo de esta conversación",
+    en: "the working desk for this conversation",
+  },
+  contextLabTermTraining: { es: "conocimiento del entrenamiento", en: "training knowledge" },
+  contextLabTermTrainingDesc: {
+    es: "lo aprendido al entrenar — no cabe \"todo el mundo\" en la ventana",
+    en: "what it learned during training — the window can't hold \"everything\"",
+  },
+  contextLabTermRag: { es: "memoria / RAG / archivos", en: "memory / RAG / files" },
+  contextLabTermRagDesc: {
+    es: "guardar fuera y traer trozos a la mesa (ver Módulo F)",
+    en: "store elsewhere and bring pieces to the desk (see Module F)",
+  },
+  contextLabFootnote: {
+    es: "bge-m3 (el embedder real que ya usa el cubo) soporta hasta 8 192 tokens — nota aparte, no es el número de arriba.",
+    en: "bge-m3 (the real embedder the cube already uses) supports up to 8,192 tokens — a separate footnote, not the number above.",
+  },
+  nextTokenLabel: { es: "C · intuición del siguiente token", en: "C · next-token intuition" },
+  nextTokenDeclared: { es: "vocabulario de ejemplo, declarado", en: "demo vocabulary, declared" },
+  nextTokenTemp: { es: "temperatura", en: "temperature" },
+  attentionArcsLabel: { es: "D · cómo se miran los tokens", en: "D · how tokens attend" },
+  attentionArcsDeclared: { es: "pesos ilustrativos, declarados", en: "illustrative weights, declared" },
+  attentionArcsEmpty: { es: "escribe algo arriba para ver los arcos", en: "type something above to see the arcs" },
+  ragLabel: { es: "F · RAG: pregunta → chunks → respuesta", en: "F · RAG: question → chunks → answer" },
+  ragDeclared: { es: "recuperación real, respuesta de ejemplo", en: "real retrieval, demo answer" },
+  ragPlaceholder: { es: "haz una pregunta…", en: "ask a question…" },
+  ragAsk: { es: "preguntar", en: "ask" },
+  ragRetrieving: { es: "buscando vecinos reales…", en: "searching real neighbors…" },
+  ragError: { es: "no se pudo calcular el embedding", en: "couldn't compute the embedding" },
+  ragNoChunks: { es: "sin vecinos suficientemente cercanos", en: "no sufficiently close neighbors" },
+  ragAnswerDeclared: {
+    es: "sin un modelo generador conectado todavía (ver P8) — esto es una plantilla sobre los conceptos de arriba, de verdad recuperados, no una respuesta generada.",
+    en: "no generator model connected yet (see P8) — this is a template over the concepts above, really retrieved, not a generated answer.",
+  },
+  ragAnswerPrefix: {
+    es: "Lo más relacionado con tu pregunta en el dataset es:",
+    en: "The most related things to your question in the dataset are:",
   },
 
   // --- P4: vx-kind-legend ---

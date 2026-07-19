@@ -21,6 +21,14 @@ import type { VxZoomRail } from "./ui/components/zoomRail";
 import "./ui/components/zoomRail";
 import type { VxChromeLegend, DomainIsolateDetail } from "./ui/components/chromeLegend";
 import "./ui/components/chromeLegend";
+import type { VxContextLab } from "./ui/components/contextLab";
+import "./ui/components/contextLab";
+import type { VxNextTokenBars } from "./ui/components/nextTokenBars";
+import "./ui/components/nextTokenBars";
+import type { VxAttentionArcs } from "./ui/components/attentionArcs";
+import "./ui/components/attentionArcs";
+import type { VxRagStub } from "./ui/components/ragStub";
+import "./ui/components/ragStub";
 import type { VxBootSplash } from "./ui/components/bootSplash";
 import "./ui/components/bootSplash";
 import "./ui/components/mathArena";
@@ -570,10 +578,49 @@ async function main() {
       if (mode === "intermedio") {
         target.appendChild(composer);
         target.appendChild(strip);
+
+        // Currículo de licenciatura en IA (DOCs/10-intermedio-licenciatura.md)
+        // — Módulos A-B ya viven arriba (composer/strip = A; la tarjeta
+        // fijada con coseno real = B); esta nota es sólo el recordatorio
+        // de pipeline. C-G son componentes nuevos, cada uno declara si
+        // sus números son reales o ilustrativos (ver comentarios en cada
+        // archivo — no todo puede serlo sin un modelo generador real).
         const note = document.createElement("div");
         note.className = "dock-note";
-        note.innerHTML = `<p>${t("pipelineDockEmbedding", lang)}</p><p>${t("pipelineDockNeighbors", lang)}</p>`;
+        note.innerHTML = `<p>${t("pipelineDockIntro", lang)}</p><p>${t("pipelineDockNeighbors", lang)}</p>`;
         target.appendChild(note);
+
+        const nextTokenBars = document.createElement("vx-next-token-bars") as VxNextTokenBars;
+        target.appendChild(nextTokenBars);
+
+        const attentionArcs = document.createElement("vx-attention-arcs") as VxAttentionArcs;
+        target.appendChild(attentionArcs);
+
+        const contextLab = document.createElement("vx-context-lab") as VxContextLab;
+        target.appendChild(contextLab);
+
+        const ragStub = document.createElement("vx-rag-stub") as VxRagStub;
+        ragStub.onConceptFocus((ids) => field.setSearchHighlights(ids));
+        ragStub.setConceptLookup((id) => field.concepts.find((c) => c.id === id));
+        target.appendChild(ragStub);
+
+        const failureNote = document.createElement("div");
+        failureNote.className = "dock-note";
+        failureNote.innerHTML = `<p>${t("failureModesNote", lang)}</p>`;
+        target.appendChild(failureNote);
+
+        // Vincula los módulos nuevos a lo que ya se escribe — mismo
+        // evento que arriba alimenta highlights/chain/tokenMode, sin
+        // duplicar esa lógica (dos listeners en el mismo evento es
+        // normal en DOM, no hay problema de orden entre ellos).
+        composer.addEventListener("vx-tokens-change", (event) => {
+          const { tokens, text } = (event as CustomEvent<TokensChangeDetail>).detail;
+          nextTokenBars.setText(text);
+          attentionArcs.setTokens(tokens.map((tok) => tok.text));
+          void tokenizeBGE(text).then((bgeTokens) =>
+            contextLab.setTokens(bgeTokens.map((tok) => tok.text)),
+          );
+        });
       } else {
         target.appendChild(strip);
         target.appendChild(composer);

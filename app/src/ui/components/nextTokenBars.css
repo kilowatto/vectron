@@ -1,0 +1,98 @@
+:host {
+  display: block;
+  font-family: var(--font-mono);
+  padding: 10px 16px;
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+
+.label {
+  font-size: 10.5px;
+  color: var(--dim);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.declared {
+  font-size: 9px;
+  color: var(--dim);
+  opacity: 0.7;
+  font-style: italic;
+}
+
+.bars {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.word {
+  width: 52px;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.track {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(231, 226, 214, 0.1);
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  background: #39ff6a;
+  border-radius: 4px;
+  transition: width 0.15s ease;
+}
+
+.pct {
+  width: 40px;
+  flex-shrink: 0;
+  text-align: right;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+}
+
+.temp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.temp-label {
+  font-size: 10px;
+  color: var(--dim);
+}
+
+.temp-row input[type="range"] {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+.temp-value {
+  width: 24px;
+  text-align: right;
+  font-size: 10.5px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}

@@ -2237,6 +2237,40 @@ export const SEED_CONCEPTS: SeedConcept[] = [
     const [es, en] = pair.split(",");
     return { wordEs: es, wordEn: en, domain: "hogar", taxonomy: ["hogar", "sala"], traits: { tipo: "sala" } };
   }),
+  // Polisemia real (Módulo G, DOCs/10-intermedio-licenciatura.md): misma
+  // palabra española, dos conceptos con embedding propio (wordEn
+  // distinto a propósito) — "banco" ya existe como institución
+  // financiera (economía_y_negocios) más arriba; esta es la OTRA
+  // acepción, mueble. "hoja" no existía en ningún sentido — se agregan
+  // sus dos acepciones más comunes a la vez para que el ejemplo
+  // realmente muestre dos partículas separadas al escribir la palabra.
+  {
+    wordEs: "banco",
+    wordEn: "bench (furniture)",
+    domain: "hogar",
+    taxonomy: ["hogar", "sala"],
+    distinctiveTrait: "polisemia",
+    traits: { tipo: "sala" },
+    partOfSpeech: "sustantivo" as const,
+  },
+  {
+    wordEs: "hoja",
+    wordEn: "leaf (plant)",
+    domain: "biologia_vegetal",
+    taxonomy: ["biologia_vegetal", "concepto"],
+    distinctiveTrait: "polisemia",
+    traits: { tipo: "planta" },
+    partOfSpeech: "sustantivo" as const,
+  },
+  {
+    wordEs: "hoja",
+    wordEn: "sheet of paper",
+    domain: "hogar",
+    taxonomy: ["hogar", "oficina"],
+    distinctiveTrait: "polisemia",
+    traits: { tipo: "oficina" },
+    partOfSpeech: "sustantivo" as const,
+  },
   // --- Hogar: comedor ---
   ...[
     "plato,plate", "vaso,glass", "tenedor,fork", "cuchara,spoon", "cuchillo,knife",

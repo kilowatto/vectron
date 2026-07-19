@@ -1,0 +1,211 @@
+:host {
+  display: block;
+  font-family: var(--font-mono);
+  padding: 10px 16px;
+}
+
+.head {
+  margin-bottom: 4px;
+}
+
+.label {
+  font-size: 10.5px;
+  color: var(--dim);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.contract {
+  font-size: 10.5px;
+  color: var(--dim);
+  line-height: 1.5;
+  margin: 0 0 10px;
+}
+
+.meter-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+.meter-title {
+  font-size: 10.5px;
+  color: var(--ink);
+}
+
+.count {
+  font-size: 10.5px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.track {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(231, 226, 214, 0.12);
+  overflow: hidden;
+}
+
+.bar {
+  height: 100%;
+  width: 0%;
+  background: #39ff6a;
+  border-radius: 3px;
+  transition: width 0.2s ease;
+}
+
+.bar.amber {
+  background: #d9a534;
+}
+
+.bar.red {
+  background: #ff6b4a;
+}
+
+.tape {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 8px;
+  max-height: 80px;
+  overflow: hidden;
+}
+
+.chip {
+  font-size: 9.5px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(57, 255, 106, 0.1);
+  border: 1px solid rgba(57, 255, 106, 0.25);
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.chip.dim {
+  background: rgba(231, 226, 214, 0.04);
+  border-color: rgba(231, 226, 214, 0.1);
+  color: var(--dim);
+  text-decoration: line-through;
+  opacity: 0.55;
+}
+
+.gap {
+  font-size: 9.5px;
+  color: var(--dim);
+  padding: 2px 4px;
+  align-self: center;
+}
+
+.empty {
+  font-size: 10px;
+  color: var(--dim);
+  opacity: 0.6;
+}
+
+.overflow-note {
+  margin-top: 6px;
+  font-size: 10px;
+  color: #ff6b4a;
+  line-height: 1.4;
+}
+
+.actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+}
+
+.actions button {
+  background: none;
+  border: 1px solid rgba(231, 226, 214, 0.2);
+  border-radius: 6px;
+  padding: 5px 10px;
+  color: var(--dim);
+  font-family: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.actions button:hover {
+  color: var(--ink);
+  border-color: rgba(231, 226, 214, 0.4);
+}
+
+.actions .paste:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.compare-head {
+  margin-top: 14px;
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.compare {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.compare-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+}
+
+.compare-label {
+  width: 88px;
+  flex-shrink: 0;
+  color: var(--dim);
+}
+
+.compare-track {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(231, 226, 214, 0.08);
+  overflow: hidden;
+}
+
+.compare-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #4fb8c4, #22c7ff);
+}
+
+.compare-value {
+  width: 62px;
+  flex-shrink: 0;
+  text-align: right;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  font-size: 9.5px;
+}
+
+.memory-callout {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--dim);
+  line-height: 1.4;
+}
+
+.memory-callout b {
+  color: var(--ink);
+}
+
+.footnote {
+  margin-top: 10px;
+  font-size: 9px;
+  color: var(--dim);
+  opacity: 0.65;
+  font-style: italic;
+}
