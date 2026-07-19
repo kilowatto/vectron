@@ -195,6 +195,17 @@ body {
     position: fixed;
     inset: 0;
     z-index: 60;
+    /* Bug real reportado en vivo con captura ("así se ve en móvil"):
+       a diferencia de la versión de escritorio (ver arriba, regla de
+       min-width:1024px), este panel nunca tuvo fondo propio — el
+       cubo/la Cámara de Contexto seguían activos DETRÁS (mismo motor
+       3D, nunca pausado) y se veían a través como un lavado blanco
+       que volvía illegible el texto encima. Mismo tono que la versión
+       de escritorio, más opaco a propósito: en escritorio el panel es
+       una franja angosta junto al cubo (algo de mezcla ahí se siente
+       intencional); aquí es TODA la pantalla, tiene que leerse solo. */
+    background: rgba(8, 10, 13, 0.97);
+    overflow-y: auto;
   }
 }
 
