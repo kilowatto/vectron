@@ -29,17 +29,18 @@ We now have more product surface than “add words + split panel”:
 ### Dependency graph
 
 ```
-P0  funcion POS + phrase gaps + coverage script + MODE_POS matrix
-P1  composer / token-strip split (+ i18n)
-P2  mode morph (≤1s, random stagger)     ← needs P0 so E/L sets are real
-P3  densify ≥4k verbs + ≥4k adjs (lemmas; forms in D1/KV) ← needs P2 · see `08`
-P4  zoom rail + kind legend + color key
-P5  boot splash + weighted loader + cache
-P6  three shells (P / I / A layouts)
-P7  Math Arena slices (Cosine→PCA→Softmax→Attention)
-P8  RAG lite (WebLLM)
-P9  grow toward 15k (coverage stays green)
-P10 OSS/CI (phrase coverage in CI, WebGL smoke)
+P0    funcion POS + phrase gaps + coverage script + MODE_POS matrix
+P1    composer / token-strip split (+ i18n)
+P2    mode morph (≤1s, random stagger)     ← needs P0 so E/L sets are real
+P3    densify ≥4k verbs + ≥4k adjs (lemmas; forms in D1/KV) ← needs P2 · see `08`
+P4    zoom rail + kind legend + color key
+P5    boot splash + weighted loader + cache
+P6    three shells (P / I / A layouts)
+P6.5  Intermedio licenciatura curriculum + chrome-legend consolidation ← see `10`/`11`/`12`, moved AHEAD of P7 (2026-07-18 decision)
+P7    Math Arena slices (Cosine→PCA→Softmax→Attention)
+P8    RAG lite (WebLLM)
+P9    grow toward 15k (coverage stays green)
+P10   OSS/CI (phrase coverage in CI, WebGL smoke)
 ```
 
 Parallelism allowed:
@@ -62,6 +63,7 @@ Parallelism allowed:
 | **P4** | Readable chrome | Zoom rail; kind glyphs; domain color peek — discrete, 3-mode copy | `05` |
 | **P5** | Calm cold start | Splash + progress; tokenizers prefetched; IDB/ETag cache | `03` §6 |
 | **P6** | Three apps | Distinct shells under Principiante / Intermedio / Avanzado names | `02`/`03` |
+| **P6.5** | Intermedio licenciatura | Chrome-legend merge (no more floating-over-dock bug) + Modules A-G (tokens→coseno→next-token→arcs→context lab→RAG stub→failure modes) | `10`/`11`/`12` |
 | **P7** | Math Arena | Permanent lab; Cosine first → … → Attention; mobile Cubo\|Matemáticas | `03` |
 | **P8** | RAG | Question → neighbors → local answer | `02` |
 | **P9** | Scale | Toward 15k; every new hero phrase passes coverage | — |
@@ -163,6 +165,53 @@ Principiante wonder / Intermedio pipeline dock / Avanzado cube|math frame (math 
 
 ---
 
+### P6.5 — Intermedio licenciatura curriculum (moved ahead of P7)
+
+Decisión 2026-07-18: este trabajo pasa a ser prioridad sobre Math
+Arena — el currículo de Intermedio no depende de P7, puede ir primero
+sin bloquear nada. Ver [`10-intermedio-licenciatura.md`](./10-intermedio-licenciatura.md) (currículo),
+[`11-screen-specs.md`](./11-screen-specs.md) (auditoría de pantallas/chrome) y
+[`12-context-window-lab.md`](./12-context-window-lab.md) (evolución del Módulo E).
+
+**Fase 1 — chrome/leyendas (DONE):**
+- `vx-chrome-legend` fusiona `vx-color-key` + `vx-kind-legend` (un solo
+  pill colapsable, dominios+tipos en el mismo sheet).
+- Montaje contextual por shell: Intermedio ≥1024px al PIE del dock
+  (`#side-pane`, flujo normal); cualquier otro shell flota sobre
+  `#cube-pane` únicamente (nunca sobre Math Arena ni el dock).
+- Móvil ≤640px ya no oculta la leyenda (`display:none`) — pill
+  colapsado, mismo criterio que desktop.
+- `vx-zoom-rail` y `vx-concept-card` montados dentro de `#cube-pane`
+  (`position:absolute`, no fixed al viewport) — el card fijado ya no
+  puede terminar sobre el dock/Math Arena en ningún shell.
+- z-index alineado al ledger de `11` §4.
+
+**Fase 2 — currículo A-G (DONE, primera pasada):**
+- A (tokens) y B (coseno) — ya existían (composer/strip + tarjeta con
+  vecinos reales); no necesitaron componente nuevo.
+- C `vx-next-token-bars` — softmax real sobre logits de vocabulario de
+  demostración fijo (declarado); slider de temperatura funcional.
+- D `vx-attention-arcs` — tira 2D (canvas) de tokens reales con arcos
+  de peso ilustrativo determinista (declarado, no heatmap PhD — eso
+  sigue siendo exclusivo de Avanzado/Math Arena).
+- E `vx-context-lab` (evoluciona el `vx-context-meter` inicial per
+  `12`) — ventana de laboratorio de 500 tokens ARTIFICIAL con cinta
+  que se apaga al desbordar, botón de demo, comparador log contra
+  GPT-5 (~400k) / Claude Sonnet 5 (1M) reales; bge-m3 (8 192, real)
+  sólo como nota al pie.
+- F `vx-rag-stub` — recuperación 100% real (embedTexts + Vectorize),
+  respuesta declarada como plantilla (sin generador conectado, P8).
+- G — dos pares de polisemia reales agregados al dataset (`banco`,
+  `hoja`) + nota explicativa; pendiente del reseed combinado para
+  tener embeddings/coords propios.
+
+**Pendiente:** verificación mobile real (el entorno de pruebas
+disponible no pudo forzar un viewport angosto de verdad); pulir copy
+ES/EN de los módulos nuevos con más uso; Módulo F con generador real
+cuando WebLLM (P8) esté listo.
+
+---
+
 ### P7 — Math Arena
 
 Slices: Cosine → PCA → Softmax → Attention → Sampling. Mobile: Cubo | Matemáticas. No Σ hide-all toggle.
@@ -228,6 +277,7 @@ Ya no basta “poner palabras”. El orden tiene que respetar: matriz POS, frase
 | **P4** | Chrome legible | Zoom + tipos + colores |
 | **P5** | Boot calmado | Splash + cache |
 | **P6** | Tres apps | Layouts distintos P/I/A |
+| **P6.5** | Licenciatura Intermedio | Leyendas fusionadas + módulos A-G (`10`/`11`/`12`), antes de P7 |
 | **P7** | Math Arena | Coseno→…→Attention |
 | **P8** | RAG | Pregunta→vecinos→respuesta |
 | **P9** | 15k | Con cobertura verde |
