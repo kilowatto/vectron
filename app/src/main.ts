@@ -37,6 +37,8 @@ import type { VxBlockDiagram } from "./ui/components/blockDiagram";
 import "./ui/components/blockDiagram";
 import type { VxRagStub } from "./ui/components/ragStub";
 import "./ui/components/ragStub";
+import type { VxRagDocs } from "./ui/components/ragDocs";
+import "./ui/components/ragDocs";
 import type {
   VxIntermediateSurface,
   IntermediateSurface,
@@ -825,6 +827,28 @@ async function main() {
       });
     });
     ragPanel.appendChild(ragStub);
+
+    // Resto del checklist de Fase 5 (DOCs/13 §19: "Prepared docs.
+    // Archive/chunk visualization."): a diferencia de ragStub (que
+    // recupera vecinos del dataset del cubo), esto trocea y embebe de
+    // verdad un documento EXTERNO preparado — el journey que dibuja el
+    // doc (archivo → fragmentos → recuperar → Cámara), no otra copia
+    // del Módulo F.
+    const ragDocs = document.createElement("vx-rag-docs") as VxRagDocs;
+    ragDocs.onRetrieved((chunks) => {
+      const text = chunks.join(" ");
+      void tokenizeBGE(text).then((bgeTokens) => {
+        contextController.append({
+          id: `ragdoc-${demoTurnIndex++}`,
+          role: "retrieval",
+          text,
+          tokens: bgeTokens.map((tok) => tok.text),
+          createdAt: demoTurnIndex,
+        });
+      });
+    });
+    ragPanel.appendChild(ragDocs);
+
     renderRecoverList();
     ragPanel.appendChild(recoverEl);
 

@@ -359,6 +359,21 @@ const STRINGS = {
     es: "→ enviado a la Cámara de Contexto (Transformer · Contexto) como turno \"retrieval\" — ocupa espacio real en la ventana, no es gratis.",
     en: "→ sent to the Context Chamber (Transformer · Context) as a \"retrieval\" turn — it takes up real space in the window, it isn't free.",
   },
+  // --- Fase 5 (resto del checklist): documento preparado + archivo de
+  // fragmentos reales, en vez de recuperar sólo del dataset del cubo ---
+  ragDocsHeading: { es: "documento preparado", en: "prepared document" },
+  ragDocsIntro: {
+    es: "Elige un documento externo, tocéalo en fragmentos y embébelos de verdad (bge-m3) — luego pregunta: la recuperación compara tu pregunta contra cada fragmento con coseno real, no contra el dataset del cubo.",
+    en: "Pick an external document, chunk it, and really embed each chunk (bge-m3) — then ask: retrieval compares your question against every chunk with real cosine, not against the cube's dataset.",
+  },
+  ragDocSelectCube: { es: "sobre el cubo de significado", en: "about the meaning cube" },
+  ragDocSelectRhino: { es: "el rinoceronte naranja", en: "the orange rhinoceros" },
+  ragDocsChunkBtn: { es: "trocear y embeber", en: "chunk & embed" },
+  ragDocsChunking: { es: "troceando y embebiendo de verdad…", en: "chunking and really embedding…" },
+  ragDocsChunksHeading: { es: "archivo (fragmentos reales)", en: "archive (real chunks)" },
+  ragDocsAskPlaceholder: { es: "pregunta sobre el documento…", en: "ask about the document…" },
+  ragDocsNoChunks: { es: "trocea un documento primero", en: "chunk a document first" },
+  ragDocsTopChunks: { es: "fragmentos recuperados (coseno real)", en: "retrieved chunks (real cosine)" },
 
   // --- P4: vx-kind-legend ---
   kindLegendNotable: { es: "luz grande = destacado", en: "big light = notable" },
