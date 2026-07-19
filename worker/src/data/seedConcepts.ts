@@ -13671,4 +13671,23 @@ export const SEED_CONCEPTS: SeedConcept[] = [
     { wordEs: "George Orwell", wordEn: "George Orwell", domain: "personajes", taxonomy: ["personajes", "literatura", "concepto"], distinctiveTrait: "Novelas de época", traits: { tipo: "persona", cargo: "escritor", lema: true }, partOfSpeech: "sustantivo" as const },
   ],
 
+  // Generado por Workers AI vía GenerateConceptsWorkflow (colores, presidentes,
+  // numeros, dias, meses, formas geometricas) — 2026-07-19, 13 conceptos,
+  // ya dedupeados contra el dataset existente al momento de generarse.
+  ...[
+    { wordEs: "caramelizar", wordEn: "to caramelize", domain: "acciones", taxonomy: ["acciones", "cocina", "concepto"], distinctiveTrait: "dorar azúcares", traits: { tipo: "verbo_de_cocina", lema: true }, partOfSpeech: "verbo" as const },
+    { wordEs: "deslizar", wordEn: "to slide", domain: "acciones", taxonomy: ["acciones", "movimiento", "concepto"], distinctiveTrait: "sin rozar", traits: { tipo: "verbo_de_movimiento", lema: true }, partOfSpeech: "verbo" as const },
+    { wordEs: "rodar", wordEn: "to roll", domain: "acciones", taxonomy: ["acciones", "movimiento", "concepto"], distinctiveTrait: "sobre ruedas", traits: { tipo: "verbo_de_movimiento", lema: true }, partOfSpeech: "verbo" as const },
+    { wordEs: "desplazarse", wordEn: "to move around", domain: "acciones", taxonomy: ["acciones", "movimiento", "concepto"], distinctiveTrait: "cambio de lugar", traits: { tipo: "verbo_de_movimiento", lema: true }, partOfSpeech: "verbo" as const },
+    { wordEs: "desviarse", wordEn: "to deviate", domain: "acciones", taxonomy: ["acciones", "movimiento", "concepto"], distinctiveTrait: "cambio de rumbo", traits: { tipo: "verbo_de_movimiento", lema: true }, partOfSpeech: "verbo" as const },
+    { wordEs: "sarcástico", wordEn: "sarcastic", domain: "lexico_adjetival", taxonomy: ["lexico_adjetival", "personalidad", "concepto"], distinctiveTrait: "usa ironía para criticar", traits: { tipo: "adjetivo", lema: true }, partOfSpeech: "adjetivo" as const },
+    { wordEs: "Pachycephalosaurus", wordEn: "Pachycephalosaurus", domain: "biologia_animal", taxonomy: ["biologia_animal", "dinosaurios", "concepto"], distinctiveTrait: "Cráneo abovedado", traits: { tipo: "dinosaurio", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "Compsognathus", wordEn: "Compsognathus", domain: "biologia_animal", taxonomy: ["biologia_animal", "dinosaurios", "concepto"], distinctiveTrait: "Carnívoro pequeño", traits: { tipo: "dinosaurio", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "Carnotaurus", wordEn: "Carnotaurus", domain: "biologia_animal", taxonomy: ["biologia_animal", "dinosaurios", "concepto"], distinctiveTrait: "Hornos en la cabeza", traits: { tipo: "dinosaurio", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "Ceratosaurus", wordEn: "Ceratosaurus", domain: "biologia_animal", taxonomy: ["biologia_animal", "dinosaurios", "concepto"], distinctiveTrait: "Cuerno nasal", traits: { tipo: "dinosaurio", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "Deinonychus", wordEn: "Deinonychus", domain: "biologia_animal", taxonomy: ["biologia_animal", "dinosaurios", "concepto"], distinctiveTrait: "Garras en pies", traits: { tipo: "dinosaurio", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "Othnielia", wordEn: "Othnielia", domain: "biologia_animal", taxonomy: ["biologia_animal", "dinosaurios", "concepto"], distinctiveTrait: "Cuello largo", traits: { tipo: "dinosaurio", lema: true }, partOfSpeech: "sustantivo" as const },
+    { wordEs: "Aquila", wordEn: "Aquila", domain: "ciencia", taxonomy: ["ciencia", "astronomia", "concepto"], distinctiveTrait: "Águila en vuelo", traits: { tipo: "constelacion", lema: true }, partOfSpeech: "sustantivo" as const },
+  ],
+
 ];
