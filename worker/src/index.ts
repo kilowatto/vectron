@@ -356,13 +356,27 @@ async function handleSyncTrigger(env: Env, request: Request): Promise<Response> 
     return Response.json({ ok: true, triggered: false, reason: "already-running" }, { headers: corsHeaders(request) });
   }
 
-  const instance = await env.SYNC_WORKFLOW.create({ params: { fromIndex: current } });
-  await env.DB.prepare("UPDATE sync_lease SET workflow_instance_id = ? WHERE id = 1").bind(instance.id).run();
+  // Bug real reportado en vivo: si esto se interrumpe (timeout de red,
+  // cliente que se desconecta) DESPUÉS de tomar el lease pero ANTES de
+  // guardar el workflow_instance_id, el lease queda trabado "tomado"
+  // sin ningún Workflow real corriendo detrás — nadie lo libera hasta
+  // que expire el TTL (10 min). Si crear la instancia o guardar su id
+  // truena, soltar el lease aquí mismo en vez de dejarlo fantasma.
+  try {
+    const instance = await env.SYNC_WORKFLOW.create({ params: { fromIndex: current } });
+    await env.DB.prepare("UPDATE sync_lease SET workflow_instance_id = ? WHERE id = 1").bind(instance.id).run();
 
-  return Response.json(
-    { ok: true, triggered: true, instanceId: instance.id, fromIndex: current, target },
-    { headers: corsHeaders(request) },
-  );
+    return Response.json(
+      { ok: true, triggered: true, instanceId: instance.id, fromIndex: current, target },
+      { headers: corsHeaders(request) },
+    );
+  } catch (err) {
+    await env.DB.prepare("UPDATE sync_lease SET locked_at = NULL, workflow_instance_id = NULL WHERE id = 1").run();
+    return Response.json(
+      { ok: false, error: `no se pudo crear el workflow: ${err}` },
+      { status: 500, headers: corsHeaders(request) },
+    );
+  }
 }
 
 export default {
