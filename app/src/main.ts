@@ -233,7 +233,42 @@ async function main() {
     { role: "user", es: "Guarda esta clave: MANGO-47.", en: "Remember this key: MANGO-47." },
     { role: "assistant", es: "Anotado: MANGO-47.", en: "Noted: MANGO-47." },
   ];
+  // MANGO-47 (DOCs/13 "prueba memorable"): una clave + color + fecha
+  // límite, seguida de suficiente relleno para forzar overflow bajo
+  // política "compact" — el resumen que se queda NO promete conservar
+  // la clave (destilador con pérdida, no "apretar agua"). El texto
+  // completo original sigue vivo en `evictedTurns` — recuperable desde
+  // el panel RAG, sin tener que fingir que nunca se perdió.
+  const MANGO_TURNS: { role: ContextRole; es: string; en: string }[] = [
+    {
+      role: "user",
+      es: "Mi clave secreta es MANGO-47, mi color favorito es verde y la fecha límite es el 3 de agosto.",
+      en: "My secret key is MANGO-47, my favorite color is green, and the deadline is August 3rd.",
+    },
+    {
+      role: "assistant",
+      es: "Anotado: MANGO-47, verde, 3 de agosto.",
+      en: "Noted: MANGO-47, green, August 3rd.",
+    },
+    ...DEMO_TURNS,
+    ...DEMO_TURNS,
+    ...DEMO_TURNS,
+    ...DEMO_TURNS,
+    ...DEMO_TURNS,
+    ...DEMO_TURNS,
+  ];
   let demoTurnIndex = 0;
+
+  async function appendDemoTurn(role: ContextRole, text: string, id: string): Promise<void> {
+    const bgeTokens = await tokenizeBGE(text);
+    contextController.append({
+      id,
+      role,
+      text,
+      tokens: bgeTokens.map((tok) => tok.text),
+      createdAt: demoTurnIndex,
+    });
+  }
 
   const chamberDemoEl = document.createElement("div");
   chamberDemoEl.className = "dock-note";
@@ -248,7 +283,18 @@ async function main() {
   rejectPolicyBtn.type = "button";
   const fifoPolicyBtn = document.createElement("button");
   fifoPolicyBtn.type = "button";
-  chamberControlsEl.append(sendTurnBtn, resetChamberBtn, rejectPolicyBtn, fifoPolicyBtn);
+  const compactPolicyBtn = document.createElement("button");
+  compactPolicyBtn.type = "button";
+  chamberControlsEl.append(sendTurnBtn, resetChamberBtn, rejectPolicyBtn, fifoPolicyBtn, compactPolicyBtn);
+
+  const compactRowEl = document.createElement("div");
+  compactRowEl.className = "controls-row";
+  const compactNowBtn = document.createElement("button");
+  compactNowBtn.type = "button";
+  const mangoTestBtn = document.createElement("button");
+  mangoTestBtn.type = "button";
+  compactRowEl.append(compactNowBtn, mangoTestBtn);
+  const compactResultEl = document.createElement("p");
 
   function renderChamberDemoCopy() {
     chamberDemoEl.innerHTML = "";
@@ -256,11 +302,14 @@ async function main() {
     title.innerHTML = `<b>${t("contextChamberLabel", lang)}</b>`;
     const intro = document.createElement("p");
     intro.textContent = t("contextChamberIntro", lang);
-    chamberDemoEl.append(title, intro, chamberUsageEl, chamberControlsEl);
+    chamberDemoEl.append(title, intro, chamberUsageEl, chamberControlsEl, compactRowEl, compactResultEl);
     sendTurnBtn.textContent = t("contextChamberSendTurn", lang);
     resetChamberBtn.textContent = t("contextChamberReset", lang);
     rejectPolicyBtn.textContent = t("contextChamberPolicyReject", lang);
     fifoPolicyBtn.textContent = t("contextChamberPolicyFifo", lang);
+    compactPolicyBtn.textContent = t("contextChamberPolicyCompact", lang);
+    compactNowBtn.textContent = t("contextChamberCompactNow", lang);
+    mangoTestBtn.textContent = t("contextChamberMangoTest", lang);
     renderChamberUsage();
   }
 
@@ -273,31 +322,96 @@ async function main() {
       .replace("{budget}", budget.toLocaleString());
     rejectPolicyBtn.classList.toggle("active", state.policy === "reject");
     fifoPolicyBtn.classList.toggle("active", state.policy === "fifo");
+    compactPolicyBtn.classList.toggle("active", state.policy === "compact");
   }
   contextController.subscribe(renderChamberUsage);
 
   sendTurnBtn.addEventListener("click", () => {
     const example = DEMO_TURNS[demoTurnIndex % DEMO_TURNS.length];
     demoTurnIndex++;
-    const text = lang === "en" ? example.en : example.es;
-    void tokenizeBGE(text).then((bgeTokens) => {
-      contextController.append({
-        id: `demo-${demoTurnIndex}-${text.length}`,
-        role: example.role,
-        text,
-        tokens: bgeTokens.map((tok) => tok.text),
-        createdAt: demoTurnIndex,
-      });
-    });
+    void appendDemoTurn(example.role, lang === "en" ? example.en : example.es, `demo-${demoTurnIndex}`);
   });
   resetChamberBtn.addEventListener("click", () => {
     demoTurnIndex = 0;
+    compactResultEl.textContent = "";
     contextController.reset();
   });
   rejectPolicyBtn.addEventListener("click", () => contextController.setPolicy("reject"));
   fifoPolicyBtn.addEventListener("click", () => contextController.setPolicy("fifo"));
+  compactPolicyBtn.addEventListener("click", () => contextController.setPolicy("compact"));
+
+  compactNowBtn.addEventListener("click", () => {
+    const before = contextController.getSnapshot().used;
+    void contextController.compact().then((result) => {
+      const after = contextController.getSnapshot().used;
+      compactResultEl.textContent =
+        result.droppedTurns.length === 0
+          ? t("contextChamberCompactNothing", lang)
+          : t("contextChamberCompactResult", lang)
+              .replace("{dropped}", String(result.droppedTurns.length))
+              .replace("{before}", before.toLocaleString())
+              .replace("{after}", after.toLocaleString());
+    });
+  });
+
+  mangoTestBtn.addEventListener("click", () => {
+    void (async () => {
+      demoTurnIndex = 0;
+      compactResultEl.textContent = "";
+      contextController.reset();
+      contextController.setPolicy("compact");
+      for (let i = 0; i < MANGO_TURNS.length; i++) {
+        demoTurnIndex = i + 1;
+        const turn = MANGO_TURNS[i];
+        await appendDemoTurn(turn.role, lang === "en" ? turn.en : turn.es, `mango-${i}`);
+      }
+    })();
+  });
 
   renderChamberDemoCopy();
+
+  // "Recuperar original" (DOCs/13, prueba MANGO-47): los turnos que
+  // FIFO expulsa o que `compact()` condensa NO se borran de verdad —
+  // `contextController` los guarda en `evictedTurns` con su texto
+  // completo. El panel RAG es donde el doc dice que se "recupera" lo
+  // que ya no cabe en la ventana — mismo patrón de elemento singleton
+  // reparentado que `chamberDemoEl`.
+  const recoverEl = document.createElement("div");
+  recoverEl.className = "dock-note";
+  const recoverListEl = document.createElement("div");
+  recoverListEl.className = "controls-row";
+  const revealEl = document.createElement("p");
+
+  function renderRecoverList() {
+    recoverEl.innerHTML = "";
+    const heading = document.createElement("p");
+    heading.innerHTML = `<b>${t("contextChamberRecoverHeading", lang)}</b>`;
+    recoverEl.appendChild(heading);
+    const evicted = contextController.getSnapshot().evictedTurns;
+    if (evicted.length === 0) {
+      const empty = document.createElement("p");
+      empty.textContent = t("contextChamberRecoverEmpty", lang);
+      recoverEl.appendChild(empty);
+      return;
+    }
+    const quiz = document.createElement("p");
+    quiz.textContent = t("contextChamberRecoverQuiz", lang);
+    recoverEl.appendChild(quiz);
+    recoverListEl.innerHTML = "";
+    evicted.forEach((turn, i) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = `${t("contextChamberRecoverReveal", lang)} #${i + 1}`;
+      btn.addEventListener("click", () => {
+        revealEl.textContent = `${turn.role}: "${turn.text}"`;
+      });
+      recoverListEl.appendChild(btn);
+    });
+    recoverEl.appendChild(recoverListEl);
+    recoverEl.appendChild(revealEl);
+  }
+  contextController.subscribe(renderRecoverList);
+  renderRecoverList();
 
   // El render arranca AQUÍ, no al final: así el cubo ya gira y se va
   // poblando de partículas detrás del splash mientras cargan
@@ -534,6 +648,8 @@ async function main() {
     ragStub.onConceptFocus((ids) => field.setSearchHighlights(ids));
     ragStub.setConceptLookup((id) => field.concepts.find((c) => c.id === id));
     ragPanel.appendChild(ragStub);
+    renderRecoverList();
+    ragPanel.appendChild(recoverEl);
 
     // Mismo evento que ya alimenta highlights/chain/tokenMode arriba —
     // un segundo listener en el mismo `vx-tokens-change` es normal en

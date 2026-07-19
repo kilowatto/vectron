@@ -197,6 +197,31 @@ const STRINGS = {
   contextChamberPolicyReject: { es: "rechazar", en: "reject" },
   contextChamberPolicyFifo: { es: "FIFO", en: "FIFO" },
   contextChamberUsage: { es: "{used} / {budget} tokens", en: "{used} / {budget} tokens" },
+  // --- Fase 3: compactación / destilador (DOCs/13 §5, Phase 3) ---
+  contextChamberPolicyCompact: { es: "compactar", en: "compact" },
+  contextChamberCompactNow: { es: "compactar ahora", en: "compact now" },
+  contextChamberCompactResult: {
+    es: "{dropped} turno(s) → 1 resumen ({before} → {after} tokens) — detalle perdido a propósito",
+    en: "{dropped} turn(s) → 1 summary ({before} → {after} tokens) — detail lost on purpose",
+  },
+  contextChamberCompactNothing: {
+    es: "nada que compactar todavía — llena la cámara primero",
+    en: "nothing to compact yet — fill the chamber first",
+  },
+  contextChamberMangoTest: { es: "prueba MANGO-47", en: "MANGO-47 test" },
+  contextChamberRecoverHeading: {
+    es: "recuperar de turnos evictados/compactados",
+    en: "recover from evicted/compacted turns",
+  },
+  contextChamberRecoverEmpty: {
+    es: "nada evictado todavía — llena y expulsa/compacta para ver esto",
+    en: "nothing evicted yet — fill and evict/compact to see this",
+  },
+  contextChamberRecoverReveal: { es: "ver original", en: "reveal original" },
+  contextChamberRecoverQuiz: {
+    es: "¿Recuerdas la clave secreta de arriba? Míralo en el resumen del chat — si ya no aparece, se perdió en la compactación. Recupérala aquí:",
+    en: "Remember the secret key from above? Look in the chat summary — if it's gone, it was lost in compaction. Recover it here:",
+  },
   ragDockIntro: {
     es: "Recuperar antes de generar: una pregunta trae trozos reales de un archivo externo a la mesa de trabajo, en vez de que el modelo invente.",
     en: "Retrieve before generating: a question brings real chunks from an external file to the working desk, instead of the model making things up.",
