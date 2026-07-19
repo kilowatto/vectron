@@ -37,3 +37,67 @@ button.active {
   font-weight: 600;
   cursor: default;
 }
+
+.drawer-toggle {
+  display: none;
+}
+
+.options {
+  display: flex;
+  gap: 2px;
+}
+
+/* Móvil — mismo cajón colapsable que <vx-mode-switcher>, ver ese CSS
+   para el razonamiento completo. */
+@media (max-width: 640px) {
+  :host {
+    background: rgba(10, 13, 17, 0.55);
+  }
+
+  .drawer-toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: none;
+    border: none;
+    color: var(--ink);
+    padding: 5px 9px;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+
+  .chevron {
+    color: var(--dim);
+    opacity: 0.6;
+    transition: transform 0.2s ease;
+    font-size: 9px;
+  }
+
+  :host([expanded]) .chevron {
+    transform: rotate(180deg);
+  }
+
+  .options {
+    display: none;
+    flex-direction: column;
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    min-width: 90px;
+    background: rgba(10, 13, 17, 0.92);
+    border: 1px solid rgba(231, 226, 214, 0.14);
+    border-radius: 6px;
+    padding: 3px;
+    gap: 1px;
+  }
+
+  :host([expanded]) .options {
+    display: flex;
+  }
+
+  .options button {
+    text-align: left;
+  }
+}

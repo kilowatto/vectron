@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { SEED_CONCEPTS } from "../src/data/seedConcepts";
-import { pcaReduce, normalizeToCube, type PcaBasis } from "./pca";
+import { pcaReduce, normalizeToCube, declumpPoints, type PcaBasis } from "./pca";
 
 const ACCOUNT_ID = "99c9300f175af0e76483b949f6c6acd1";
 const EMBEDDING_MODEL = "@cf/baai/bge-m3";
@@ -67,7 +67,32 @@ async function main() {
   // mismo tamaño de partícula es justo lo que separa más al hacer zoom.
   const CUBE_SCALE = 1.9;
   const pca = pcaReduce(embeddings, 3);
-  const { points: reduced, maxAbs } = normalizeToCube(pca.points, CUBE_SCALE);
+  const { points: rescaled, maxAbs } = normalizeToCube(pca.points, CUBE_SCALE);
+
+  // Separación local (bug real reportado en vivo con zoom máximo sobre
+  // un clúster de biología/animales, ver pca.ts declumpPoints): el
+  // reescalado de arriba es uniforme, no ayuda con bolsas locales
+  // genuinamente densas — sólo la separación real 3D entre vecinos
+  // resuelve eso, ni el zoom ni CUBE_SCALE solos alcanzan. minDist
+  // calibrado contra el radio real de la partícula (0.032, ver
+  // particleField.ts) — separación mínima ≈3x ese radio, un hueco
+  // visible sin dispersar de más zonas que ya estaban bien.
+  // Bug real encontrado verificando esta misma corrida: recortar al
+  // borde del cubo como paso SEPARADO después de separar podía volver a
+  // juntar dos puntos que la relajación ya había resuelto (si ambos
+  // caían más allá del borde en el mismo eje, el clip los aplastaba al
+  // mismo valor). declumpPoints ahora recibe el límite y lo aplica
+  // DENTRO de cada iteración — el borde actúa como una pared más contra
+  // la que rebotar, resuelto junto con la separación, no después.
+  console.log("Separando bolsas densas locales…");
+  const MIN_SEPARATION = 0.1;
+  // 60 -> 300 iteraciones: verificado en la corrida real (8 053 puntos)
+  // que con 60 el peor par todavía quedaba en ~0.084 (bajo el objetivo
+  // 0.1) — la relajación converge asintóticamente, las últimas décimas
+  // de porcentaje tardan más rondas. 300 deja el peor par en ~0.0999,
+  // imperceptible del objetivo, y sigue tomando sólo ~13s sobre el
+  // dataset completo (nada frente a los minutos del re-embed).
+  const reduced = declumpPoints(rescaled, MIN_SEPARATION, 300, CUBE_SCALE);
 
   // La base de proyección se persiste junto al dataset: con ella el
   // cliente puede proyectar embeddings NUEVOS (tokens/frases en vivo)

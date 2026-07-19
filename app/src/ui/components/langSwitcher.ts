@@ -48,13 +48,28 @@ export class VxLangSwitcher extends HTMLElement {
   #render() {
     const current = (this.getAttribute("current") as Lang | null) ?? getStoredLang();
     const root = this.shadowRoot ?? attachShadow(this, css);
-    root.innerHTML = LANGS.map(
-      (lang) =>
-        `<button type="button" data-lang="${lang}" class="${lang === current ? "active" : ""}">${lang}</button>`,
-    ).join("");
+    // Cajón sólo en móvil (ver langSwitcher.css) — mismo patrón que
+    // <vx-mode-switcher>.
+    root.innerHTML = `
+      <button type="button" class="drawer-toggle">
+        <span class="current-label">${current}</span>
+        <span class="chevron">▾</span>
+      </button>
+      <div class="options">
+        ${LANGS.map(
+          (lang) =>
+            `<button type="button" data-lang="${lang}" class="${lang === current ? "active" : ""}">${lang}</button>`,
+        ).join("")}
+      </div>
+    `;
 
-    root.querySelectorAll<HTMLButtonElement>("button").forEach((btn) => {
+    root.querySelector(".drawer-toggle")?.addEventListener("click", () => {
+      this.toggleAttribute("expanded");
+    });
+
+    root.querySelectorAll<HTMLButtonElement>(".options button").forEach((btn) => {
       btn.addEventListener("click", () => {
+        this.removeAttribute("expanded");
         const lang = btn.dataset.lang as Lang;
         if (lang === current) return;
         this.dispatchEvent(

@@ -60,8 +60,12 @@ export async function fetchPcaBasis(): Promise<PcaBasis | null> {
 }
 
 /** Proyección de un embedding 1024-d al cubo 3D con la base guardada —
- * exactamente la misma aritmética que seed.ts aplicó al dataset:
- * centrar con la media, producto punto con cada eje, escalar por eje. */
+ * exactamente la misma aritmética que seed.ts/pca.ts aplicó al dataset:
+ * centrar con la media, producto punto con cada eje, escalar por eje,
+ * recortar (clip) al borde del cubo — mismo motivo que normalizeToCube
+ * en pca.ts: sin el clip, una frase/token en vivo cuyo embedding cae
+ * fuera del percentil 98 usado para calibrar `maxAbs` se dibujaría
+ * fuera del cubo visible en vez de quedarse en su borde. */
 export function projectWithBasis(vector: number[], basis: PcaBasis): [number, number, number] {
   const out: number[] = [];
   for (let c = 0; c < basis.components.length; c++) {
@@ -70,7 +74,8 @@ export function projectWithBasis(vector: number[], basis: PcaBasis): [number, nu
     for (let i = 0; i < vector.length; i++) {
       dot += (vector[i] - basis.mean[i]) * comp[i];
     }
-    out.push(basis.maxAbs[c] > 0 ? (dot / basis.maxAbs[c]) * basis.cubeScale : 0);
+    const scaled = basis.maxAbs[c] > 0 ? (dot / basis.maxAbs[c]) * basis.cubeScale : 0;
+    out.push(Math.max(-basis.cubeScale, Math.min(basis.cubeScale, scaled)));
   }
   return out as [number, number, number];
 }

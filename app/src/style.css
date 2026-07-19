@@ -233,6 +233,37 @@ body {
   display: none;
 }
 
+/* Móvil — rediseño completo del HUD (pedido explícito del usuario con
+   captura real: el número de conceptos quedaba tapado por el composer,
+   que en pantallas angostas ocupa casi toda la mitad inferior). Dos
+   cambios, no uno:
+   1) fps y el diagnóstico WebGPU/WebGL son ruido de depuración, no le
+      sirven a quien usa la app — se esconden siempre en móvil, no sólo
+      en Principiante.
+   2) el conteo se sube junto a la marca (arriba) en vez de vivir abajo
+      — así nunca compite por espacio con composer/token-strip, que ya
+      tienen dueño exclusivo de la franja inferior. */
+@media (max-width: 640px) {
+  #backend-tag,
+  #fps,
+  #hud-top .dot,
+  #hud-bottom .dot {
+    display: none;
+  }
+
+  #hud {
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 0;
+  }
+
+  #hud-bottom {
+    position: static;
+  }
+}
+
 /* P6 — contenido del dock/consola (ver mountComposerAndStrip en
    main.ts): la nota de pipeline vive junto al composer/strip
    reparentados, con el mismo tono discreto que el disclaimer del
