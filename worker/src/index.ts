@@ -1,6 +1,7 @@
 import { SEED_CONCEPTS } from "./data/seedConcepts";
 
 export { SyncConceptsWorkflow } from "./syncWorkflow";
+export { GenerateConceptsWorkflow } from "./genConceptsWorkflow";
 
 export interface Env {
   AI: Ai;
@@ -9,6 +10,7 @@ export interface Env {
   VECTORIZE: VectorizeIndex;
   ASSETS: Fetcher;
   SYNC_WORKFLOW: Workflow;
+  GENERATE_WORKFLOW: Workflow;
 }
 
 /** TTL del lease de auto-sync (ver DOCs/13 + migrations/0004): más

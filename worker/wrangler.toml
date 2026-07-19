@@ -33,6 +33,11 @@ name = "vectron-sync-concepts"
 binding = "SYNC_WORKFLOW"
 class_name = "SyncConceptsWorkflow"
 
+[[workflows]]
+name = "vectron-generate-concepts"
+binding = "GENERATE_WORKFLOW"
+class_name = "GenerateConceptsWorkflow"
+
 [[routes]]
 pattern = "vectron.kilowatto.com"
 custom_domain = true
