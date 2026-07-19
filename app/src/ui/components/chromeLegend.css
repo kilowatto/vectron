@@ -1,0 +1,220 @@
+/* DOCs/11-screen-specs.md §1/§3: un solo pill colapsable en vez de dos
+   componentes apilados (`vx-color-key` + `vx-kind-legend` fusionados
+   aquí). Por defecto vive ABSOLUTO dentro de #cube-pane (no fixed al
+   viewport, no relativo a stageEl) — así nunca queda sobre la columna
+   de Math Arena en el split de Avanzado, ni sobre el dock de
+   Intermedio; quien lo monta (main.ts) decide en qué contenedor vive
+   según el shell. El atributo `dock` cambia a flujo normal cuando
+   vive al pie del panel lateral en vez de flotar. */
+:host {
+  position: absolute;
+  z-index: 13;
+  left: max(16px, env(safe-area-inset-left));
+  bottom: max(calc(clamp(16px, 4vw, 40px) + 160px), 190px);
+  font-family: var(--font-mono);
+}
+
+.peek {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(10, 13, 17, 0.7);
+  border: 1px solid rgba(231, 226, 214, 0.16);
+  border-radius: 8px;
+  padding: 5px 9px;
+  color: var(--dim);
+  font-family: inherit;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.2s ease;
+}
+
+.peek:hover,
+:host(:has(.sheet:not([hidden]))) .peek {
+  opacity: 1;
+  color: var(--ink);
+}
+
+.chevron {
+  color: var(--dim);
+  opacity: 0.6;
+  transition: transform 0.2s ease;
+  font-size: 8px;
+}
+
+:host(:has(.sheet:not([hidden]))) .chevron {
+  transform: rotate(180deg);
+}
+
+.swatches {
+  display: flex;
+  gap: 2px;
+}
+
+.dot {
+  display: inline-block;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sheet {
+  position: absolute;
+  z-index: 14;
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: min(280px, 70vw);
+  max-height: 50vh;
+  overflow-y: auto;
+  background: rgba(10, 13, 17, 0.92);
+  border: 1px solid rgba(231, 226, 214, 0.16);
+  border-radius: 10px;
+  padding: 8px;
+  backdrop-filter: blur(10px);
+}
+
+/* Chips de "tipos" (antes vx-kind-legend) — arriba de la lista de
+   dominios dentro del mismo sheet, separados por una línea. */
+.kinds {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-bottom: 8px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid rgba(231, 226, 214, 0.12);
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9.5px;
+  color: var(--dim);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.kdot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink);
+  flex-shrink: 0;
+}
+
+.kdot.big {
+  width: 9px;
+  height: 9px;
+}
+
+.kdot.bge {
+  background: #39ff6a;
+}
+
+.kdot.gpt {
+  background: #22c7ff;
+}
+
+.kdot.phrase {
+  background: #ffe14d;
+}
+
+.kline {
+  display: inline-block;
+  width: 12px;
+  height: 2px;
+  flex-shrink: 0;
+}
+
+.kline.orange {
+  background: #d98a34;
+}
+
+.kline.cyan {
+  background: #4fb8c4;
+}
+
+/* Lista de dominios (antes vx-color-key) */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 6px;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row:hover {
+  background: rgba(231, 226, 214, 0.08);
+}
+
+.row.active {
+  background: rgba(217, 138, 52, 0.16);
+}
+
+.row .name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row .name small {
+  color: var(--dim);
+  font-size: 9px;
+  margin-left: 4px;
+}
+
+.row .count {
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/* Vive al pie del dock (Intermedio ≥1024px) — flujo normal, no
+   flotante. La "esquina libre" que buscaba la posición absoluta no
+   aplica aquí: el dock ya es su propio scroll vertical. */
+:host([dock]) {
+  position: static;
+  left: auto;
+  bottom: auto;
+  margin-top: 14px;
+}
+
+:host([dock]) .sheet {
+  position: static;
+  z-index: auto;
+  width: 100%;
+  max-height: none;
+  margin-top: 8px;
+}
+
+/* Móvil: bug real corregido (DOCs/11 — antes display:none escondía la
+   pedagogía por completo). Se queda como pill colapsado, igual que en
+   desktop, sólo se ajusta el offset vertical al alto real del
+   composer flotante en pantallas angostas. */
+@media (max-width: 640px) {
+  :host {
+    bottom: max(calc(clamp(16px, 4vw, 40px) + 130px), 160px);
+  }
+
+  .sheet {
+    width: min(300px, calc(100vw - 32px));
+    max-height: 55vh;
+  }
+}

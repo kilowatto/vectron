@@ -2,9 +2,14 @@
    de abajo. Nunca `display:none` (debe seguir siendo "hittable"),
    opacidad baja en reposo, sube con :hover o con la clase .awake que
    el componente se pone a sí mismo. */
+/* DOCs/11-screen-specs.md §1: absolute dentro de #cube-pane (montado
+   ahí en main.ts), no fixed al viewport — así el rail nunca queda
+   sobre la columna de Math Arena en el split de Avanzado. */
 :host {
-  position: fixed;
-  z-index: 13;
+  position: absolute;
+  /* Ledger de z-index (DOCs/11 §4): rail 12, debajo de la leyenda
+     (13/14) y del composer/strip flotante (15). */
+  z-index: 12;
   left: max(14px, env(safe-area-inset-left));
   top: max(140px, 18vh);
   bottom: max(calc(clamp(16px, 4vw, 40px) + 150px), 190px);

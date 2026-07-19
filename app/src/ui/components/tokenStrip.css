@@ -4,7 +4,9 @@
    vivía en una sola barra inferior. */
 :host {
   position: fixed;
-  z-index: 14;
+  /* Ledger de z-index (DOCs/11 §4): composer/strip flotante ambos en
+     15, un solo par por encima de la leyenda (13/14). */
+  z-index: 15;
   left: 0;
   right: 0;
   margin-inline: auto !important;

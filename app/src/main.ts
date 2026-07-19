@@ -19,10 +19,8 @@ import "./ui/components/tokenStrip";
 import type { ModePickDetail } from "./ui/components/modeSelect";
 import type { VxZoomRail } from "./ui/components/zoomRail";
 import "./ui/components/zoomRail";
-import type { VxKindLegend } from "./ui/components/kindLegend";
-import "./ui/components/kindLegend";
-import type { VxColorKey, DomainIsolateDetail } from "./ui/components/colorKey";
-import "./ui/components/colorKey";
+import type { VxChromeLegend, DomainIsolateDetail } from "./ui/components/chromeLegend";
+import "./ui/components/chromeLegend";
 import type { VxBootSplash } from "./ui/components/bootSplash";
 import "./ui/components/bootSplash";
 import "./ui/components/mathArena";
@@ -47,6 +45,7 @@ const MODE_POS: Record<Mode, Set<PartOfSpeech>> = {
 };
 
 const stageEl = document.querySelector<HTMLDivElement>("#stage")!;
+const cubePaneEl = document.querySelector<HTMLDivElement>("#cube-pane")!;
 const canvas = document.querySelector<HTMLCanvasElement>("#scene")!;
 const backendTag = document.querySelector<HTMLSpanElement>("#backend-tag")!;
 const fpsLabel = document.querySelector<HTMLSpanElement>("#fps")!;
@@ -220,47 +219,63 @@ async function main() {
 
   countLabel.textContent = t("hudLoading", lang);
 
-  // P4 — chrome discreto: rail de zoom + leyenda de tipos + llave de
-  // colores (ver DOCs/05-hud-legends-zoom-colors.md). Se crean UNA vez
-  // (como los switchers), no por modo — sólo cambian de copy/contenido.
+  // P4/DOCs-11 — chrome discreto: rail de zoom + leyenda fusionada
+  // (dominios+tipos, ver chromeLegend.ts). Se crean UNA vez (como los
+  // switchers), no por modo — sólo cambian de copy/contenido/lugar.
+  // Montados en #cube-pane (no stageEl/viewport): así nunca quedan
+  // sobre la columna de Math Arena en el split de Avanzado — bug real
+  // señalado en la auditoría de pantallas (DOCs/11-screen-specs.md §1).
   const zoomRail = document.createElement("vx-zoom-rail") as VxZoomRail;
   zoomRail.setAttribute("readout", "");
-  stageEl.appendChild(zoomRail);
+  cubePaneEl.appendChild(zoomRail);
   zoomRail.attach(engine.camera, engine.controls);
 
-  const kindLegend = document.createElement("vx-kind-legend") as VxKindLegend;
-  stageEl.appendChild(kindLegend);
+  const chromeLegend = document.createElement("vx-chrome-legend") as VxChromeLegend;
+  cubePaneEl.appendChild(chromeLegend);
 
-  const colorKey = document.createElement("vx-color-key") as VxColorKey;
-  stageEl.appendChild(colorKey);
-
-  // Índice dominio -> instancias, para que "aislar" en la llave de
-  // colores reutilice el mismo atenuado que ya existe para búsqueda de
-  // texto (setSearchHighlights) — sin nueva API en particleField.
+  // Índice dominio -> instancias, para que "aislar" en la leyenda
+  // reutilice el mismo atenuado que ya existe para búsqueda de texto
+  // (setSearchHighlights) — sin nueva API en particleField.
   const domainIndex = new Map<string, number[]>();
   field.concepts.forEach((c, i) => {
     const list = domainIndex.get(c.domain) ?? [];
     list.push(i);
     domainIndex.set(c.domain, list);
   });
-  colorKey.addEventListener("vx-domain-isolate", (event) => {
+  chromeLegend.addEventListener("vx-domain-isolate", (event) => {
     const { domain } = (event as CustomEvent<DomainIsolateDetail>).detail;
     field.setSearchHighlights(domain ? (domainIndex.get(domain) ?? []) : []);
   });
 
-  function refreshColorKey() {
+  function refreshChromeLegend() {
     const counts = new Map<string, number>();
     for (const c of field.concepts) {
       if (!allowedPos.has(c.partOfSpeech)) continue;
       counts.set(c.domain, (counts.get(c.domain) ?? 0) + 1);
     }
-    colorKey.setVisibleDomains(
+    chromeLegend.setVisibleDomains(
       [...counts.entries()].map(([domain, count]) => ({ domain, count })),
     );
   }
 
+  // DOCs/11 §1: en el dock de Intermedio (≥1024px) la leyenda vive al
+  // PIE del panel lateral (flujo normal, tras composer/strip/notas),
+  // nunca flotando sobre el cubo — en cualquier otro shell (incluido
+  // el split de Avanzado, cuyo panel es Math Arena, no esta leyenda)
+  // flota sobre #cube-pane, que es donde ya vive por defecto.
+  function placeChromeLegend(mode: Mode) {
+    const wantsDock = mode === "intermedio" && matchMedia(DESKTOP_INTERMEDIO).matches;
+    if (wantsDock) {
+      chromeLegend.setAttribute("dock", "");
+      sidePaneEl.appendChild(chromeLegend);
+    } else {
+      chromeLegend.removeAttribute("dock");
+      cubePaneEl.appendChild(chromeLegend);
+    }
+  }
+
   card = document.createElement("vx-concept-card") as VxConceptCard;
-  stageEl.appendChild(card);
+  cubePaneEl.appendChild(card);
 
   // P6 — tres shells reales (ver DOCs/03 §3): Intermedio agrega un dock
   // fijo en escritorio, Avanzado agrega un Math Arena con separador
@@ -604,6 +619,9 @@ async function main() {
     }
     if (seq !== chromeSwapSeq) return;
     ({ composer, strip: tokenStrip } = mountComposerAndStrip(mode, fadeMs));
+    // Después de composer/strip/notas — el pie del dock es justo eso,
+    // el pie (DOCs/11-screen-specs.md §S3a, "ordered, scrollable").
+    placeChromeLegend(mode);
   }
 
   // El "cambio de stage" real: nunca recrea el motor 3D ni recarga la
@@ -669,8 +687,7 @@ async function main() {
     interaction.setDefaultTopK(mode === "principiante" ? 5 : 6);
     interaction.reset(); // suelta el pin ANTES del morph — mismo orden que "cancela al empezar" (06 §6)
     tokenMode.setEnabled(mode === "avanzado");
-    kindLegend.setMode(mode);
-    colorKey.setMode(mode);
+    chromeLegend.setMode(mode);
     field.setSearchHighlights([]); // suelta cualquier dominio aislado del modo anterior
 
     // Todo el "chrome" de la app (shell, composer/strip, HUD, color key)
@@ -687,7 +704,7 @@ async function main() {
     // El conteo real no depende de que la morph termine — se puede
     // calcular directo del filtro, así el HUD también es instantáneo.
     const visibleCount = field.concepts.filter((c) => allowedPos.has(c.partOfSpeech)).length;
-    refreshColorKey();
+    refreshChromeLegend();
     // El HUD también habla el idioma de cada modo: Principiante no dice
     // "vector", los otros sí (con la notación ℝ en Avanzado).
     const countUnit =

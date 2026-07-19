@@ -41,6 +41,14 @@
   flex-direction: column;
 }
 
+/* El fix real (DOCs/11-screen-specs.md §1) es dónde vive el elemento
+   en el DOM, no un breakpoint aquí: <vx-concept-card> ahora se monta
+   dentro de #cube-pane (position:relative + overflow:hidden, ver
+   main.ts) en vez de #stage/viewport — `right` de arriba queda
+   anclado al borde derecho REAL del cubo en cualquier shell, así que
+   nunca puede terminar sobre el dock de Intermedio ni el Math Arena
+   de Avanzado sin necesidad de un caso especial por modo. */
+
 /* Móvil: la esquina superior derecha por sí sola ya deja libre el
    centro y la izquierda del cubo (donde ocurre casi todo el drag con
    el dedo) — sólo hace falta angostarla más para no comerse medio
