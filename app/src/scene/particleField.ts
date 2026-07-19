@@ -707,11 +707,17 @@ export function createParticleField(
     focusAttrArray.fill(dim);
     const nowFocused = active ? new Set(searchIds) : null;
     for (const id of searchIds) {
-      highlightAttrArray[id] = 0.55;
+      // 0.55 -> 1.05: reportado en vivo ("falta más intensidad") — con
+      // el piso 0.18 + rim, 0.55 dejaba una coincidencia apenas por
+      // encima de las partículas normales (glow~0.7-1.3x según ángulo,
+      // igual de discreto que el resto del cubo). 1.05 la separa con
+      // claridad incluso de frente (glow~1.2-1.8x) sin llegar a
+      // quemarse contra el pulso (pulse máx ~0.91).
+      highlightAttrArray[id] = 1.05;
       focusAttrArray[id] = 1;
     }
     if (pointerId !== null) {
-      highlightAttrArray[pointerId] = 1.1;
+      highlightAttrArray[pointerId] = 1.6;
       if (active) {
         focusAttrArray[pointerId] = 1;
         nowFocused?.add(pointerId);

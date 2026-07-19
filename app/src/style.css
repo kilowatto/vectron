@@ -459,3 +459,60 @@ body {
 .surface-panel[hidden] {
   display: none;
 }
+
+/* Pedido explícito en vivo: cruz WASD discreta, sólo escritorio con
+   mouse real (hover:hover + pointer:fine — un touchscreen ancho, ej.
+   tablet en landscape, no tiene teclado físico aunque el ancho pase el
+   min-width) — deja claro que la cámara se puede navegar con teclado
+   sin competir por espacio con el zoom rail (izquierda) ni el composer
+   (centrado). Nunca display:none del todo (mismo espíritu que
+   zoomRail): opacidad baja en reposo, sube al usarla. */
+#key-nav-hint {
+  display: none;
+}
+
+@media (hover: hover) and (pointer: fine) and (min-width: 1024px) {
+  #key-nav-hint {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    position: absolute;
+    z-index: 12;
+    right: max(20px, env(safe-area-inset-right));
+    bottom: max(24px, env(safe-area-inset-bottom));
+    opacity: 0.4;
+    transition: opacity 0.25s ease;
+    pointer-events: none;
+  }
+
+  #key-nav-hint:hover {
+    opacity: 0.85;
+  }
+}
+
+.knh-row {
+  display: flex;
+  gap: 3px;
+}
+
+.knh-key {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  background: rgba(231, 226, 214, 0.08);
+  border: 1px solid rgba(231, 226, 214, 0.22);
+  color: var(--dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.knh-key.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #1a0f04;
+}

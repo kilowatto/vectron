@@ -493,15 +493,107 @@ async function main() {
   // calidad en tiempo de ejecución — sólo hacia abajo (nunca de vuelta
   // a "high" sola, para no parpadear), y sólo importa mientras la
   // Cámara está a la vista (es lo único con variantes de calidad).
+  // Pedido explícito en vivo: navegar la cámara con WASD/flechas en
+  // escritorio — W/↑ acerca, S/↓ aleja (dolly sobre controls.target,
+  // mismo eje que la rueda), A/← y D/→ orbitan izquierda/derecha
+  // (mismo pivote que el giro automático). Directo sobre
+  // camera.position/controls.target vía coordenadas esféricas, igual
+  // que flyTo/focusOnMatches arriba — OrbitControls relee esa posición
+  // en su próximo `update()` (ver engine.ts), así que no hay estado
+  // interno con el que desincronizarse.
+  const keyNavEl = document.createElement("div");
+  keyNavEl.id = "key-nav-hint";
+  keyNavEl.setAttribute("aria-hidden", "true");
+  keyNavEl.innerHTML = `
+    <div class="knh-row"><span class="knh-key" data-key="w">W</span></div>
+    <div class="knh-row">
+      <span class="knh-key" data-key="a">A</span>
+      <span class="knh-key" data-key="s">S</span>
+      <span class="knh-key" data-key="d">D</span>
+    </div>
+  `;
+  cubePaneEl.appendChild(keyNavEl);
+  const keyNavEls = new Map(
+    [...keyNavEl.querySelectorAll<HTMLSpanElement>(".knh-key")].map((el) => [el.dataset.key, el]),
+  );
+
+  type NavDir = "forward" | "back" | "left" | "right";
+  const NAV_KEYS: Record<string, NavDir> = {
+    w: "forward",
+    arrowup: "forward",
+    s: "back",
+    arrowdown: "back",
+    a: "left",
+    arrowleft: "left",
+    d: "right",
+    arrowright: "right",
+  };
+  const pressedNav = new Set<NavDir>();
+
+  // Si el foco está en un campo de texto (composer, pregunta RAG,
+  // "trocear y embeber"…) las mismas teclas deben escribir letras, no
+  // mover la cámara — recorre shadow roots hasta el elemento real con
+  // foco, no sólo el host del primer nivel.
+  function isTypingTarget(): boolean {
+    let el: Element | null = document.activeElement;
+    while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement;
+    if (!el) return false;
+    return el.tagName === "INPUT" || el.tagName === "TEXTAREA" || (el as HTMLElement).isContentEditable;
+  }
+
+  function setNavKeyVisual(dir: NavDir, active: boolean) {
+    for (const [key, mappedDir] of Object.entries(NAV_KEYS)) {
+      if (mappedDir === dir) keyNavEls.get(key)?.classList.toggle("active", active);
+    }
+  }
+
+  window.addEventListener("keydown", (event) => {
+    if (event.repeat || isTypingTarget()) return;
+    const dir = NAV_KEYS[event.key.toLowerCase()];
+    if (!dir) return;
+    pressedNav.add(dir);
+    setNavKeyVisual(dir, true);
+  });
+  window.addEventListener("keyup", (event) => {
+    const dir = NAV_KEYS[event.key.toLowerCase()];
+    if (!dir) return;
+    pressedNav.delete(dir);
+    setNavKeyVisual(dir, false);
+  });
+  // Alt-tab / devtools a medio soltar una tecla no debe dejar la cámara
+  // moviéndose sola para siempre.
+  window.addEventListener("blur", () => {
+    pressedNav.clear();
+    keyNavEls.forEach((el) => el.classList.remove("active"));
+  });
+
+  const NAV_ORBIT_SPEED = 1.1; // rad/s
+  const NAV_DOLLY_SPEED = 1.6; // factor exponencial de distancia/s
+  function applyKeyboardNav(dt: number) {
+    if (pressedNav.size === 0) return;
+    const controls = engine.controls;
+    const camera = engine.camera;
+    const offset = camera.position.clone().sub(controls.target);
+    const spherical = new THREE.Spherical().setFromVector3(offset);
+    if (pressedNav.has("left")) spherical.theta -= NAV_ORBIT_SPEED * dt;
+    if (pressedNav.has("right")) spherical.theta += NAV_ORBIT_SPEED * dt;
+    let distScale = 1;
+    if (pressedNav.has("forward")) distScale *= Math.exp(-NAV_DOLLY_SPEED * dt);
+    if (pressedNav.has("back")) distScale *= Math.exp(NAV_DOLLY_SPEED * dt);
+    spherical.radius = Math.min(Math.max(spherical.radius * distScale, controls.minDistance), controls.maxDistance);
+    offset.setFromSpherical(spherical);
+    camera.position.copy(controls.target).add(offset);
+  }
   let lowFpsStreak = 0;
   let chamberQualityDowngraded = false;
   engine.start(
     (dt) => {
+      applyKeyboardNav(dt);
       // Bug real corregido (ver engine.ts): el giro automático ahora es
       // controls.autoRotate (gira la cámara alrededor de
       // controls.target, no el grupo alrededor del origen del mundo) —
       // aquí sólo se prende/apaga con la misma condición de antes.
-      engine.controls.autoRotate = !card?.isPinned() && liveTokenCount === 0;
+      engine.controls.autoRotate = !card?.isPinned() && liveTokenCount === 0 && pressedNav.size === 0;
       if (contextChamber.group.visible) contextChamber.update(dt);
     },
     (fps) => {
@@ -672,28 +764,43 @@ async function main() {
   // normal, arriba de los tres paneles) en vez de flotar, apenas la
   // superficie activa no sea "cube" — ahí no hay nada debajo con lo que
   // pueda chocar.
-  function placeComposerAndStrip() {
-    if (!composer || !tokenStrip) return;
+  // `elComposer`/`elStrip` en vez de leer las variables externas
+  // `composer`/`tokenStrip` directo: bug real encontrado en vivo
+  // (composer ausente del DOM al aterrizar en Cube, ausencia que sólo
+  // se resolvía tras visitar Transformer/RAG una vez) — esta función
+  // corre DENTRO de mountComposerAndStrip (vía applyIntermediateSurfaceVisibility,
+  // ver abajo) para hacer el montaje inicial, momento en el que las
+  // variables externas TODAVÍA apuntan al composer del modo anterior (o
+  // a null la primera vez) — la asignación real (`composer = ...`)
+  // ocurre recién cuando swapComposerAndStrip recibe el valor de
+  // retorno, DESPUÉS de que mountComposerAndStrip (y esta función,
+  // llamada desde dentro) ya terminaron. Pasar los elementos recién
+  // creados explícitos evita depender de ese orden.
+  function placeComposerAndStrip(elComposer: VxComposer | null, elStrip: VxTokenStrip | null) {
+    if (!elComposer || !elStrip) return;
     const desktopDock = matchMedia(DESKTOP_INTERMEDIO).matches;
     const dockStyle = desktopDock || intermediateSurface !== "cube";
-    composer.toggleAttribute("dock", dockStyle);
-    tokenStrip.toggleAttribute("dock", dockStyle);
+    elComposer.toggleAttribute("dock", dockStyle);
+    elStrip.toggleAttribute("dock", dockStyle);
     if (dockStyle && cubePanelEl) {
-      sidePaneEl.insertBefore(tokenStrip, cubePanelEl);
-      sidePaneEl.insertBefore(composer, tokenStrip);
+      sidePaneEl.insertBefore(elStrip, cubePanelEl);
+      sidePaneEl.insertBefore(elComposer, elStrip);
     } else if (!dockStyle) {
-      stageEl.appendChild(composer);
-      stageEl.appendChild(tokenStrip);
+      stageEl.appendChild(elComposer);
+      stageEl.appendChild(elStrip);
     }
   }
 
-  function applyIntermediateSurfaceVisibility() {
+  function applyIntermediateSurfaceVisibility(
+    overrideComposer?: VxComposer,
+    overrideStrip?: VxTokenStrip,
+  ) {
     if (cubePanelEl) cubePanelEl.hidden = intermediateSurface !== "cube";
     if (transformerPanelEl) transformerPanelEl.hidden = intermediateSurface !== "transformer";
     if (ragPanelEl) ragPanelEl.hidden = intermediateSurface !== "rag";
     stageEl.dataset.intermedioSurface = intermediateSurface;
     placeIntermediateSurfaceNav();
-    placeComposerAndStrip();
+    placeComposerAndStrip(overrideComposer ?? composer, overrideStrip ?? tokenStrip);
     applyTransformerChapter();
     setChamberPeekActive(false);
   }
@@ -1087,13 +1194,33 @@ async function main() {
     for (const conceptId of ids) centroid.add(new THREE.Vector3(...field.concepts[conceptId].coords));
     centroid.divideScalar(ids.length);
 
+    // Pedido explícito en vivo ("que centre y zoom que llene el
+    // viewport"): antes esto sólo paneaba (conservaba la distancia
+    // actual) — con el cubo completo detrás, el grupo resaltado se
+    // sentía chico y perdido en medio de todo lo demás. Ahora también
+    // hace dolly a la distancia mínima que encuadra el grupo completo
+    // (radio real hasta el punto más lejano del centroide, ajustado al
+    // FOV/aspect reales de la cámara — nunca asume ancho de escritorio).
+    let radius = 0;
+    for (const conceptId of ids) {
+      radius = Math.max(radius, centroid.distanceTo(new THREE.Vector3(...field.concepts[conceptId].coords)));
+    }
+    const camera = engine.camera;
+    const vHalf = (camera.fov * Math.PI) / 360;
+    const hHalf = Math.atan(Math.tan(vHalf) * camera.aspect);
+    const halfAngle = Math.min(vHalf, hHalf);
+    const PADDING = 1.6;
+    const MIN_DIST = 0.55;
+    const MAX_DIST = 4.86;
+    const fitDist = radius > 0.001 ? (radius * PADDING) / Math.sin(halfAngle) : 1.1;
+    const targetDist = Math.min(Math.max(fitDist, MIN_DIST), MAX_DIST);
+
     const seq = ++matchFocusState.id;
     const controls = engine.controls;
-    const camera = engine.camera;
     const fromT = controls.target.clone();
     const fromC = camera.position.clone();
-    const delta = centroid.clone().sub(fromT);
-    const toC = fromC.clone().add(delta);
+    const dir = fromC.clone().sub(fromT).normalize();
+    const toC = centroid.clone().add(dir.multiplyScalar(targetDist));
     const duration = 650;
     const start = performance.now();
     function tick() {
@@ -1269,7 +1396,7 @@ async function main() {
       cubePanelEl = cubePanel;
       transformerPanelEl = transformerPanel;
       ragPanelEl = ragPanel;
-      applyIntermediateSurfaceVisibility();
+      applyIntermediateSurfaceVisibility(composer, strip);
     } else if (isDockLayout(mode)) {
       // P6: hijos de flujo normal dentro de la consola de ancho
       // completo (Avanzado) — no overlays flotantes.
