@@ -262,21 +262,24 @@ export function createParticleField(
   }
 
   // Cuántas morphs pueden estar "en vuelo" a la vez — compartido entre
-  // el cálculo del presupuesto dinámico y el scheduler de abajo.
-  const CONCURRENCY_CAP = 32;
+  // el cálculo del presupuesto dinámico y el scheduler de abajo. Subido
+  // 32->48: con miles de partículas de por medio ahora (el léxico P3
+  // creció mucho desde el primer ajuste), más concurrencia real es lo
+  // que baja el piso natural de duración sin tocar cómo se ve cada
+  // mitosis/fusión individual.
+  const CONCURRENCY_CAP = 48;
 
-  // Presupuesto DINÁMICO (feedback directo del usuario viendo la morph
-  // en producción, 2026-07-19: "al final aparecen muchas de golpe" —
-  // el tope fijo de 1000ms original, con cientos de partículas entrando
-  // de golpe (Principiante->Avanzado con el léxico P3 ya son ~700+),
-  // no le daba tiempo al tope de concurrencia de terminarlas a todas
-  // antes del hard-deadline, así que el remanente se snapeaba de un
-  // jalón). Se escala con cuántas partículas hay que animar — pocas
-  // siguen sintiéndose rápidas, muchas se estiran, nunca más de 10s.
+  // Presupuesto DINÁMICO — ajustado 2026-07-19 en sentido contrario al
+  // cambio anterior: el dataset creció tanto (P3 ya pasa de 4k lemas)
+  // que transiciones grandes SIEMPRE tocaban el tope de 10s, sintiéndose
+  // lentas (reportado en vivo) — bajar el tope y el peso por partícula
+  // comprime el espaciado entre inicios, no la duración de cada mitosis/
+  // fusión individual (esa sigue en 260-420ms, ver buildSchedule), así
+  // que se ve igual de bien pero termina antes.
   function dynamicBudget(itemCount: number): number {
-    const AVG_DURATION = 350;
+    const AVG_DURATION = 220;
     const raw = (itemCount * AVG_DURATION) / CONCURRENCY_CAP;
-    return Math.min(10000, Math.max(1000, raw));
+    return Math.min(4000, Math.max(900, raw));
   }
 
   // Gaps aleatorios entre inicios (no un metrónomo fijo) y, si la

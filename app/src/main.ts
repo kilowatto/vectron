@@ -354,6 +354,43 @@ async function main() {
     requestAnimationFrame(tick);
   }
 
+  // Bug real reportado con capturas en vivo: el PCA centra TODO el
+  // dataset en el origen, pero un subconjunto (ej. sólo sustantivos+
+  // función en Principiante) no queda centrado ahí — su propio
+  // centroide queda desplazado hacia donde vive esa región semántica.
+  // Como la órbita siempre giraba alrededor del origen fijo, cambiar de
+  // modo dejaba lo visible "de un lado", descentrado, y la rotación se
+  // sentía desbalanceada. Recalcula el centroide de lo visible en cada
+  // cambio de modo y desliza la cámara (target + posición, mismo
+  // offset relativo — un paneo, no un dolly) hacia allá.
+  const recenterState = { id: 0 };
+  function recenterToMode(allowed: Set<PartOfSpeech>) {
+    const visible = field.concepts.filter((c) => allowed.has(c.partOfSpeech));
+    if (visible.length === 0) return;
+    const centroid = new THREE.Vector3();
+    for (const c of visible) centroid.add(new THREE.Vector3(...c.coords));
+    centroid.divideScalar(visible.length);
+
+    const id = ++recenterState.id;
+    const controls = engine.controls;
+    const camera = engine.camera;
+    const fromT = controls.target.clone();
+    const fromC = camera.position.clone();
+    const delta = centroid.clone().sub(fromT);
+    const toC = fromC.clone().add(delta);
+    const duration = 1100;
+    const start = performance.now();
+    function tick() {
+      if (id !== recenterState.id) return;
+      const t = Math.min((performance.now() - start) / duration, 1);
+      const e = 1 - Math.pow(1 - t, 3);
+      controls.target.lerpVectors(fromT, centroid, e);
+      camera.position.lerpVectors(fromC, toC, e);
+      if (t < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
   const interaction = setupConceptInteraction({
     canvas,
     camera: engine.camera,
@@ -560,18 +597,29 @@ async function main() {
     kindLegend.setMode(mode);
     colorKey.setMode(mode);
     field.setSearchHighlights([]); // suelta cualquier dominio aislado del modo anterior
-    // P2: mitosis (nacen las que entran) / fusión (las que salen se
-    // comen hacia una vecina) en vez del corte instantáneo de antes —
-    // ver DOCs/06-mode-morph-cells.md. Duración dinámica según cuántas
-    // partículas hay que animar (1-10s) — ajustado con feedback directo
-    // del usuario: el tope fijo de 1s original hacía que las
-    // transiciones grandes terminaran de golpe en vez de en ola pareja.
-    const reducedMotion =
-      typeof matchMedia !== "undefined" &&
-      matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const { visibleCount } = await field.morphToPartOfSpeechFilter(allowedPos, { reducedMotion });
-    refreshColorKey();
 
+    // Todo el "chrome" de la app (shell, composer/strip, HUD, color key)
+    // se actualiza YA — bug real reportado en vivo: antes esperaba a que
+    // terminara la morph de partículas (hasta varios segundos) para
+    // recién ahí cambiar el dock/Math Arena/toggle Cubo|Matemáticas, así
+    // que durante toda la animación el switcher ya mostraba el modo
+    // nuevo pero el layout seguía siendo el del modo anterior.
+    const isFirstCall = composer === null;
+    applyShellLayout(mode);
+    if (composer && tokenStrip) {
+      await Promise.all([
+        fadeOut(composer, { duration: 220 }),
+        fadeOut(tokenStrip, { duration: 220 }),
+      ]);
+      composer.remove();
+      tokenStrip.remove();
+    }
+    ({ composer, strip: tokenStrip } = mountComposerAndStrip(mode));
+
+    // El conteo real no depende de que la morph termine — se puede
+    // calcular directo del filtro, así el HUD también es instantáneo.
+    const visibleCount = field.concepts.filter((c) => allowedPos.has(c.partOfSpeech)).length;
+    refreshColorKey();
     // El HUD también habla el idioma de cada modo: Principiante no dice
     // "vector", los otros sí (con la notación ℝ en Avanzado).
     const countUnit =
@@ -581,7 +629,7 @@ async function main() {
           ? t("hudUnitIntermedio", lang)
           : t("hudUnitAvanzado", lang);
     baseCountText = `${visibleCount.toLocaleString(lang === "en" ? "en-US" : "es-MX")} ${countUnit}`;
-    if (!composer) {
+    if (isFirstCall) {
       renderCountLabel();
     } else {
       fadeOut(countLabel, { duration: 150 }).then(() => {
@@ -590,16 +638,20 @@ async function main() {
       });
     }
 
-    if (composer && tokenStrip) {
-      await Promise.all([
-        fadeOut(composer, { duration: 220 }),
-        fadeOut(tokenStrip, { duration: 220 }),
-      ]);
-      composer.remove();
-      tokenStrip.remove();
-    }
-    applyShellLayout(mode);
-    ({ composer, strip: tokenStrip } = mountComposerAndStrip(mode));
+    // Recentrar la órbita al centroide de lo visible corre EN PARALELO
+    // con la morph, no bloquea nada — ver recenterToMode arriba.
+    recenterToMode(allowedPos);
+
+    // P2: mitosis (nacen las que entran) / fusión (las que salen se
+    // comen hacia una vecina) en vez del corte instantáneo de antes —
+    // ver DOCs/06-mode-morph-cells.md. Duración dinámica según cuántas
+    // partículas hay que animar — ajustada 2026-07-19 para que
+    // transiciones grandes ya no se sientan lentas (ver dynamicBudget
+    // en particleField.ts).
+    const reducedMotion =
+      typeof matchMedia !== "undefined" &&
+      matchMedia("(prefers-reduced-motion: reduce)").matches;
+    await field.morphToPartOfSpeechFilter(allowedPos, { reducedMotion });
   }
 
   switcher.addEventListener("vx-mode-change", (event) => {
