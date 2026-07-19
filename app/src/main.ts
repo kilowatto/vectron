@@ -660,12 +660,40 @@ async function main() {
     }
   }
 
+  // Bug real reportado en vivo con captura ("todo encimando"): composer/
+  // strip flotaban (position:fixed) sobre CUALQUIER superficie angosta,
+  // asumiendo que el panel full-bleed de Transformer/RAG los tapa por
+  // completo al navegar ahí (comentario original en mountComposerAndStrip
+  // más abajo) — en la práctica no siempre pintan en ese orden (visto en
+  // Safari real) y, aunque lo hicieran, el propio texto del panel invita
+  // a escribir ahí ("escribe algo arriba para ver los arcos") — esconder
+  // el composer detrás del texto sería igual de roto que encimarlo. La
+  // solución real es la misma que ya usa escritorio: dockearlo (flujo
+  // normal, arriba de los tres paneles) en vez de flotar, apenas la
+  // superficie activa no sea "cube" — ahí no hay nada debajo con lo que
+  // pueda chocar.
+  function placeComposerAndStrip() {
+    if (!composer || !tokenStrip) return;
+    const desktopDock = matchMedia(DESKTOP_INTERMEDIO).matches;
+    const dockStyle = desktopDock || intermediateSurface !== "cube";
+    composer.toggleAttribute("dock", dockStyle);
+    tokenStrip.toggleAttribute("dock", dockStyle);
+    if (dockStyle && cubePanelEl) {
+      sidePaneEl.insertBefore(tokenStrip, cubePanelEl);
+      sidePaneEl.insertBefore(composer, tokenStrip);
+    } else if (!dockStyle) {
+      stageEl.appendChild(composer);
+      stageEl.appendChild(tokenStrip);
+    }
+  }
+
   function applyIntermediateSurfaceVisibility() {
     if (cubePanelEl) cubePanelEl.hidden = intermediateSurface !== "cube";
     if (transformerPanelEl) transformerPanelEl.hidden = intermediateSurface !== "transformer";
     if (ragPanelEl) ragPanelEl.hidden = intermediateSurface !== "rag";
     stageEl.dataset.intermedioSurface = intermediateSurface;
     placeIntermediateSurfaceNav();
+    placeComposerAndStrip();
     applyTransformerChapter();
     setChamberPeekActive(false);
   }
@@ -1229,25 +1257,11 @@ async function main() {
     });
     if (mode === "intermedio") {
       // DOCs/13 §3-4 (Phase 1): tres superficies hermanas comparten UN
-      // composer. En dock de escritorio composer/strip viven arriba de
-      // los tres paneles, siempre visibles; en angosto no hay dock
-      // hasta elegir una superficie que no sea "cube" — ahí composer/
-      // strip siguen flotando sobre el cubo (mismo trade-off que
-      // <vx-surface-toggle> en Avanzado angosto: se pierden de vista
-      // mientras se navega otra superficie, se recuperan al volver a
-      // "Cubo"), y los tres paneles se montan igual dentro de
-      // #side-pane para que el CSS full-bleed (ver style.css) los
-      // muestre por turnos.
-      const desktopDock = isDockLayout(mode);
-      if (desktopDock) {
-        composer.setAttribute("dock", "");
-        strip.setAttribute("dock", "");
-        sidePaneEl.appendChild(composer);
-        sidePaneEl.appendChild(strip);
-      } else {
-        stageEl.appendChild(composer);
-        stageEl.appendChild(strip);
-      }
+      // composer. Dónde viven exactamente (flotando sobre el cubo vs.
+      // dockeados de flujo normal arriba de los tres paneles) depende
+      // de la superficie activa Y el ancho — ver placeComposerAndStrip,
+      // que decide esto mismo cada vez que la superficie cambia, no
+      // sólo aquí al montar.
       const { cubePanel, transformerPanel, ragPanel } = buildIntermediateSurfacePanels(composer);
       sidePaneEl.appendChild(cubePanel);
       sidePaneEl.appendChild(transformerPanel);

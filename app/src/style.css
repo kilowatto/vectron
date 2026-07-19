@@ -206,6 +206,11 @@ body {
        intencional); aquí es TODA la pantalla, tiene que leerse solo. */
     background: rgba(8, 10, 13, 0.97);
     overflow-y: auto;
+    /* Espacio reservado para #chamber-peek-btn (fixed, 16px + ~30px de
+       alto — ver más abajo): sin esto el final del scroll queda justo
+       debajo del botón, mismo tipo de encimado que el de composer/strip
+       arriba, sólo que en el borde inferior en vez de en medio. */
+    padding-bottom: 64px;
   }
 }
 
