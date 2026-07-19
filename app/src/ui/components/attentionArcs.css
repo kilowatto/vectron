@@ -32,6 +32,29 @@ canvas {
   cursor: default;
 }
 
+/* "Stage size" (DOCs/13 §11.2, Phase 4) — vive a pantalla sobre
+   #cube-pane en vez del dock chico; el canvas llena lo que quede del
+   host después del head, en vez de una altura fija de 92px. */
+:host([stage]) {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+}
+
+:host([stage]) canvas {
+  flex: 1;
+  min-height: 0;
+}
+
+:host([stage]) .label {
+  font-size: 13px;
+}
+
+:host([stage]) .declared {
+  font-size: 11px;
+}
+
 .empty {
   font-size: 10.5px;
   color: var(--dim);

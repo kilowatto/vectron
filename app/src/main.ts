@@ -27,6 +27,14 @@ import type { VxNextTokenBars } from "./ui/components/nextTokenBars";
 import "./ui/components/nextTokenBars";
 import type { VxAttentionArcs } from "./ui/components/attentionArcs";
 import "./ui/components/attentionArcs";
+import type {
+  VxTransformerChapter,
+  TransformerChapter,
+  TransformerChapterChangeDetail,
+} from "./ui/components/transformerChapterNav";
+import "./ui/components/transformerChapterNav";
+import type { VxBlockDiagram } from "./ui/components/blockDiagram";
+import "./ui/components/blockDiagram";
 import type { VxRagStub } from "./ui/components/ragStub";
 import "./ui/components/ragStub";
 import type {
@@ -583,7 +591,7 @@ async function main() {
     if (ragPanelEl) ragPanelEl.hidden = intermediateSurface !== "rag";
     stageEl.dataset.intermedioSurface = intermediateSurface;
     placeIntermediateSurfaceNav();
-    setContextChamberActive(currentMode === "intermedio" && intermediateSurface === "transformer");
+    applyTransformerChapter();
   }
 
   // DOCs/13 anti-goal explícito: "Cubo y Cámara nunca se presentan como
@@ -595,9 +603,51 @@ async function main() {
     if (active === contextChamberActive) return;
     contextChamberActive = active;
     contextChamber.group.visible = active;
-    field.group.visible = !active;
-    cubeEdges.visible = !active;
     flyTo(active ? contextChamber.group.position.clone() : null);
+  }
+
+  // Phase 4 (DOCs/13 §11): capítulos DENTRO de Transformer. "Contexto"
+  // es la Cámara 3D (ya existe); Atención/Bloques/Predicción viven en
+  // un overlay DOM a pantalla sobre #cube-pane (doc §11.2: "not forced
+  // into 3D — the Context Chamber owns the one major 3D spectacle").
+  // "Entrada" no necesita vista propia — ya es el Cubo (Módulo A).
+  let transformerChapter: TransformerChapter = "context";
+  const transformerChapterNav = document.createElement("vx-transformer-chapter") as VxTransformerChapter;
+  transformerChapterNav.setAttribute("current", transformerChapter);
+  transformerChapterNav.addEventListener("vx-transformer-chapter-change", (event) => {
+    transformerChapter = (event as CustomEvent<TransformerChapterChangeDetail>).detail.chapter;
+    transformerChapterNav.setAttribute("current", transformerChapter);
+    applyTransformerChapter();
+  });
+
+  const stageOverlayEl = document.createElement("div");
+  stageOverlayEl.id = "transformer-stage-overlay";
+  stageOverlayEl.hidden = true;
+  cubePaneEl.appendChild(stageOverlayEl);
+  const stageAttentionArcs = document.createElement("vx-attention-arcs") as VxAttentionArcs;
+  stageAttentionArcs.setAttribute("stage", "");
+  const stageBlockDiagram = document.createElement("vx-block-diagram") as VxBlockDiagram;
+  const stageNextTokenBars = document.createElement("vx-next-token-bars") as VxNextTokenBars;
+  stageNextTokenBars.setAttribute("stage", "");
+
+  function applyTransformerChapter() {
+    const inTransformer = currentMode === "intermedio" && intermediateSurface === "transformer";
+    const showChamber = inTransformer && transformerChapter === "context";
+    const showStageOverlay =
+      inTransformer && (transformerChapter === "attention" || transformerChapter === "blocks" || transformerChapter === "prediction");
+    setContextChamberActive(showChamber);
+    field.group.visible = !inTransformer || transformerChapter === "input";
+    cubeEdges.visible = field.group.visible;
+    stageOverlayEl.hidden = !showStageOverlay;
+    if (showStageOverlay) {
+      stageOverlayEl.replaceChildren(
+        transformerChapter === "attention"
+          ? stageAttentionArcs
+          : transformerChapter === "blocks"
+            ? stageBlockDiagram
+            : stageNextTokenBars,
+      );
+    }
   }
 
   // Los tres paneles (Módulos A/B+G en Cubo, C/D/E en Transformer, F en
@@ -624,9 +674,10 @@ async function main() {
 
     const transformerPanel = document.createElement("div");
     transformerPanel.className = "surface-panel";
+    transformerPanel.appendChild(transformerChapterNav);
     const transformerNote = document.createElement("div");
     transformerNote.className = "dock-note";
-    transformerNote.innerHTML = `<p>${t("transformerDockIntro", lang)}</p>`;
+    transformerNote.innerHTML = `<p>${t("transformerDockIntro", lang)}</p><p>${t("transformerInputStageNote", lang)}</p>`;
     transformerPanel.appendChild(transformerNote);
     // Orden = capítulos de DOCs/13 §2.7: Contexto → Atención → Predicción.
     const contextLab = document.createElement("vx-context-lab") as VxContextLab;
@@ -658,6 +709,11 @@ async function main() {
       const { tokens, text } = (event as CustomEvent<TokensChangeDetail>).detail;
       nextTokenBars.setText(text);
       attentionArcs.setTokens(tokens.map((tok) => tok.text));
+      // Instancias "stage size" del overlay (Phase 4, DOCs/13 §11) —
+      // mismo dato, sólo un segundo destino además del widget chico
+      // del dock, para que ya tengan contenido cuando se les navegue.
+      stageNextTokenBars.setText(text);
+      stageAttentionArcs.setTokens(tokens.map((tok) => tok.text));
       void tokenizeBGE(text).then((bgeTokens) =>
         contextLab.setTokens(bgeTokens.map((tok) => tok.text)),
       );
@@ -1075,10 +1131,11 @@ async function main() {
   async function runApplyModeChrome(mode: Mode) {
     currentMode = mode;
     allowedPos = MODE_POS[mode];
-    // Fuera de Intermedio la Cámara de Contexto nunca debe quedar
-    // activa (Principiante/Avanzado no la conocen) — restaura el cubo
-    // sin esperar a que Intermedio la desactive por su cuenta.
-    if (mode !== "intermedio") setContextChamberActive(false);
+    // Fuera de Intermedio ni la Cámara de Contexto ni el overlay de
+    // capítulos deben quedar activos (Principiante/Avanzado no los
+    // conocen) — `currentMode` ya es el nuevo modo aquí, así que esto
+    // recalcula todo a "apagado" sin esperar a que Intermedio lo haga.
+    if (mode !== "intermedio") applyTransformerChapter();
     // Pedido explícito 2026-07-19: el switcher deslizaba su pastilla
     // (y el composer/tokenStrip se desvanecían al remontarse) en una
     // duración fija, desacoplada de cuánto tarda en realidad la ola de

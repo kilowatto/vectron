@@ -198,6 +198,33 @@ body {
   }
 }
 
+/* Phase 4 (DOCs/13 §11): capítulos Atención/Bloques/Predicción del
+   capítulo Transformer, promovidos a "stage size" sobre #cube-pane —
+   fondo opaco a propósito (mismo color que el body) para que nunca se
+   sienta como el mismo espacio de datos que el cubo/la cámara detrás. */
+#transformer-stage-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 11;
+  background: #05070a;
+  /* Bug real encontrado en vivo: `:host { padding }` en un componente
+     Shadow DOM pierde SIEMPRE contra un selector de luz que también
+     toque `padding` en el host (aquí, el reset `* { padding:0 }` de
+     arriba) — sin importar especificidad, la regla del documento
+     externo gana. Antes esto no se notaba porque el dock/sidePaneEl ya
+     traía su propio padding; este overlay no tiene ninguno más
+     alrededor, así que el respiro tiene que venir de aquí, no de
+     `:host([stage])` en cada componente (que ya quedó documentado
+     como "no aplica" donde se intentó). */
+  padding: 48px;
+  box-sizing: border-box;
+}
+
+#transformer-stage-overlay > * {
+  width: 100%;
+  height: 100%;
+}
+
 #scene {
   position: absolute;
   inset: 0;

@@ -1,0 +1,37 @@
+:host {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+  background: rgba(10, 13, 17, 0.5);
+  border: 1px solid rgba(231, 226, 214, 0.12);
+  border-radius: 6px;
+  padding: 3px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.02em;
+}
+
+button {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--dim);
+  padding: 5px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  letter-spacing: inherit;
+  white-space: nowrap;
+}
+
+button:hover {
+  color: var(--ink);
+}
+
+button.active {
+  background: var(--accent-2);
+  color: #06222a;
+  font-weight: 600;
+  cursor: default;
+}

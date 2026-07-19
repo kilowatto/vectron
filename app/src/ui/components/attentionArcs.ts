@@ -23,10 +23,15 @@ function pairWeight(a: string, b: string): number {
 }
 
 export class VxAttentionArcs extends HTMLElement {
+  static readonly observedAttributes = ["stage"];
   #canvas!: HTMLCanvasElement;
   #ctx!: CanvasRenderingContext2D;
   #tokens: string[] = [];
   #hoverIdx: number | null = null;
+
+  attributeChangedCallback() {
+    this.#draw();
+  }
 
   connectedCallback() {
     if (this.shadowRoot) return;
@@ -57,11 +62,12 @@ export class VxAttentionArcs extends HTMLElement {
   }
 
   #tokenBoxes(): { x: number; w: number }[] {
+    const stage = this.hasAttribute("stage");
     const width = this.#canvas.clientWidth || 280;
     const n = this.#tokens.length;
     if (n === 0) return [];
-    const gap = 6;
-    const boxW = Math.min(56, (width - gap * (n - 1)) / n);
+    const gap = stage ? 12 : 6;
+    const boxW = Math.min(stage ? 96 : 56, (width - gap * (n - 1)) / n);
     const totalW = boxW * n + gap * (n - 1);
     const startX = (width - totalW) / 2;
     return this.#tokens.map((_, i) => ({ x: startX + i * (boxW + gap), w: boxW }));
@@ -80,9 +86,13 @@ export class VxAttentionArcs extends HTMLElement {
 
   #draw() {
     if (!this.#ctx) return;
+    // Promoción "stage size" (DOCs/13 §11.2, Phase 4) — mismo canvas,
+    // mismo cálculo de arcos, sólo más grande cuando vive a pantalla
+    // sobre #cube-pane en vez del dock chico.
+    const stage = this.hasAttribute("stage");
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const width = this.#canvas.clientWidth || 280;
-    const height = 92;
+    const height = stage ? Math.max(220, this.#canvas.clientHeight || 320) : 92;
     this.#canvas.width = width * dpr;
     this.#canvas.height = height * dpr;
     this.#canvas.style.height = `${height}px`;
@@ -95,7 +105,7 @@ export class VxAttentionArcs extends HTMLElement {
     if (this.#tokens.length === 0) return;
 
     const boxes = this.#tokenBoxes();
-    const boxY = height - 24;
+    const boxY = height - (stage ? 48 : 24);
     const arcBaseY = boxY - 4;
 
     // Arcos primero (detrás de las cajas) — de cada token hacia el
@@ -121,6 +131,7 @@ export class VxAttentionArcs extends HTMLElement {
     }
 
     // Cajas de tokens.
+    const boxH = stage ? 36 : 20;
     boxes.forEach((b, i) => {
       const active = this.#hoverIdx === i;
       ctx.fillStyle = active ? "rgba(217, 138, 52, 0.22)" : "rgba(231, 226, 214, 0.08)";
@@ -128,15 +139,17 @@ export class VxAttentionArcs extends HTMLElement {
       ctx.lineWidth = 1;
       const r = 4;
       ctx.beginPath();
-      ctx.roundRect(b.x, boxY, b.w, 20, r);
+      ctx.roundRect(b.x, boxY, b.w, boxH, r);
       ctx.fill();
       ctx.stroke();
       ctx.fillStyle = active ? "#e7e2d6" : "#9aa5ad";
-      ctx.font = "9px var(--font-mono), monospace";
+      ctx.font = stage ? "13px var(--font-mono), monospace" : "9px var(--font-mono), monospace";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      const label = this.#tokens[i].length > 8 ? this.#tokens[i].slice(0, 7) + "…" : this.#tokens[i];
-      ctx.fillText(label, b.x + b.w / 2, boxY + 10);
+      const maxChars = stage ? 12 : 8;
+      const label =
+        this.#tokens[i].length > maxChars ? this.#tokens[i].slice(0, maxChars - 1) + "…" : this.#tokens[i];
+      ctx.fillText(label, b.x + b.w / 2, boxY + boxH / 2);
     });
   }
 }

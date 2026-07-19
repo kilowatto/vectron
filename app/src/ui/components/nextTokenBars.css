@@ -96,3 +96,50 @@
   color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
+
+/* "Stage size" (DOCs/13 §11.4, Phase 4) — vive a pantalla sobre
+   #cube-pane; mismas barras, sólo más grandes y con más aire. */
+:host([stage]) {
+  padding: 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+}
+
+:host([stage]) .label {
+  font-size: 15px;
+}
+
+:host([stage]) .declared {
+  font-size: 12px;
+}
+
+:host([stage]) .bars {
+  gap: 14px;
+  margin: 24px 0;
+}
+
+:host([stage]) .bar-row {
+  font-size: 20px;
+  gap: 16px;
+}
+
+:host([stage]) .word {
+  width: 120px;
+  font-weight: 600;
+}
+
+:host([stage]) .track {
+  height: 16px;
+}
+
+:host([stage]) .pct {
+  width: 64px;
+  font-size: 16px;
+}
+
+:host([stage]) .temp-row {
+  margin-top: 20px;
+  font-size: 14px;
+}
