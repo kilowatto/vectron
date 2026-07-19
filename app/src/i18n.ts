@@ -227,6 +227,11 @@ const STRINGS = {
     en: "nothing to compact yet — fill the chamber first",
   },
   contextChamberMangoTest: { es: "prueba MANGO-47", en: "MANGO-47 test" },
+  // --- Fase 6: dolly de escala de capacidad (DOCs/13 §10) ---
+  contextChamberScaleHeading: {
+    es: "comparar escala (la cámara vuela y el vessel crece × cbrt(capacidad/500))",
+    en: "compare scale (camera flies out, vessel grows × cbrt(capacity/500))",
+  },
   contextChamberRecoverHeading: {
     es: "recuperar de turnos evictados/compactados",
     en: "recover from evicted/compacted turns",

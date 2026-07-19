@@ -55,7 +55,7 @@ import { tokenizeSimple, tokenizeBPE } from "./tokenizer";
 import { tokenizeBGE } from "./bgeTokenizer";
 import { fetchCosinePairs, type PartOfSpeech } from "./data/concepts";
 import { setupTokenMode } from "./scene/tokenMode";
-import { createContextChamber } from "./scene/contextChamber";
+import { createContextChamber, linearCapacityScale } from "./scene/contextChamber";
 import {
   createContextController,
   CONTEXT_PROFILES,
@@ -304,13 +304,67 @@ async function main() {
   compactRowEl.append(compactNowBtn, mangoTestBtn);
   const compactResultEl = document.createElement("p");
 
+  // Fase 6 (DOCs/13 §10) — "wow" de escala: cambia de perfil de
+  // capacidad, escala el vessel × cbrt(capacidad/500) y hace dolly de
+  // cámara si la Cámara ya está a la vista, para que se sienta el
+  // salto en vez de sólo leerlo en un número.
+  const scaleHeadingEl = document.createElement("p");
+  const scaleRowEl = document.createElement("div");
+  scaleRowEl.className = "controls-row";
+  const scaleLabBtn = document.createElement("button");
+  scaleLabBtn.type = "button";
+  const scaleChatgptBtn = document.createElement("button");
+  scaleChatgptBtn.type = "button";
+  const scaleClaudeBtn = document.createElement("button");
+  scaleClaudeBtn.type = "button";
+  scaleRowEl.append(scaleLabBtn, scaleChatgptBtn, scaleClaudeBtn);
+  let activeCapacityProfile: keyof typeof CONTEXT_PROFILES = "lab";
+
+  function syncCapacityButtons() {
+    scaleLabBtn.classList.toggle("active", activeCapacityProfile === "lab");
+    scaleChatgptBtn.classList.toggle("active", activeCapacityProfile === "chatgptThinking");
+    scaleClaudeBtn.classList.toggle("active", activeCapacityProfile === "claudeSonnet5");
+  }
+
+  function setCapacityProfile(profileKey: keyof typeof CONTEXT_PROFILES) {
+    activeCapacityProfile = profileKey;
+    const profile = CONTEXT_PROFILES[profileKey];
+    contextController.setCapacity(profile.capacity);
+    const scale = linearCapacityScale(profile.capacity, CONTEXT_PROFILES.lab.capacity);
+    contextChamber.setCapacityScale(scale);
+    if (contextChamber.group.visible) {
+      const targetDist = 1.75 * Math.max(1, scale);
+      // Bug real encontrado en vivo: OrbitControls.maxDistance=9.9 (fijado
+      // en engine.ts para el zoom del cubo) reclama la cámara de vuelta
+      // cada frame si el dolly pide más lejos que eso — Claude Sonnet 5
+      // necesita ~22 unidades. Subir el techo permanentemente es
+      // inofensivo para el cubo (sólo permite alejarse más si alguien
+      // quiere) y evita pelear con el control cada cuadro.
+      engine.controls.maxDistance = Math.max(engine.controls.maxDistance, targetDist + 2);
+      flyTo(contextChamber.group.position.clone(), targetDist);
+    }
+    syncCapacityButtons();
+  }
+  scaleLabBtn.addEventListener("click", () => setCapacityProfile("lab"));
+  scaleChatgptBtn.addEventListener("click", () => setCapacityProfile("chatgptThinking"));
+  scaleClaudeBtn.addEventListener("click", () => setCapacityProfile("claudeSonnet5"));
+
   function renderChamberDemoCopy() {
     chamberDemoEl.innerHTML = "";
     const title = document.createElement("p");
     title.innerHTML = `<b>${t("contextChamberLabel", lang)}</b>`;
     const intro = document.createElement("p");
     intro.textContent = t("contextChamberIntro", lang);
-    chamberDemoEl.append(title, intro, chamberUsageEl, chamberControlsEl, compactRowEl, compactResultEl);
+    chamberDemoEl.append(
+      title,
+      intro,
+      chamberUsageEl,
+      chamberControlsEl,
+      compactRowEl,
+      compactResultEl,
+      scaleHeadingEl,
+      scaleRowEl,
+    );
     sendTurnBtn.textContent = t("contextChamberSendTurn", lang);
     resetChamberBtn.textContent = t("contextChamberReset", lang);
     rejectPolicyBtn.textContent = t("contextChamberPolicyReject", lang);
@@ -318,6 +372,11 @@ async function main() {
     compactPolicyBtn.textContent = t("contextChamberPolicyCompact", lang);
     compactNowBtn.textContent = t("contextChamberCompactNow", lang);
     mangoTestBtn.textContent = t("contextChamberMangoTest", lang);
+    scaleHeadingEl.textContent = t("contextChamberScaleHeading", lang);
+    scaleLabBtn.textContent = t("contextLabModelLab", lang);
+    scaleChatgptBtn.textContent = t("contextLabModelChatgpt", lang);
+    scaleClaudeBtn.textContent = t("contextLabModelClaude", lang);
+    syncCapacityButtons();
     renderChamberUsage();
   }
 
@@ -599,10 +658,18 @@ async function main() {
   // malla de aristas) en vez de superponerlos, y reusa `flyTo` (ya
   // existe para volar a una partícula fijada) para encuadrarla.
   let contextChamberActive = false;
+  const CUBE_FOG_DENSITY = (engine.scene.fog as THREE.FogExp2).density;
   function setContextChamberActive(active: boolean) {
     if (active === contextChamberActive) return;
     contextChamberActive = active;
     contextChamber.group.visible = active;
+    // Bug real encontrado en vivo: FogExp2 con la densidad calibrada
+    // para las distancias del cubo (~5-10 unidades) apaga por completo
+    // cualquier cosa más allá de ~18 unidades — exactamente donde el
+    // dolly de escala de capacidad (Claude Sonnet 5 ≈22u) necesita
+    // llegar. La Cámara vive en su propia zona del mundo, nunca junto
+    // al cubo, así que puede tener su propia densidad sin afectarlo.
+    (engine.scene.fog as THREE.FogExp2).density = active ? 0.01 : CUBE_FOG_DENSITY;
     flyTo(active ? contextChamber.group.position.clone() : null);
   }
 
@@ -816,7 +883,7 @@ async function main() {
   // conservando la dirección de vista actual — después del vuelo, orbitar
   // y hacer zoom giran alrededor de la partícula, no del centro.
   const flyState = { id: 0 };
-  function flyTo(worldPos: THREE.Vector3 | null) {
+  function flyTo(worldPos: THREE.Vector3 | null, distanceOverride?: number) {
     const id = ++flyState.id;
     const controls = engine.controls;
     const camera = engine.camera;
@@ -824,8 +891,12 @@ async function main() {
     const currentDist = camera.position.distanceTo(controls.target);
     // Acercarse al fijar; al volver al centro, quedarse a distancia de
     // vista general. 1.15/3.2 -> 1.75/4.86 (×1.52, mismo factor que
-    // CUBE_SCALE — ver seed.ts).
-    const targetDist = worldPos ? Math.min(currentDist, 1.75) : Math.max(currentDist, 4.86);
+    // CUBE_SCALE — ver seed.ts). `distanceOverride` es para el dolly de
+    // escala de capacidad (doc §10) — la Cámara de Contexto crece y la
+    // vista tiene que alejarse en la misma proporción para seguir
+    // encuadrándola completa.
+    const targetDist =
+      distanceOverride ?? (worldPos ? Math.min(currentDist, 1.75) : Math.max(currentDist, 4.86));
     const dir = camera.position.clone().sub(controls.target).normalize();
     const fromT = controls.target.clone();
     const fromC = camera.position.clone();

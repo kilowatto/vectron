@@ -53,8 +53,17 @@ export interface ContextChamber3D {
   group: THREE.Group;
   setSnapshot(snapshot: ContextSnapshot, capacity: number, responseReserve: number): void;
   setQuality(quality: RenderQuality): void;
+  /** Doc §10 — escala del vessel (no del fill) por raíz cúbica de la
+   * razón de capacidad; 1 = tamaño del lab (500). Deja la silueta
+   * fantasma del lab visible como referencia cuando scale !== 1. */
+  setCapacityScale(scale: number): void;
   update(dt: number): void;
   dispose(): void;
+}
+
+/** Doc §10: `linearCapacityScale(capacity) = cbrt(capacity / 500)`. */
+export function linearCapacityScale(capacity: number, labCapacity = 500): number {
+  return Math.cbrt(capacity / labCapacity);
 }
 
 export function createContextChamber(
@@ -153,6 +162,17 @@ export function createContextChamber(
   vessel.renderOrder = 5; // doc §8.7: vidrio se dibuja AL FINAL de lo transparente
   group.add(vessel);
 
+  // --- Silueta fantasma (doc §10, "wow" de escala) — el vessel de 500
+  // tokens de referencia, SIN escalar, visible sólo cuando `group` se
+  // escala a un perfil de capacidad más grande (contra-escalada para
+  // quedarse en su tamaño original mientras el resto del grupo crece). ---
+  const ghostVessel = new THREE.LineSegments(
+    new THREE.EdgesGeometry(vesselGeometry),
+    new THREE.LineBasicMaterial({ color: 0xd98a34, transparent: true, opacity: 0.35 }),
+  );
+  ghostVessel.visible = false;
+  group.add(ghostVessel);
+
   // --- Liquid volume (agua) — altura unitaria, escalada en Y según fill ---
   const liquidGeometry = new THREE.CylinderGeometry(VESSEL_RADIUS * 0.9, VESSEL_RADIUS * 0.9, 1, 32);
   liquidGeometry.translate(0, 0.5, 0); // pivote en la base, para escalar hacia arriba desde el fondo
@@ -243,6 +263,13 @@ export function createContextChamber(
     });
   }
 
+  function setCapacityScale(scale: number) {
+    group.scale.setScalar(scale);
+    const isReference = Math.abs(scale - 1) < 0.01;
+    ghostVessel.visible = !isReference;
+    ghostVessel.scale.setScalar(1 / scale);
+  }
+
   function update(dt: number) {
     time += dt;
     const pos = surface.geometry.attributes.position;
@@ -262,6 +289,8 @@ export function createContextChamber(
     liquidGeometry.dispose();
     surfaceGeometry.dispose();
     dropGeometry.dispose();
+    ghostVessel.geometry.dispose();
+    (ghostVessel.material as THREE.Material).dispose();
     vessel.material.dispose();
     (liquid.material as THREE.Material).dispose();
     (surface.material as THREE.Material).dispose();
@@ -269,5 +298,5 @@ export function createContextChamber(
     envTexture?.dispose();
   }
 
-  return { group, setSnapshot, setQuality, update, dispose };
+  return { group, setSnapshot, setQuality, setCapacityScale, update, dispose };
 }
