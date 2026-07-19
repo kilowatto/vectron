@@ -1,10 +1,21 @@
+import { SEED_CONCEPTS } from "./data/seedConcepts";
+
+export { SyncConceptsWorkflow } from "./syncWorkflow";
+
 export interface Env {
   AI: Ai;
   DB: D1Database;
   DATASET: R2Bucket;
   VECTORIZE: VectorizeIndex;
   ASSETS: Fetcher;
+  SYNC_WORKFLOW: Workflow;
 }
+
+/** TTL del lease de auto-sync (ver DOCs/13 + migrations/0004): más
+ * largo que cualquier corrida real esperada (unos pocos lotes de
+ * embeddings, casi siempre bajo 1 minuto) — sólo existe para no dejar
+ * el lock trabado para siempre si una instancia muere sin liberar. */
+const SYNC_LEASE_TTL_MS = 10 * 60 * 1000;
 
 const ALLOWED_ORIGINS = new Set([
   "http://localhost:5173",
@@ -302,6 +313,56 @@ async function handleSimilarByVector(env: Env, request: Request): Promise<Respon
   );
 }
 
+/** Chequeo barato (una sola fila, sin AI ni Vectorize) — el cliente lo
+ * llama en cada boot para decidir si vale la pena disparar el sync.
+ * `target` es SEED_CONCEPTS.length tal cual quedó bundleado en ESTE
+ * deploy — sólo cambia cuando se despliega un lote nuevo. */
+async function handleSyncStatus(env: Env, request: Request): Promise<Response> {
+  const row = await env.DB.prepare("SELECT COUNT(*) as c FROM concepts").first<{ c: number }>();
+  const current = row?.c ?? 0;
+  const target = SEED_CONCEPTS.length;
+  return Response.json(
+    { ok: true, current, target, upToDate: current >= target },
+    { headers: corsHeaders(request) },
+  );
+}
+
+/** Dispara el Workflow de sync SÓLO si de verdad falta algo Y nadie más
+ * ya lo está corriendo — el UPDATE de abajo es la parte que de verdad
+ * decide quién gana: sólo la petición cuyo UPDATE cambia una fila real
+ * (`meta.changes === 1`) crea la instancia; todas las demás (lease ya
+ * tomado y todavía fresco) ven `changes === 0` y no hacen nada. Así un
+ * lote de visitantes concurrentes en el mismo boot no dispara N
+ * instancias del mismo trabajo. */
+async function handleSyncTrigger(env: Env, request: Request): Promise<Response> {
+  const row = await env.DB.prepare("SELECT COUNT(*) as c FROM concepts").first<{ c: number }>();
+  const current = row?.c ?? 0;
+  const target = SEED_CONCEPTS.length;
+  if (current >= target) {
+    return Response.json({ ok: true, triggered: false, reason: "up-to-date" }, { headers: corsHeaders(request) });
+  }
+
+  const now = new Date();
+  const staleBefore = new Date(now.getTime() - SYNC_LEASE_TTL_MS).toISOString();
+  const claim = await env.DB.prepare(
+    "UPDATE sync_lease SET locked_at = ? WHERE id = 1 AND (locked_at IS NULL OR locked_at < ?)",
+  )
+    .bind(now.toISOString(), staleBefore)
+    .run();
+
+  if (claim.meta.changes !== 1) {
+    return Response.json({ ok: true, triggered: false, reason: "already-running" }, { headers: corsHeaders(request) });
+  }
+
+  const instance = await env.SYNC_WORKFLOW.create({ params: { fromIndex: current } });
+  await env.DB.prepare("UPDATE sync_lease SET workflow_instance_id = ? WHERE id = 1").bind(instance.id).run();
+
+  return Response.json(
+    { ok: true, triggered: true, instanceId: instance.id, fromIndex: current, target },
+    { headers: corsHeaders(request) },
+  );
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -336,6 +397,14 @@ export default {
 
     if (url.pathname === "/api/similar-by-vector" && request.method === "POST") {
       return handleSimilarByVector(env, request);
+    }
+
+    if (url.pathname === "/api/sync-status") {
+      return handleSyncStatus(env, request);
+    }
+
+    if (url.pathname === "/api/sync-trigger" && request.method === "POST") {
+      return handleSyncTrigger(env, request);
     }
 
     if (url.pathname.startsWith("/api/")) {

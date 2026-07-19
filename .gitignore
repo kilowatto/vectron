@@ -7,3 +7,4 @@ dist/
 .env.local
 worker/.dev.vars
 worker/scripts/out/
+worker/scripts/backups/

@@ -28,6 +28,11 @@ bucket_name = "vectron-dataset"
 binding = "VECTORIZE"
 index_name = "vectron-concepts-m3"
 
+[[workflows]]
+name = "vectron-sync-concepts"
+binding = "SYNC_WORKFLOW"
+class_name = "SyncConceptsWorkflow"
+
 [[routes]]
 pattern = "vectron.kilowatto.com"
 custom_domain = true

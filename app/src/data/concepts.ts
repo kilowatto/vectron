@@ -31,6 +31,27 @@ export async function fetchConcepts(): Promise<Concept[]> {
   return res.json();
 }
 
+/** DOCs/13 + pedido explícito del usuario 2026-07-19 ("que el app lo
+ * haga sin que tú tengas que hacerlo y quemar tokens"): mitad cliente
+ * del auto-sync — en cada boot pregunta si SEED_CONCEPTS (bundleado en
+ * el Worker) quedó por delante de lo que ya vive en D1/Vectorize/R2, y
+ * si sí, dispara el Workflow (que decide del lado del servidor si YA
+ * hay alguien corriéndolo — ver sync_lease). Fire-and-forget a
+ * propósito: el visitante actual ya recibió su propio concepts.json,
+ * la corrección es para las visitas FUTURAS una vez que el Workflow
+ * termine — nunca bloquea ni retrasa este boot, y un fallo aquí (red,
+ * Worker caído) es silencioso, no es un problema del visitante. */
+export function checkAndTriggerSync(): void {
+  fetch(`${API_BASE}/api/sync-status`)
+    .then((res) => (res.ok ? res.json() : null))
+    .then((status: { upToDate?: boolean } | null) => {
+      if (status && status.upToDate === false) {
+        void fetch(`${API_BASE}/api/sync-trigger`, { method: "POST" });
+      }
+    })
+    .catch(() => {});
+}
+
 export interface Neighbor {
   id: number;
   score: number;

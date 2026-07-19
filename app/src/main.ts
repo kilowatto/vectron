@@ -3,7 +3,7 @@ import * as THREE from "three/webgpu";
 import { createParticleField } from "./scene/particleField";
 import { createEngine } from "./scene/engine";
 import { setupConceptInteraction } from "./scene/conceptInteraction";
-import { fetchConcepts } from "./data/concepts";
+import { fetchConcepts, checkAndTriggerSync } from "./data/concepts";
 import { getStoredMode, setStoredMode, type Mode } from "./ui/components/modeStorage";
 import "./ui/components/modeSelect";
 import "./ui/components/modeSwitcher";
@@ -143,6 +143,7 @@ async function main() {
   splash.setProgress(5, t("bootDataset", lang));
   const concepts = await fetchConcepts();
   splash.setProgress(40, t("bootDataset", lang));
+  checkAndTriggerSync();
 
   // Bug de UX real reportado en vivo (grabaciones de pantalla): para
   // quien ya tiene un modo guardado de una visita anterior, el boot
