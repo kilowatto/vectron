@@ -11,6 +11,12 @@ import css from "./kindLegend.css?inline";
  * explícita del diseño ("no mentir con formas hasta que el mesh las
  * tenga").
  *
+ * Colapsado por defecto detrás de un "peek" (mismo patrón que
+ * <vx-color-key>, ver colorKey.ts) — bug real reportado en vivo: texto
+ * explicativo denso, siempre visible, "flotando sin entenderse y
+ * estorbando" cuando no se está buscando explícitamente qué significa
+ * algo. Tocar el peek despliega la fila completa por encima.
+ *
  * ### Atributos
  * | nombre | tipo   | descripción |
  * |--------|--------|-------------|
@@ -18,11 +24,35 @@ import css from "./kindLegend.css?inline";
  */
 export class VxKindLegend extends HTMLElement {
   #mode: Mode = "intermedio";
+  #expanded = false;
+  #peekEl!: HTMLButtonElement;
+  #sheetEl!: HTMLDivElement;
 
   connectedCallback() {
     if (this.shadowRoot) return;
     this.#mode = (this.getAttribute("mode") as Mode) ?? "intermedio";
-    attachShadow(this, css);
+    const root = attachShadow(this, css);
+    root.innerHTML = `
+      <button type="button" class="peek">
+        <span class="mark">?</span>
+        <span class="label"></span>
+      </button>
+      <div class="sheet" hidden>
+        <div class="row"></div>
+      </div>
+    `;
+    this.#peekEl = root.querySelector(".peek")!;
+    this.#sheetEl = root.querySelector(".sheet")!;
+    this.#peekEl.addEventListener("click", () => {
+      this.#expanded = !this.#expanded;
+      this.#render();
+    });
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && this.#expanded) {
+        this.#expanded = false;
+        this.#render();
+      }
+    });
     this.#render();
   }
 
@@ -33,7 +63,10 @@ export class VxKindLegend extends HTMLElement {
 
   #render() {
     const lang = getStoredLang();
-    const root = this.shadowRoot!;
+    this.#sheetEl.hidden = !this.#expanded;
+    this.#peekEl.setAttribute("aria-expanded", String(this.#expanded));
+    this.#peekEl.querySelector(".label")!.textContent = t("kindLegendPeek", lang);
+
     const chips: string[] = [
       `<span class="chip"><span class="dot big"></span>${t("kindLegendNotable", lang)}</span>`,
     ];
@@ -50,7 +83,7 @@ export class VxKindLegend extends HTMLElement {
         `<span class="chip"><span class="dot bge"></span><span class="dot gpt"></span><span class="dot phrase"></span>${t("kindLegendTokens", lang)}</span>`,
       );
     }
-    root.innerHTML = `<div class="row">${chips.join("")}</div>`;
+    this.#sheetEl.querySelector(".row")!.innerHTML = chips.join("");
   }
 }
 

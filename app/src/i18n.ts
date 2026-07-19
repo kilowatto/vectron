@@ -187,6 +187,7 @@ const STRINGS = {
   kindLegendNeighbors: { es: "vecinos (coseno real)", en: "neighbors (real cosine)" },
   kindLegendPath: { es: "camino de tu frase", en: "your phrase's path" },
   kindLegendTokens: { es: "BGE · GPT · frase (vivo)", en: "BGE · GPT · phrase (live)" },
+  kindLegendPeek: { es: "¿qué significa esto?", en: "what does this mean?" },
 } satisfies Record<string, Record<Lang, string>>;
 
 export type StringKey = keyof typeof STRINGS;
