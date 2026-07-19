@@ -673,11 +673,6 @@ export function createParticleField(
   };
 }
 
-export function spinField(field: ParticleField, dt: number): void {
-  field.group.rotation.y += dt * 0.035;
-  field.group.rotation.x = Math.sin(performance.now() * 0.00006) * 0.08;
-}
-
 export function disposeField(field: ParticleField): void {
   field.mesh.geometry.dispose();
   (field.mesh.material as THREE.Material).dispose();

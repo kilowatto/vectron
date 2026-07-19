@@ -55,6 +55,20 @@ export async function createEngine(canvas: HTMLCanvasElement): Promise<Engine> {
   controls.minDistance = 0.53;
   controls.maxDistance = 9.9;
   controls.zoomToCursor = true;
+  // Bug real reportado en vivo con grabación de pantalla: el giro
+  // automático (antes: field.group.rotation.y += ...) rotaba TODO el
+  // grupo alrededor del ORIGEN del mundo — si el centroide de lo
+  // visible en el modo actual está lejos del origen (recenterToMode en
+  // main.ts ya lo detecta y mueve la cámara ahí), ese giro sacaba el
+  // cúmulo entero de cuadro varias veces por vuelta, dejando la
+  // pantalla en negro. autoRotate de OrbitControls gira la CÁMARA
+  // alrededor de `controls.target` — el mismo punto que recenterToMode
+  // ya mantiene sobre el centroide — así que el giro automático queda
+  // centrado en lo mismo que ve la cámara, sin importar dónde esté ese
+  // punto en el espacio del mundo. autoRotateSpeed en "vueltas/60fps",
+  // no rad/s — 0.33 iguala la velocidad visual del giro anterior
+  // (0.035 rad/s).
+  controls.autoRotateSpeed = 0.33;
 
   const scenePass = pass(scene, camera);
   const scenePassColor = scenePass.getTextureNode("output");

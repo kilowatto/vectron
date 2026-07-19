@@ -1,6 +1,6 @@
 import "./style.css";
 import * as THREE from "three/webgpu";
-import { createParticleField, spinField } from "./scene/particleField";
+import { createParticleField } from "./scene/particleField";
 import { createEngine } from "./scene/engine";
 import { setupConceptInteraction } from "./scene/conceptInteraction";
 import { fetchConcepts } from "./data/concepts";
@@ -72,9 +72,9 @@ async function main() {
   let lang = getStoredLang();
   let appReady = false;
   // Declaradas arriba (no en su punto de uso original) porque el loop de
-  // render arranca DURANTE el boot splash ahora — spinField necesita
-  // leer estas dos ya en los primeros frames, mucho antes de que
-  // card/tokenMode existan de verdad más abajo.
+  // render arranca DURANTE el boot splash ahora — el callback de
+  // engine.start necesita leer estas dos ya en los primeros frames,
+  // mucho antes de que card/tokenMode existan de verdad más abajo.
   let card: VxConceptCard | null = null;
   let liveTokenCount = 0;
 
@@ -154,8 +154,12 @@ async function main() {
   // los lee por referencia, ya resueltos cuando el usuario llegue a
   // interactuar (mucho después de que termine el splash).
   engine.start(
-    (dt) => {
-      if (!card?.isPinned() && liveTokenCount === 0) spinField(field, dt);
+    () => {
+      // Bug real corregido (ver engine.ts): el giro automático ahora es
+      // controls.autoRotate (gira la cámara alrededor de
+      // controls.target, no el grupo alrededor del origen del mundo) —
+      // aquí sólo se prende/apaga con la misma condición de antes.
+      engine.controls.autoRotate = !card?.isPinned() && liveTokenCount === 0;
     },
     (fps) => {
       fpsLabel.textContent = `${fps} fps`;

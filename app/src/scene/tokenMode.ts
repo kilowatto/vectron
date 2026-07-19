@@ -83,9 +83,10 @@ function hasLetters(s: string): boolean {
 export function setupTokenMode(options: TokenModeOptions): TokenMode {
   const { canvas, camera, field, card, onCountChange } = options;
 
-  // Dentro de field.group para girar JUNTO con el cubo — si viviera en
-  // la escena raíz, las posiciones proyectadas quedarían desalineadas
-  // del dataset en cuanto spinField rotara el grupo.
+  // Dentro de field.group para compartir el mismo espacio de
+  // coordenadas que el dataset (el giro automático ya no rota este
+  // grupo — ver engine.ts controls.autoRotate — pero sigue siendo el
+  // contenedor natural de todo lo que vive en el cubo).
   const group = new THREE.Group();
   field.group.add(group);
 
