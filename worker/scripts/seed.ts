@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { SEED_CONCEPTS } from "../src/data/seedConcepts";
@@ -20,7 +20,7 @@ function readWranglerToken(): string {
   return match[1];
 }
 
-async function embedBatch(texts: string[], token: string): Promise<number[][]> {
+async function embedBatchOnce(texts: string[], token: string): Promise<number[][]> {
   const url = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/ai/run/${EMBEDDING_MODEL}`;
   const res = await fetch(url, {
     method: "POST",
@@ -37,8 +37,71 @@ async function embedBatch(texts: string[], token: string): Promise<number[][]> {
   return body.result.data;
 }
 
+/** Reintentos con backoff — encontrado en vivo corriendo el batch 8
+ * (9,591 conceptos): Workers AI tira 408 (timeout) de forma
+ * intermitente, sin patrón de tamaño de lote — antes esto tiraba TODA
+ * la corrida (sin re-embeder lo ya hecho) por un solo timeout
+ * transitorio. 4 intentos / 1.5s-12s de espera absorbe eso sin
+ * arriesgar un loop infinito. */
+async function embedBatch(texts: string[], token: string): Promise<number[][]> {
+  const MAX_ATTEMPTS = 6;
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      return await embedBatchOnce(texts, token);
+    } catch (err) {
+      lastErr = err;
+      if (attempt < MAX_ATTEMPTS) {
+        const waitMs = 1500 * 2 ** (attempt - 1);
+        console.warn(`  [retry ${attempt}/${MAX_ATTEMPTS - 1}] ${(err as Error).message} — esperando ${waitMs}ms`);
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+      }
+    }
+  }
+  throw lastErr;
+}
+
 function sqlEscape(value: string): string {
   return value.replace(/'/g, "''");
+}
+
+const CHECKPOINT_PATH = join(OUT_DIR, "embed_checkpoint.json");
+
+/** Checkpoint incremental — encontrado en vivo: incluso con reintentos,
+ * una corrida de 9,591 conceptos puede topar con una racha de 408 que
+ * agota los reintentos (visto en la práctica pasado el lote 40). Sin
+ * esto, ese único lote fallido tira TODO el trabajo ya hecho (cientos
+ * de lotes reales, dinero/tiempo de Workers AI ya gastado). Se
+ * persiste después de CADA lote exitoso — reanudar sólo re-embebe lo
+ * que falte, nunca lo ya confirmado. Se valida contra la LONGITUD
+ * actual de SEED_CONCEPTS antes de reusar: si el dataset cambió
+ * (batch nuevo agregado) desde el checkpoint, se descarta — reanudar
+ * con índices desalineados generaría embeddings para el concepto
+ * equivocado, silenciosamente.
+ */
+interface Checkpoint {
+  totalConcepts: number;
+  embeddings: number[][];
+}
+
+function loadCheckpoint(): number[][] {
+  try {
+    const raw = readFileSync(CHECKPOINT_PATH, "utf-8");
+    const cp = JSON.parse(raw) as Checkpoint;
+    if (cp.totalConcepts !== SEED_CONCEPTS.length) {
+      console.log("Checkpoint de otra corrida (cambió SEED_CONCEPTS) — se descarta, empieza de cero.");
+      return [];
+    }
+    console.log(`Checkpoint encontrado: ${cp.embeddings.length}/${SEED_CONCEPTS.length} ya embebidos.`);
+    return cp.embeddings;
+  } catch {
+    return [];
+  }
+}
+
+function saveCheckpoint(embeddings: number[][]): void {
+  const cp: Checkpoint = { totalConcepts: SEED_CONCEPTS.length, embeddings };
+  writeFileSync(CHECKPOINT_PATH, JSON.stringify(cp));
 }
 
 async function main() {
@@ -46,12 +109,13 @@ async function main() {
   const token = readWranglerToken();
 
   console.log(`Generando embeddings reales para ${SEED_CONCEPTS.length} conceptos…`);
-  const embeddings: number[][] = [];
-  for (let i = 0; i < SEED_CONCEPTS.length; i += BATCH_SIZE) {
+  const embeddings: number[][] = loadCheckpoint();
+  for (let i = embeddings.length; i < SEED_CONCEPTS.length; i += BATCH_SIZE) {
     const batch = SEED_CONCEPTS.slice(i, i + BATCH_SIZE);
     const texts = batch.map((c) => c.wordEn);
     const vectors = await embedBatch(texts, token);
     embeddings.push(...vectors);
+    saveCheckpoint(embeddings);
     console.log(`  ${Math.min(i + BATCH_SIZE, SEED_CONCEPTS.length)}/${SEED_CONCEPTS.length}`);
   }
 
@@ -155,6 +219,7 @@ async function main() {
     JSON.stringify(clientDataset, null, 2),
   );
 
+  rmSync(CHECKPOINT_PATH, { force: true });
   console.log(`\nListo. Artefactos en ${OUT_DIR}:`);
   console.log("  concepts.sql      -> wrangler d1 execute vectron-db --remote --file=");
   console.log("  vectors.ndjson    -> wrangler vectorize insert vectron-concepts-m3 --file=");
