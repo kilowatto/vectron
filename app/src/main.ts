@@ -336,7 +336,7 @@ async function main() {
   }
 
   // Redistribuir en vivo si la ventana cruza un breakpoint sin cambiar
-  // de modo (ej. rotar una tablet) — reusa runApplyMode en vez de
+  // de modo (ej. rotar una tablet) — reusa runApplyModeChrome en vez de
   // duplicar la lógica de reparentar composer/strip.
   for (const query of [DESKTOP_INTERMEDIO, DESKTOP_AVANZADO]) {
     matchMedia(query).addEventListener("change", () => {
@@ -585,6 +585,15 @@ async function main() {
   // encontrado spam-clickeando P/I/A/P en producción: el HUD se quedaba
   // mostrando el modo equivocado aunque el switcher sí marcaba el
   // correcto.
+  //
+  // El guard sólo envuelve el "chrome" (switcher/HUD/shell/composer —
+  // rápido, tiene que quedar en orden) — la morph de partículas se
+  // dispara sin esperarla (ver runApplyModeChrome). Pedido explícito
+  // 2026-07-19: cambiar de modo otra vez ANTES de que la ola anterior
+  // termine debe arrancar de inmediato, no esperar en cola a que la
+  // vieja acabe — morphToPartOfSpeechFilter ya sabe interrumpir la
+  // suya propia sin saltos (ver morphSeq/scaleArray en particleField.ts),
+  // sólo hacía falta que aquí no la esperáramos dentro del candado.
   let applyModeBusy = false;
   let queuedMode: Mode | null = null;
 
@@ -595,7 +604,7 @@ async function main() {
     }
     applyModeBusy = true;
     try {
-      await runApplyMode(mode);
+      await runApplyModeChrome(mode);
     } finally {
       applyModeBusy = false;
       if (queuedMode !== null) {
@@ -606,13 +615,13 @@ async function main() {
     }
   }
 
-  async function runApplyMode(mode: Mode) {
+  async function runApplyModeChrome(mode: Mode) {
     currentMode = mode;
     allowedPos = MODE_POS[mode];
     switcher.setAttribute("current", mode);
     backendTag.textContent = engine.usingWebGPU ? t("hudWebgpu", lang) : t("hudWebgl", lang);
 
-    card!.configure({ simple: mode === "principiante", lang }); // runApplyMode sólo corre tras asignar card, arriba
+    card!.configure({ simple: mode === "principiante", lang }); // runApplyModeChrome sólo corre tras asignar card, arriba
     interaction.setDefaultTopK(mode === "principiante" ? 5 : 6);
     interaction.reset(); // suelta el pin ANTES del morph — mismo orden que "cancela al empezar" (06 §6)
     tokenMode.setEnabled(mode === "avanzado");
@@ -666,14 +675,20 @@ async function main() {
 
     // P2: mitosis (nacen las que entran) / fusión (las que salen se
     // comen hacia una vecina) en vez del corte instantáneo de antes —
-    // ver DOCs/06-mode-morph-cells.md. Duración dinámica según cuántas
-    // partículas hay que animar — ajustada 2026-07-19 para que
-    // transiciones grandes ya no se sientan lentas (ver dynamicBudget
-    // en particleField.ts).
+    // ver DOCs/06-mode-morph-cells.md. Duración calculada según cuántas
+    // partículas hay que animar (ver computeMorphPlan en
+    // particleField.ts). NO se espera aquí adentro (antes sí, con
+    // `await`) — hacerlo bloqueaba applyModeBusy hasta varios segundos,
+    // así que un segundo cambio de modo mientras la ola seguía en el
+    // aire se quedaba en cola esperando en vez de interrumpirla de
+    // inmediato. morphToPartOfSpeechFilter ya resuelve la interrupción
+    // por su cuenta (morphSeq cancela la promesa vieja sin saltar,
+    // scaleArray/posArray hacen que la nueva continúe desde donde cada
+    // partícula de verdad esté).
     const reducedMotion =
       typeof matchMedia !== "undefined" &&
       matchMedia("(prefers-reduced-motion: reduce)").matches;
-    await field.morphToPartOfSpeechFilter(allowedPos, { reducedMotion });
+    void field.morphToPartOfSpeechFilter(allowedPos, { reducedMotion });
   }
 
   switcher.addEventListener("vx-mode-change", (event) => {

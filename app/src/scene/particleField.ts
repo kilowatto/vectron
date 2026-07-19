@@ -176,16 +176,38 @@ export function createParticleField(
   // reportado en vivo con captura). Tamaño de vuelta a como estaba.
   const baseScaleOf = (concept: Concept) => (concept.distinctiveTrait ? 1.0 : 0.62);
 
+  // Fuente de verdad de "dónde está cada partícula AHORA MISMO" — no lo
+  // que un Set de filtro dice que debería ser, sino lo último que de
+  // verdad se escribió en el InstancedMesh. Bug real corregido junto con
+  // esto (2026-07-19, ver morphToPartOfSpeechFilter): sin esto, una
+  // partícula interrumpida a medio vuelo (mitosis/fusión cancelada por
+  // un cambio de modo más nuevo) no tenía forma de saber en qué punto
+  // exacto se quedó — cualquier animación nueva que la tocara asumía
+  // que partía de 0% o 100%, causando un salto visible. Con este par de
+  // arrays, CUALQUIER función que escriba una instancia pasa por
+  // writeInstance() y el estado real queda disponible para la siguiente
+  // decisión, sin importar si la anterior terminó o la cortaron a medias.
+  const posArray = new Float32Array(count * 3);
+  const scaleArray = new Float32Array(count);
+
+  function writeInstance(id: number, pos: readonly [number, number, number], scale: number): void {
+    dummy.position.set(pos[0], pos[1], pos[2]);
+    dummy.scale.setScalar(scale);
+    dummy.updateMatrix();
+    mesh.setMatrixAt(id, dummy.matrix);
+    posArray[id * 3] = pos[0];
+    posArray[id * 3 + 1] = pos[1];
+    posArray[id * 3 + 2] = pos[2];
+    scaleArray[id] = scale;
+  }
+
   concepts.forEach((concept, i) => {
     const hue = DOMAIN_HUES[concept.domain] ?? FALLBACK_HUE;
     tmpColor.setHex(hue);
     tmpColor.toArray(colorAttr, i * 3);
     phaseAttr[i] = Math.random() * Math.PI * 2;
 
-    dummy.position.set(concept.coords[0], concept.coords[1], concept.coords[2]);
-    dummy.scale.setScalar(baseScaleOf(concept));
-    dummy.updateMatrix();
-    mesh.setMatrixAt(i, dummy.matrix);
+    writeInstance(i, concept.coords, baseScaleOf(concept));
   });
 
   function setPartOfSpeechFilter(allowed: Set<PartOfSpeech>): number {
@@ -193,10 +215,7 @@ export function createParticleField(
     concepts.forEach((concept, i) => {
       const show = allowed.has(concept.partOfSpeech);
       if (show) visible++;
-      dummy.position.set(concept.coords[0], concept.coords[1], concept.coords[2]);
-      dummy.scale.setScalar(show ? baseScaleOf(concept) : 0);
-      dummy.updateMatrix();
-      mesh.setMatrixAt(i, dummy.matrix);
+      writeInstance(i, concept.coords, show ? baseScaleOf(concept) : 0);
     });
     mesh.instanceMatrix.needsUpdate = true;
     return visible;
@@ -225,10 +244,7 @@ export function createParticleField(
     const showCount = Math.round(pool.length * Math.min(Math.max(fraction, 0), 1));
     const shown = new Set(revealOrder.slice(0, showCount));
     concepts.forEach((concept, i) => {
-      dummy.position.set(concept.coords[0], concept.coords[1], concept.coords[2]);
-      dummy.scale.setScalar(shown.has(i) ? baseScaleOf(concept) : 0);
-      dummy.updateMatrix();
-      mesh.setMatrixAt(i, dummy.matrix);
+      writeInstance(i, concept.coords, shown.has(i) ? baseScaleOf(concept) : 0);
     });
     mesh.instanceMatrix.needsUpdate = true;
   }
@@ -265,8 +281,8 @@ export function createParticleField(
     return bestDomain !== -1 ? bestDomain : best;
   }
 
-  function shuffled(ids: number[]): number[] {
-    const a = ids.slice();
+  function shuffled<T>(items: T[]): T[] {
+    const a = items.slice();
     for (let i = a.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [a[i], a[j]] = [a[j], a[i]];
@@ -274,65 +290,154 @@ export function createParticleField(
     return a;
   }
 
+  function distSq(a: readonly [number, number, number], b: readonly [number, number, number]): number {
+    const dx = a[0] - b[0];
+    const dy = a[1] - b[1];
+    const dz = a[2] - b[2];
+    return dx * dx + dy * dy + dz * dz;
+  }
+
   interface MorphItem {
     id: number;
     kind: "mitosis" | "fusion";
-    anchor: number; // padre (mitosis) o depredador (fusión)
-    start: number; // ms dentro del presupuesto dinámico (ver dynamicBudget)
+    anchor: number; // padre (mitosis) o depredador (fusión), sólo para el "nace de..." visual
+    start: number; // ms dentro de la duración objetivo (ver computeMorphPlan)
     duration: number;
+    fromPos: readonly [number, number, number];
+    fromScale: number;
+    toPos: readonly [number, number, number];
+    toScale: number;
   }
 
-  // Cuántas morphs pueden estar "en vuelo" a la vez — compartido entre
-  // el cálculo del presupuesto dinámico y el scheduler de abajo. Subido
-  // 32->48: con miles de partículas de por medio ahora (el léxico P3
-  // creció mucho desde el primer ajuste), más concurrencia real es lo
-  // que baja el piso natural de duración sin tocar cómo se ve cada
-  // mitosis/fusión individual.
-  const CONCURRENCY_CAP = 48;
+  // Modelo de "pipeline" (pedido explícito 2026-07-19, ver DOCs/06): con
+  // cuántos workers concurrentes (CONCURRENCY_CAP fijo) y un presupuesto
+  // de tiempo TOPADO a un valor fijo independiente de N, cualquier
+  // transición con más partículas de las que el pipeline alcanza a
+  // procesar en ese tope terminaba con TODAS las que sobraban
+  // tele-transportadas de golpe cuando se acababa el reloj (el bug real
+  // reportado: "se hace de golpe, no se ve la progresión"). La cuenta:
+  // con 48 concurrentes y ~300ms por partícula, el throughput es de
+  // ~160 partículas/segundo — en 4s sólo alcanzan ~640, el resto de una
+  // transición de miles nunca llegaba a animar.
+  //
+  // La corrección real es resolver la ecuación al revés: fijar cuánto
+  // debe durar la ola completa (T_target, crece con N pero satura —
+  // "más rápida cuanta menos partículas cambian" para N chico, "~2.5-4s"
+  // para N grande, sin techo duro que fuerce un salto) y despejar CUÁNTA
+  // concurrencia hace falta para que el pipeline de verdad vacíe la cola
+  // dentro de ese tiempo — sin techo artificial (el costo real es
+  // escribir una matriz de instancia por frame, trivial hasta varios
+  // cientos a la vez, ver writeInstance).
+  const D_AVG = 330; // ms — punto medio de los rangos de duración individual (280-420 mitosis, 260-380 fusión)
+  const T_MIN = 700; // ms — transición chica (pocas partículas cambian), rápida pero visible
+  const T_MAX = 3400; // ms — transición grande (miles de partículas), calmada sin sentirse eterna
+  const N_REF = 900; // partículas a las que T_target ya casi saturó en T_MAX (curva 1-e^-x, no lineal)
+  const CONCURRENCY_MIN = 8;
+  const CONCURRENCY_MAX = 400; // tope de seguridad, no de diseño
 
-  // Presupuesto DINÁMICO — ajustado 2026-07-19 en sentido contrario al
-  // cambio anterior: el dataset creció tanto (P3 ya pasa de 4k lemas)
-  // que transiciones grandes SIEMPRE tocaban el tope de 10s, sintiéndose
-  // lentas (reportado en vivo) — bajar el tope y el peso por partícula
-  // comprime el espaciado entre inicios, no la duración de cada mitosis/
-  // fusión individual (esa sigue en 260-420ms, ver buildSchedule), así
-  // que se ve igual de bien pero termina antes.
-  function dynamicBudget(itemCount: number): number {
-    const AVG_DURATION = 220;
-    const raw = (itemCount * AVG_DURATION) / CONCURRENCY_CAP;
-    return Math.min(4000, Math.max(900, raw));
+  function computeMorphPlan(itemCount: number): { targetDuration: number; concurrency: number } {
+    if (itemCount === 0) return { targetDuration: 0, concurrency: 0 };
+    const targetDuration = T_MIN + (T_MAX - T_MIN) * (1 - Math.exp(-itemCount / N_REF));
+    const raw = Math.ceil((itemCount * D_AVG) / Math.max(targetDuration - D_AVG, D_AVG));
+    const concurrency = Math.min(CONCURRENCY_MAX, Math.max(CONCURRENCY_MIN, raw));
+    return { targetDuration, concurrency };
+  }
+
+  // Orden de la ola (pedido explícito: no destellos aleatorios por todo
+  // el cubo, sino que se vea como una mancha que crece/encoge de forma
+  // orgánica). Se agrupa por dominio (qué "tema" entra o sale primero
+  // se sortea en cada llamada, no es siempre el mismo orden) y, DENTRO
+  // de cada dominio, las partículas más cercanas a su ancla ya visible
+  // van primero — así cada mancha se ve "crecer hacia afuera desde una
+  // semilla" en vez de aparecer salpicada.
+  function groupedWaveOrder(ids: number[], anchors: Map<number, number>): number[] {
+    const byDomain = new Map<string, number[]>();
+    for (const id of ids) {
+      const domain = concepts[id].domain;
+      const group = byDomain.get(domain);
+      if (group) group.push(id);
+      else byDomain.set(domain, [id]);
+    }
+    const orderedDomains = shuffled([...byDomain.keys()]);
+    const result: number[] = [];
+    for (const domain of orderedDomains) {
+      const group = byDomain.get(domain)!;
+      group.sort((a, b) => {
+        const da = distSq(concepts[a].coords, concepts[anchors.get(a)!].coords);
+        const db = distSq(concepts[b].coords, concepts[anchors.get(b)!].coords);
+        return da - db;
+      });
+      result.push(...group);
+    }
+    return result;
   }
 
   // Gaps aleatorios entre inicios (no un metrónomo fijo) y, si la
-  // cadena cruda se saldría del presupuesto, se comprime proporcional-
-  // mente — la aleatoriedad relativa entre gaps se conserva, sólo la
-  // escala se achica (ver DOCs/06-mode-morph-cells.md §4).
+  // cadena cruda se saldría de la duración objetivo, se comprime
+  // proporcionalmente — la aleatoriedad relativa entre gaps se
+  // conserva, sólo la escala se achica (ver DOCs/06-mode-morph-cells.md
+  // §4). `fromPos`/`fromScale` se leen de posArray/scaleArray en este
+  // instante — si la partícula viene de una transición anterior
+  // cortada a medias, continúa desde ahí en vez de reiniciar desde 0%
+  // o 100% (bug real corregido junto con esto, ver writeInstance).
   function buildSchedule(
     ids: number[],
     kind: "mitosis" | "fusion",
     anchors: Map<number, number>,
-    budget: number,
+    targetDuration: number,
   ): MorphItem[] {
-    const order = shuffled(ids.filter((id) => anchors.has(id)));
+    const filtered = ids.filter((id) => anchors.has(id));
+    const order = groupedWaveOrder(filtered, anchors);
     const items: MorphItem[] = [];
     let t = 0;
     for (const id of order) {
+      const anchor = anchors.get(id)!;
+      const c = concepts[id];
+      const anchorCoords = concepts[anchor].coords;
       const [dMin, dMax] = kind === "mitosis" ? [280, 420] : [260, 380];
+      let fromPos: readonly [number, number, number];
+      let fromScale: number;
+      let toPos: readonly [number, number, number];
+      let toScale: number;
+      if (kind === "mitosis") {
+        // Recién nace (0%): parte visualmente de su ancla, como siempre.
+        // Ya venía creciendo a medias (interrupción previa): continúa
+        // desde donde de verdad está, sin regresar de golpe al ancla.
+        const alreadyGrowing = scaleArray[id] > 1e-3;
+        fromPos = alreadyGrowing
+          ? [posArray[id * 3], posArray[id * 3 + 1], posArray[id * 3 + 2]]
+          : anchorCoords;
+        fromScale = scaleArray[id];
+        toPos = c.coords;
+        toScale = baseScaleOf(c);
+      } else {
+        // Fusión: su posición real actual ya es la correcta como origen
+        // en ambos casos (recién visible = sus propias coords; a medio
+        // encoger = donde de verdad esté) — nunca hace falta ramificar.
+        fromPos = [posArray[id * 3], posArray[id * 3 + 1], posArray[id * 3 + 2]];
+        fromScale = scaleArray[id];
+        toPos = anchorCoords;
+        toScale = 0;
+      }
       items.push({
         id,
         kind,
-        anchor: anchors.get(id)!,
+        anchor,
         start: t,
         duration: dMin + Math.random() * (dMax - dMin),
+        fromPos,
+        fromScale,
+        toPos,
+        toScale,
       });
       t += 8 + Math.random() * (45 - 8);
     }
     const last = items[items.length - 1];
     if (last) {
       const lastEnd = last.start + last.duration;
-      if (lastEnd > budget) {
+      if (lastEnd > targetDuration) {
         const avgDur = items.reduce((s, it) => s + it.duration, 0) / items.length;
-        const scale = Math.max(0, budget - avgDur) / Math.max(last.start, 1);
+        const scale = Math.max(0, targetDuration - avgDur) / Math.max(last.start, 1);
         for (const it of items) it.start *= scale;
       }
     }
@@ -344,36 +449,53 @@ export function createParticleField(
     opts: { reducedMotion?: boolean } = {},
   ): Promise<{ visibleCount: number }> {
     const seq = ++morphSeq;
-    const prevAllowed = currentAllowed;
+    const isFirstCall = currentAllowed === null;
     currentAllowed = new Set(allowed);
 
-    if (!prevAllowed || opts.reducedMotion) {
+    if (isFirstCall || opts.reducedMotion) {
       return { visibleCount: setPartOfSpeechFilter(allowed) };
     }
 
+    // Clasificación por ESTADO REAL, no por diferencia entre el Set
+    // viejo y el nuevo (bug real corregido junto con esto): comparar
+    // sets asume que toda partícula ya está exactamente donde su último
+    // filtro la dejó — falso si una transición anterior fue interrumpida
+    // a medio vuelo por ésta. Comparar contra scaleArray (la escala real
+    // actual) en vez de contra el filtro anterior hace que "seguir
+    // animando desde donde se quedó" sea el comportamiento NATURAL, no
+    // un caso especial: si ya está en su escala objetivo no hay nada que
+    // hacer (stable/stableHidden), si no, entra o sale sin importar de
+    // dónde partió.
+    const EPS = 1e-3;
     const entering: number[] = [];
     const leaving: number[] = [];
-    const stable: number[] = [];
+    const stableVisible: number[] = []; // únicas anclas válidas: ya completamente visibles
     concepts.forEach((c, i) => {
-      const was = prevAllowed.has(c.partOfSpeech);
-      const now = allowed.has(c.partOfSpeech);
-      if (!was && now) entering.push(i);
-      else if (was && !now) leaving.push(i);
-      else if (was && now) stable.push(i);
+      const shouldShow = allowed.has(c.partOfSpeech);
+      const target = shouldShow ? baseScaleOf(c) : 0;
+      const current = scaleArray[i];
+      if (Math.abs(current - target) < EPS) {
+        if (shouldShow) stableVisible.push(i);
+        // si no debe mostrarse y ya está en 0, no hay nada que hacer
+      } else if (target > current) {
+        entering.push(i);
+      } else {
+        leaving.push(i);
+      }
     });
-    const visibleCount = stable.length + entering.length;
+    const visibleCount = stableVisible.length + entering.length;
     if (entering.length === 0 && leaving.length === 0) {
       return { visibleCount };
     }
 
     const parentOf = new Map<number, number>();
     for (const e of entering) {
-      const p = nearestStable(stable, e);
+      const p = nearestStable(stableVisible, e);
       if (p !== null) parentOf.set(e, p);
     }
     const predatorOf = new Map<number, number>();
     for (const l of leaving) {
-      const p = nearestStable(stable, l);
+      const p = nearestStable(stableVisible, l);
       if (p !== null) predatorOf.set(l, p);
     }
 
@@ -381,23 +503,17 @@ export function createParticleField(
     // nada estable): aparecen/desaparecen sin animar en vez de crashear.
     for (const id of entering) {
       if (parentOf.has(id)) continue;
-      const c = concepts[id];
-      dummy.position.set(c.coords[0], c.coords[1], c.coords[2]);
-      dummy.scale.setScalar(baseScaleOf(c));
-      dummy.updateMatrix();
-      mesh.setMatrixAt(id, dummy.matrix);
+      writeInstance(id, concepts[id].coords, baseScaleOf(concepts[id]));
     }
     for (const id of leaving) {
       if (predatorOf.has(id)) continue;
-      dummy.scale.setScalar(0);
-      dummy.updateMatrix();
-      mesh.setMatrixAt(id, dummy.matrix);
+      writeInstance(id, concepts[id].coords, 0);
     }
 
-    const budget = dynamicBudget(entering.length + leaving.length);
+    const { targetDuration, concurrency } = computeMorphPlan(entering.length + leaving.length);
     const allItems = [
-      ...buildSchedule(entering, "mitosis", parentOf, budget),
-      ...buildSchedule(leaving, "fusion", predatorOf, budget),
+      ...buildSchedule(entering, "mitosis", parentOf, targetDuration),
+      ...buildSchedule(leaving, "fusion", predatorOf, targetDuration),
     ];
     mesh.instanceMatrix.needsUpdate = true;
     if (allItems.length === 0) return { visibleCount };
@@ -407,21 +523,20 @@ export function createParticleField(
       const started = new Array<boolean>(allItems.length).fill(false);
       const startTimes = new Array<number>(allItems.length);
       const t0 = performance.now();
-      // Margen de gracia corto sobre el presupuesto — si por el tope de
-      // concurrencia algo se quedó sin arrancar o a medias, salta a su
-      // pose final en vez de alargar la espera de verdad.
-      const HARD_DEADLINE = budget + 150;
 
       // Red de seguridad real (bug encontrado en producción 2026-07-19):
       // este bucle depende de requestAnimationFrame, que Chrome PAUSA
       // por completo en una pestaña en segundo plano/sin foco — a
       // diferencia de setTimeout, que sigue disparando (aunque
       // limitado). Sin esto, cambiar de pestaña a media transición
-      // dejaba el modo colgado para siempre (HARD_DEADLINE nunca se
-      // evaluaba porque tick() nunca volvía a correr) — mismo tipo de
-      // bug que ya se arregló una vez para fadeOut() en motion.ts, aquí
-      // no existía ninguna protección. resolveOnce() es idempotente:
-      // lo que llegue primero (rAF o el timer) gana, lo demás es no-op.
+      // dejaba el modo colgado para siempre. A diferencia de antes, este
+      // temporizador YA NO es parte del camino normal — con la
+      // concurrencia calculada en computeMorphPlan el pipeline de verdad
+      // vacía la cola dentro de targetDuration, así que esto sólo debe
+      // disparar en el caso patológico real (pestaña oculta, dispositivo
+      // atascado), nunca en una transición normal en primer plano.
+      // resolveOnce() es idempotente: lo que llegue primero (rAF o el
+      // timer) gana, lo demás es no-op.
       let settled = false;
       function resolveOnce() {
         if (settled) return;
@@ -433,34 +548,23 @@ export function createParticleField(
         for (const item of allItems) finalize(item);
         mesh.instanceMatrix.needsUpdate = true;
         resolveOnce();
-      }, HARD_DEADLINE + 2000);
+      }, targetDuration + 6000);
 
       function finalize(item: MorphItem) {
-        const c = concepts[item.id];
-        dummy.position.set(c.coords[0], c.coords[1], c.coords[2]);
-        dummy.scale.setScalar(item.kind === "mitosis" ? baseScaleOf(c) : 0);
-        dummy.updateMatrix();
-        mesh.setMatrixAt(item.id, dummy.matrix);
+        writeInstance(item.id, item.toPos, item.toScale);
       }
 
       function tick() {
         if (seq !== morphSeq) {
-          resolveOnce(); // otro morph más nuevo lo reemplazó
+          resolveOnce(); // otro morph más nuevo lo reemplazó — se queda donde esté, sin saltar
           return;
         }
         const elapsed = performance.now() - t0;
 
-        if (elapsed >= HARD_DEADLINE) {
-          for (const item of allItems) finalize(item);
-          mesh.instanceMatrix.needsUpdate = true;
-          resolveOnce();
-          return;
-        }
-
         for (let idx = 0; idx < allItems.length; idx++) {
           const item = allItems[idx];
           if (!started[idx]) {
-            if (elapsed >= item.start && active.size < CONCURRENCY_CAP) {
+            if (elapsed >= item.start && active.size < concurrency) {
               started[idx] = true;
               startTimes[idx] = elapsed;
               active.add(idx);
@@ -472,26 +576,13 @@ export function createParticleField(
 
           const localT = Math.min((elapsed - startTimes[idx]) / item.duration, 1);
           const eased = 1 - Math.pow(1 - localT, 3);
-          const c = concepts[item.id];
-          const a = concepts[item.anchor].coords;
-
-          if (item.kind === "mitosis") {
-            dummy.position.set(
-              a[0] + (c.coords[0] - a[0]) * eased,
-              a[1] + (c.coords[1] - a[1]) * eased,
-              a[2] + (c.coords[2] - a[2]) * eased,
-            );
-            dummy.scale.setScalar(baseScaleOf(c) * eased);
-          } else {
-            dummy.position.set(
-              c.coords[0] + (a[0] - c.coords[0]) * eased,
-              c.coords[1] + (a[1] - c.coords[1]) * eased,
-              c.coords[2] + (a[2] - c.coords[2]) * eased,
-            );
-            dummy.scale.setScalar(baseScaleOf(c) * (1 - eased));
-          }
-          dummy.updateMatrix();
-          mesh.setMatrixAt(item.id, dummy.matrix);
+          const pos: [number, number, number] = [
+            item.fromPos[0] + (item.toPos[0] - item.fromPos[0]) * eased,
+            item.fromPos[1] + (item.toPos[1] - item.fromPos[1]) * eased,
+            item.fromPos[2] + (item.toPos[2] - item.fromPos[2]) * eased,
+          ];
+          const scale = item.fromScale + (item.toScale - item.fromScale) * eased;
+          writeInstance(item.id, pos, scale);
 
           if (localT >= 1) {
             active.delete(idx);

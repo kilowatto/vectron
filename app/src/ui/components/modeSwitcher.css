@@ -20,6 +20,8 @@
 }
 
 button {
+  position: relative;
+  z-index: 1;
   background: none;
   border: none;
   color: var(--dim);
@@ -30,6 +32,7 @@ button {
   font-size: inherit;
   letter-spacing: inherit;
   text-transform: uppercase;
+  transition: color 0.2s ease;
 }
 
 button:hover {
@@ -37,7 +40,6 @@ button:hover {
 }
 
 button.active {
-  background: var(--accent);
   color: #1a0f04;
   font-weight: 600;
   cursor: default;
@@ -48,8 +50,22 @@ button.active {
 }
 
 .options {
+  position: relative;
   display: flex;
   gap: 2px;
+}
+
+/* Pastilla resaltada que se DESLIZA entre pestañas en vez de aparecer
+   de golpe en la nueva posición (bug real reportado en vivo, ver
+   modeSwitcher.ts #positionPill) — vive detrás de los botones (z-index
+   0 vs 1), su posición/ancho la calcula JS con la técnica FLIP. */
+.pill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 0;
+  background: var(--accent);
+  border-radius: 4px;
 }
 
 /* Móvil — cajón colapsado por defecto (pedido explícito del usuario:
