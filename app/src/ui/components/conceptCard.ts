@@ -85,6 +85,7 @@ function cardBody(concept: Concept, detailed: boolean, lang: Lang): string {
           <span class="secondary">${secondary}</span>
         </div>
         <div class="domain">${domainLabel}</div>
+        ${concept.explain ? `<div class="explain">${concept.explain}</div>` : ""}
         ${
           detailed
             ? `<div class="taxonomy">${concept.taxonomy.join(" › ")}</div>

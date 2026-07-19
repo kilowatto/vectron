@@ -112,6 +112,18 @@
   margin-top: 4px;
 }
 
+/* Explicación pedagógica dinámica (hoy sólo el embedding de frase en
+   modo token, ver tokenMode.ts) — se distingue del resto con un borde
+   izquierdo, no es un dato más de la tabla de traits. */
+.explain {
+  margin-top: 6px;
+  padding-left: 8px;
+  border-left: 2px solid rgba(255, 225, 77, 0.4);
+  color: var(--dim);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
 .traits {
   display: flex;
   flex-direction: column;

@@ -124,6 +124,15 @@ export function setupTokenMode(options: TokenModeOptions): TokenMode {
   let particles: LiveParticle[] = [];
   let lines: ElectricLine[] = [];
   let neighborStar: ElectricLine | null = null;
+  // Pedido explícito 2026-07-19 ("mejora la explicación de manera
+  // dinámica... explicando por qué sale y qué significa"): el hover
+  // sobre la "frase" (luz grande) tenía sólo la etiqueta genérica
+  // "Token en vivo", sin decir NADA de por qué aparece lejos de sus
+  // tokens. La prueba real, no sólo texto: comparar el embedding de la
+  // frase contra el promedio simple de sus tokens BGE — si fuera un
+  // promedio, el coseno sería 1.000; la diferencia real es la prueba
+  // concreta de que el modelo calcula algo genuinamente distinto.
+  let phraseExplainMetric: { cosineVsMean: number; tokenCount: number } | null = null;
   const raycaster = new THREE.Raycaster();
   const pointerNdc = new THREE.Vector2();
 
@@ -152,6 +161,7 @@ export function setupTokenMode(options: TokenModeOptions): TokenMode {
     particles = [];
     for (const line of lines) disposeLine(line);
     lines = [];
+    phraseExplainMetric = null;
     if (neighborStar) {
       disposeLine(neighborStar);
       neighborStar = null;
@@ -242,6 +252,18 @@ export function setupTokenMode(options: TokenModeOptions): TokenMode {
     const bgeParticles = bgeFrags.map((tok, i) =>
       mkParticle("bge", tok.text, tok.id, vectors[1 + i]),
     );
+    if (bgeParticles.length > 0) {
+      const dims = phrase.vector.length;
+      const meanVector = new Array(dims).fill(0);
+      for (const p of bgeParticles) {
+        for (let d = 0; d < dims; d++) meanVector[d] += p.vector[d];
+      }
+      for (let d = 0; d < dims; d++) meanVector[d] /= bgeParticles.length;
+      phraseExplainMetric = {
+        cosineVsMean: cosineLocal(phrase.vector, meanVector),
+        tokenCount: bgeParticles.length,
+      };
+    }
     const gptParticles = gptFrags.map((tok, i) =>
       mkParticle("gpt", tok.text.trim(), tok.id, vectors[1 + bgeFrags.length + i]),
     );
@@ -322,6 +344,17 @@ export function setupTokenMode(options: TokenModeOptions): TokenMode {
     if (!on) clear();
   }
 
+  function buildPhraseExplain(): string | undefined {
+    if (!phraseExplainMetric) return undefined;
+    const lang = getStoredLang();
+    const { cosineVsMean, tokenCount } = phraseExplainMetric;
+    return [
+      t("tokenPhraseExplainIntro", lang),
+      `${t("tokenPhraseExplainMetricPrefix", lang)} ${tokenCount} ${t("tokenPhraseExplainMetricMid", lang)} ${cosineVsMean.toFixed(3)}.`,
+      t("tokenPhraseExplainGap", lang),
+    ].join(" ");
+  }
+
   function tokenToConcept(p: LiveParticle): Concept {
     const modelLabel =
       p.kind === "gpt" ? "cl100k_base (GPT)" : "bge-m3";
@@ -340,6 +373,7 @@ export function setupTokenMode(options: TokenModeOptions): TokenMode {
           : { id_vocabulario: p.tokenId ?? -1, tokenizador: modelLabel },
       coords: p.coords,
       partOfSpeech: "sustantivo",
+      explain: p.kind === "frase" ? buildPhraseExplain() : undefined,
     };
   }
 

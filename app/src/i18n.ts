@@ -70,8 +70,15 @@ const STRINGS = {
     en: "BGE WordPiece (bge-base-en-v1.5) — reference cuts",
   },
   tokenDisclaimer: {
-    es: "Cada fragmento se embebe aislado con bge-m3 (números 100% reales, el mismo modelo del cubo); el modelo real lee los tokens en contexto, con atención mutua — su posición aquí es una aproximación declarada. Los cortes de esta fila usan el tokenizador WordPiece real de bge-base-en-v1.5, no el de bge-m3 (que usa SentencePiece/XLM-RoBERTa y todavía no está implementado aquí) — se muestran como referencia, no como el tokenizador exacto del cubo. Los cortes de GPT también se embeben con bge-m3 para ubicarlos en el mismo espacio.",
-    en: "Each fragment is embedded in isolation with bge-m3 (100% real numbers, the same model as the cube); the real model reads tokens in context, with mutual attention — their position here is a declared approximation. This row's cuts use bge-base-en-v1.5's real WordPiece tokenizer, not bge-m3's (which uses SentencePiece/XLM-RoBERTa and isn't implemented here yet) — shown as a reference, not the cube's exact tokenizer. GPT's cuts are also embedded with bge-m3 so they can live in the same space.",
+    // Acortado (pedido explícito 2026-07-19, "menos alto... no gastar
+    // espacio innecesario"): mismas dos advertencias reales (tokenizador
+    // de referencia distinto del de bge-m3; posición aproximada por
+    // embeberse aislado) en una fracción del espacio — el detalle de
+    // SentencePiece/XLM-RoBERTa y de los cortes de GPT era información
+    // real pero de más para un disclaimer en vivo, no algo que se
+    // pierda (sigue documentado en DOCs).
+    es: "Cortes de referencia del WordPiece real de BGE (bge-m3 usa otro tokenizador, no implementado aquí). Cada fragmento se embebe aislado — su posición es una aproximación; el modelo real lee todo en contexto.",
+    en: "Reference cuts from BGE's real WordPiece tokenizer (bge-m3 uses a different one, not implemented here). Each fragment is embedded in isolation — its position is an approximation; the real model reads everything in context.",
   },
   tokenPhraseLabel: { es: "frase completa", en: "full phrase" },
   tokenCompareToggle: {
@@ -188,6 +195,24 @@ const STRINGS = {
   kindLegendPath: { es: "camino de tu frase", en: "your phrase's path" },
   kindLegendTokens: { es: "BGE · GPT · frase (vivo)", en: "BGE · GPT · phrase (live)" },
   kindLegendPeek: { es: "¿qué significa esto?", en: "what does this mean?" },
+
+  // --- P2: explicación pedagógica del embedding de frase (tokenMode.ts) ---
+  tokenPhraseExplainIntro: {
+    es: "Esta es la luz grande: el embedding de tu FRASE COMPLETA, no de un token suelto — un vector propio que el modelo calcula para el significado conjunto, no el promedio de sus piezas. Por eso puede proyectarse lejos de sus tokens en el cubo: no es un error de posición, es la geometría real.",
+    en: "This is the big light: the embedding of your FULL PHRASE, not a single token — its own vector, computed by the model for the combined meaning, not the average of its pieces. That's why it can project far from its tokens in the cube: not a position bug, just real geometry.",
+  },
+  tokenPhraseExplainMetricPrefix: {
+    es: "Si fuera un simple promedio de sus",
+    en: "If it were a simple average of its",
+  },
+  tokenPhraseExplainMetricMid: {
+    es: "tokens, su coseno con ese promedio sería 1.000 — en la realidad es",
+    en: "tokens, its cosine with that average would be 1.000 — in reality it's",
+  },
+  tokenPhraseExplainGap: {
+    es: "Esa diferencia es justo lo que el modelo entiende más allá de la suma de las partes.",
+    en: "That gap is exactly what the model understands beyond the sum of its parts.",
+  },
 } satisfies Record<string, Record<Lang, string>>;
 
 export type StringKey = keyof typeof STRINGS;

@@ -9,6 +9,11 @@ export interface Concept {
   traits: Record<string, string | number | boolean>;
   coords: [number, number, number];
   partOfSpeech: PartOfSpeech;
+  /** Explicación pedagógica ya armada (con números reales calculados
+   * en vivo, no texto genérico) para casos especiales que lo necesitan
+   * — hoy sólo el embedding de la frase completa en modo token (ver
+   * tokenMode.ts). Ausente para el resto del dataset. */
+  explain?: string;
 }
 
 // En producción el mismo Worker sirve el frontend y la API (misma

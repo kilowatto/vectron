@@ -14,7 +14,15 @@
   top: max(clamp(100px, 15vw, 128px), calc(env(safe-area-inset-top) + 90px));
   width: min(720px, calc(100vw - 24px));
   max-height: calc(100vh - 140px);
-  overflow: hidden;
+  /* Bug real reportado en vivo: "presiono comparar y no puedo ver" —
+     con `overflow:hidden` a secas, si la fila BGE expandida + el
+     disclaimer empujaban el total más allá de max-height, lo que
+     sobraba se recortaba de forma invisible e INALCANZABLE (el propio
+     scroll interno de .bge-detail no sirve de nada si el host que lo
+     contiene ya lo cortó antes de llegar ahí). overflow-y:auto deja
+     que el host entero se pueda desplazar cuando de verdad no cabe. */
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: 6px;
