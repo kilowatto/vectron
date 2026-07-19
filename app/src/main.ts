@@ -698,6 +698,21 @@ async function main() {
     const ragStub = document.createElement("vx-rag-stub") as VxRagStub;
     ragStub.onConceptFocus((ids) => field.setSearchHighlights(ids));
     ragStub.setConceptLookup((id) => field.concepts.find((c) => c.id === id));
+    // Phase 5 (DOCs/13 §5, "RAG → Cámara → Transformer"): lo recuperado
+    // ocupa espacio real en la ventana de contexto compartida, no es
+    // gratis — mismo controller que ya alimenta la Cámara 3D.
+    ragStub.onRetrieved((words) => {
+      const text = words.join(", ");
+      void tokenizeBGE(text).then((bgeTokens) => {
+        contextController.append({
+          id: `rag-${demoTurnIndex++}`,
+          role: "retrieval",
+          text,
+          tokens: bgeTokens.map((tok) => tok.text),
+          createdAt: demoTurnIndex,
+        });
+      });
+    });
     ragPanel.appendChild(ragStub);
     renderRecoverList();
     ragPanel.appendChild(recoverEl);

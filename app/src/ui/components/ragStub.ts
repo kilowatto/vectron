@@ -25,6 +25,7 @@ export class VxRagStub extends HTMLElement {
   #statusEl!: HTMLDivElement;
   #setConceptFocus: ((ids: number[]) => void) | null = null;
   #lookupConcept: ((id: number) => Concept | undefined) | null = null;
+  #onRetrieved: ((words: string[]) => void) | null = null;
 
   connectedCallback() {
     if (this.shadowRoot) return;
@@ -67,6 +68,16 @@ export class VxRagStub extends HTMLElement {
     this.#lookupConcept = fn;
   }
 
+  /** main.ts inyecta esto para "inyectar el paquete recuperado" en el
+   * mismo ContextController que usa la Cámara de Contexto (DOCs/13
+   * Phase 5 §5: RAG → Cámara → Transformer) — un chunk recuperado
+   * ocupa espacio en la ventana igual que cualquier turno, no es
+   * gratis. Este componente no conoce contextController directamente
+   * (no es su responsabilidad), sólo avisa qué palabras se recuperaron. */
+  onRetrieved(fn: (words: string[]) => void): void {
+    this.#onRetrieved = fn;
+  }
+
   async #handleAsk(question: string): Promise<void> {
     const lang: Lang = getStoredLang();
     if (!question) return;
@@ -96,9 +107,11 @@ export class VxRagStub extends HTMLElement {
     this.#setConceptFocus?.(resolved.map((r) => r.concept.id));
 
     const words = resolved.map(({ concept }) => (lang === "en" ? concept.word.en : concept.word.es));
+    this.#onRetrieved?.(words);
     this.#answerEl.innerHTML = `
       <p class="declared-inline">${t("ragAnswerDeclared", lang)}</p>
       <p class="answer-text">${t("ragAnswerPrefix", lang)} ${words.join(", ")}.</p>
+      <p class="declared-inline">${t("ragInjectedNote", lang)}</p>
     `;
   }
 }

@@ -350,6 +350,10 @@ const STRINGS = {
     es: "Lo más relacionado con tu pregunta en el dataset es:",
     en: "The most related things to your question in the dataset are:",
   },
+  ragInjectedNote: {
+    es: "→ enviado a la Cámara de Contexto (Transformer · Contexto) como turno \"retrieval\" — ocupa espacio real en la ventana, no es gratis.",
+    en: "→ sent to the Context Chamber (Transformer · Context) as a \"retrieval\" turn — it takes up real space in the window, it isn't free.",
+  },
 
   // --- P4: vx-kind-legend ---
   kindLegendNotable: { es: "luz grande = destacado", en: "big light = notable" },
