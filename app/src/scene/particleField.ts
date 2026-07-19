@@ -123,6 +123,12 @@ export interface ParticleField {
     allowed: Set<PartOfSpeech>,
     opts?: { reducedMotion?: boolean },
   ) => Promise<{ visibleCount: number }>;
+  /** Duración (ms) que va a tardar la ola de partículas para este
+   * filtro, calculada sin animar nada — para sincronizar el resto del
+   * "chrome" (switcher, fade del composer/tokenStrip) a la misma
+   * duración ANTES de arrancar la morph real. 0 si es la primera
+   * llamada (instantánea, nada que sincronizar). */
+  estimateMorphDuration: (allowed: Set<PartOfSpeech>) => number;
   /** Devuelve el objeto de línea creado (o null) para que quien llama
    * le cuelgue `userData.segments` (etiquetas de hover con el coseno
    * real por segmento — ver lineHover.ts). */
@@ -442,6 +448,30 @@ export function createParticleField(
       }
     }
     return items;
+  }
+
+  /**
+   * Cuánto va a tardar la ola de partículas para este cambio de filtro,
+   * SIN animar nada — mismo cálculo (misma clasificación por estado
+   * real vía scaleArray, mismo computeMorphPlan) que usa
+   * morphToPartOfSpeechFilter internamente, expuesto por separado para
+   * que quien llame (main.ts) pueda sincronizar el resto del "chrome"
+   * (switcher, fade del composer/tokenStrip) a la MISMA duración antes
+   * de arrancar la morph real — pedido explícito 2026-07-19: el
+   * switcher deslizaba su pastilla en 0.32s fijos mientras la ola de
+   * partículas real tardaba hasta 3.4s, así que el switcher "terminaba"
+   * mucho antes de que el cubo terminara de verdad.
+   */
+  function estimateMorphDuration(allowed: Set<PartOfSpeech>): number {
+    if (currentAllowed === null) return 0;
+    const EPS = 1e-3;
+    let changing = 0;
+    concepts.forEach((c, i) => {
+      const shouldShow = allowed.has(c.partOfSpeech);
+      const target = shouldShow ? baseScaleOf(c) : 0;
+      if (Math.abs(scaleArray[i] - target) >= EPS) changing++;
+    });
+    return computeMorphPlan(changing).targetDuration;
   }
 
   async function morphToPartOfSpeechFilter(
@@ -780,6 +810,7 @@ export function createParticleField(
     setPartOfSpeechFilter,
     revealProgressively,
     morphToPartOfSpeechFilter,
+    estimateMorphDuration,
     setSimilarityLines,
     setChainLines,
   };

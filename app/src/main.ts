@@ -7,7 +7,7 @@ import { fetchConcepts } from "./data/concepts";
 import { getStoredMode, setStoredMode, type Mode } from "./ui/components/modeStorage";
 import "./ui/components/modeSelect";
 import "./ui/components/modeSwitcher";
-import type { ModeChangeDetail } from "./ui/components/modeSwitcher";
+import type { ModeChangeDetail, VxModeSwitcher } from "./ui/components/modeSwitcher";
 import "./ui/components/langSwitcher";
 import type { LangChangeDetail } from "./ui/components/langSwitcher";
 import type { VxConceptCard } from "./ui/components/conceptCard";
@@ -212,7 +212,7 @@ async function main() {
 
   const initialMode = getStoredMode() ?? (await pickMode());
 
-  const switcher = document.createElement("vx-mode-switcher");
+  const switcher = document.createElement("vx-mode-switcher") as VxModeSwitcher;
   document.body.appendChild(switcher);
   const langSwitcher = document.createElement("vx-lang-switcher");
   langSwitcher.setAttribute("current", lang);
@@ -497,7 +497,10 @@ async function main() {
   // tokens ya no vive en la misma barra que el input, así que puede
   // crecer (comparación BGE) sin competir con él por espacio ni tapar
   // el centro del cubo (ver DOCs/04-build-order.md P1).
-  function mountComposerAndStrip(mode: Mode): { composer: VxComposer; strip: VxTokenStrip } {
+  function mountComposerAndStrip(
+    mode: Mode,
+    fadeMs = 420,
+  ): { composer: VxComposer; strip: VxTokenStrip } {
     const composer = document.createElement("vx-composer") as VxComposer;
     const strip = document.createElement("vx-token-strip") as VxTokenStrip;
     if (mode === "principiante") {
@@ -564,14 +567,44 @@ async function main() {
       stageEl.appendChild(composer);
       stageEl.appendChild(strip);
     }
-    fadeIn(composer, { duration: 420, rise: 16 });
-    fadeIn(strip, { duration: 420, rise: -16 });
+    fadeIn(composer, { duration: fadeMs, rise: 16 });
+    fadeIn(strip, { duration: fadeMs, rise: -16 });
     return { composer, strip };
   }
 
   let composer: VxComposer | null = null;
   let tokenStrip: VxTokenStrip | null = null;
   let currentMode: Mode = initialMode;
+
+  // El fundido de salida/entrada del composer/tokenStrip ahora dura lo
+  // mismo que la ola de partículas (hasta 3.4s en cambios grandes, ver
+  // chromeFadeMs en runApplyModeChrome) — si se esperara (`await`)
+  // adentro de runApplyModeChrome como antes, applyModeBusy se
+  // quedaría trabado ese mismo tiempo, reintroduciendo justo el
+  // problema que se acaba de arreglar (un segundo cambio de modo a
+  // medio camino debe reaccionar YA, no esperar en cola). Por eso esto
+  // corre SIN esperar, con su propio contador de secuencia — si un
+  // cambio de modo más nuevo llega mientras este fundido todavía está
+  // en el aire, éste no debe pisar el composer/tokenStrip que el más
+  // nuevo ya montó.
+  let chromeSwapSeq = 0;
+
+  async function swapComposerAndStrip(mode: Mode, fadeMs: number) {
+    const seq = ++chromeSwapSeq;
+    const prevComposer = composer;
+    const prevStrip = tokenStrip;
+    if (prevComposer && prevStrip) {
+      await Promise.all([
+        fadeOut(prevComposer, { duration: fadeMs }),
+        fadeOut(prevStrip, { duration: fadeMs }),
+      ]);
+      if (seq !== chromeSwapSeq) return; // un cambio más nuevo ya se encargó
+      prevComposer.remove();
+      prevStrip.remove();
+    }
+    if (seq !== chromeSwapSeq) return;
+    ({ composer, strip: tokenStrip } = mountComposerAndStrip(mode, fadeMs));
+  }
 
   // El "cambio de stage" real: nunca recrea el motor 3D ni recarga la
   // página — las partículas siguen girando durante todo el cambio, sólo
@@ -618,6 +651,17 @@ async function main() {
   async function runApplyModeChrome(mode: Mode) {
     currentMode = mode;
     allowedPos = MODE_POS[mode];
+    // Pedido explícito 2026-07-19: el switcher deslizaba su pastilla
+    // (y el composer/tokenStrip se desvanecían al remontarse) en una
+    // duración fija, desacoplada de cuánto tarda en realidad la ola de
+    // partículas (dinámica, 0.7-3.4s según cuántas cambian, ver
+    // computeMorphPlan en particleField.ts) — el "chrome" terminaba su
+    // transición mucho antes de que el cubo terminara la suya.
+    // estimateMorphDuration calcula esa misma duración SIN animar nada,
+    // así que switcher/composer/tokenStrip pueden sincronizarse a ella
+    // antes de que la morph real arranque más abajo.
+    const morphMs = field.estimateMorphDuration(allowedPos);
+    switcher.setTransitionMs(morphMs > 0 ? morphMs : 320);
     switcher.setAttribute("current", mode);
     backendTag.textContent = engine.usingWebGPU ? t("hudWebgpu", lang) : t("hudWebgl", lang);
 
@@ -636,16 +680,9 @@ async function main() {
     // que durante toda la animación el switcher ya mostraba el modo
     // nuevo pero el layout seguía siendo el del modo anterior.
     const isFirstCall = composer === null;
+    const chromeFadeMs = morphMs > 0 ? morphMs : 220;
     applyShellLayout(mode);
-    if (composer && tokenStrip) {
-      await Promise.all([
-        fadeOut(composer, { duration: 220 }),
-        fadeOut(tokenStrip, { duration: 220 }),
-      ]);
-      composer.remove();
-      tokenStrip.remove();
-    }
-    ({ composer, strip: tokenStrip } = mountComposerAndStrip(mode));
+    void swapComposerAndStrip(mode, chromeFadeMs);
 
     // El conteo real no depende de que la morph termine — se puede
     // calcular directo del filtro, así el HUD también es instantáneo.

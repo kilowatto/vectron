@@ -56,6 +56,21 @@ export class VxModeSwitcher extends HTMLElement {
   // con la transición activada — el navegador anima ese último tramo.
   #lastPillRect: PillRect | null = null;
 
+  // Duración real de la ola de partículas para el cambio en curso —
+  // pedido explícito 2026-07-19: la pastilla deslizaba en 0.32s fijos
+  // mientras el morph real (dinámico, ver computeMorphPlan en
+  // particleField.ts) podía tardar hasta 3.4s en cambios grandes, así
+  // que el switcher "terminaba" mucho antes que el cubo. Quien llama
+  // (main.ts) debe fijar esto con estimateMorphDuration() JUSTO ANTES
+  // de cambiar `current` — si nunca se fija, 320ms es el valor de
+  // siempre (primera carga, o si alguien usa este componente sin ese
+  // paso extra).
+  #transitionMs = 320;
+
+  setTransitionMs(ms: number) {
+    this.#transitionMs = Math.max(1, ms);
+  }
+
   connectedCallback() {
     this.#render();
   }
@@ -157,8 +172,8 @@ export class VxModeSwitcher extends HTMLElement {
       height: `${prev.height}px`,
     });
     requestAnimationFrame(() => {
-      pill.style.transition =
-        "left 0.32s cubic-bezier(0.4, 0, 0.2, 1), width 0.32s cubic-bezier(0.4, 0, 0.2, 1)";
+      const s = `${this.#transitionMs}ms`;
+      pill.style.transition = `left ${s} cubic-bezier(0.4, 0, 0.2, 1), width ${s} cubic-bezier(0.4, 0, 0.2, 1)`;
       Object.assign(pill.style, {
         left: `${next.left}px`,
         top: `${next.top}px`,
