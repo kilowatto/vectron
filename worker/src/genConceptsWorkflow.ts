@@ -47,13 +47,38 @@ const TEXT_MODEL = "@cf/meta/llama-3.1-70b-instruct";
 // que no se repita entre fragmentos.
 const MAX_PER_CALL = 40;
 
+/** Bug real encontrado en vivo: un JSON.parse estricto sobre TODO el
+ * array tira todo el lote por una sola comilla mal escapada en un
+ * nombre (ej. un apóstrofe dentro de "distinctiveTrait") — y como el
+ * modelo con el MISMO prompt tiende a repetir el mismo error en los
+ * reintentos, un solo objeto roto podía tumbar el chunk completo 4
+ * veces seguidas. Si el parse estricto del array completo falla,
+ * cae a extraer cada objeto `{...}` por su cuenta y sólo descarta los
+ * que de verdad no parsean — el resto del lote sobrevive. */
 function extractJsonArray(text: string): unknown[] {
   const start = text.indexOf("[");
   const end = text.lastIndexOf("]");
   if (start === -1 || end === -1 || end < start) {
     throw new Error("la respuesta no contiene un array JSON");
   }
-  return JSON.parse(text.slice(start, end + 1));
+  const slice = text.slice(start, end + 1);
+  try {
+    return JSON.parse(slice);
+  } catch {
+    const objects: unknown[] = [];
+    const matches = slice.match(/\{[^{}]*\}/g) ?? [];
+    for (const m of matches) {
+      try {
+        objects.push(JSON.parse(m));
+      } catch {
+        // descarta sólo este objeto roto, no el lote
+      }
+    }
+    if (objects.length === 0) {
+      throw new Error("ningún objeto del array parseó, ni siquiera individualmente");
+    }
+    return objects;
+  }
 }
 
 function isGeneratedItem(x: unknown): x is GeneratedItem {
@@ -97,18 +122,29 @@ export class GenerateConceptsWorkflow extends WorkflowEntrypoint<Env, GeneratePa
         // categorías de varios cientos.
         const excludeList = catGenerated.map((i) => i.wordEs).slice(-150);
 
-        const items = await step.do(
-          `generar ${cat.key} parte ${chunk}`,
-          {
-            retries: { limit: 4, delay: "5 seconds", backoff: "exponential" },
-            timeout: "3 minutes",
-          },
-          async () => {
-            const excludeNote =
-              excludeList.length > 0
-                ? `\nNO repitas ninguna de estas, ya las generamos antes en esta misma categoría: ${excludeList.join(", ")}.`
-                : "";
-            const prompt = `Genera EXACTAMENTE ${askFor} conceptos reales para esta categoría: ${cat.promptHint}${excludeNote}
+        // Bug real encontrado en vivo: un chunk que agota sus 4
+        // reintentos (el mismo error de JSON se repitió las 4 veces —
+        // no es azar del modelo, algo en ESE prompt específico lo
+        // provoca de forma consistente) tiraba el `await` hacia
+        // afuera, abortando TODAS las categorías restantes del lote
+        // — incluidas las que ya habían generado bien. Atajar el
+        // error aquí y sólo cortar ESTA categoría (se queda con los
+        // chunks que sí funcionaron) deja que el resto del lote
+        // siga.
+        let items: GeneratedItem[];
+        try {
+          items = await step.do(
+            `generar ${cat.key} parte ${chunk}`,
+            {
+              retries: { limit: 4, delay: "5 seconds", backoff: "exponential" },
+              timeout: "3 minutes",
+            },
+            async () => {
+              const excludeNote =
+                excludeList.length > 0
+                  ? `\nNO repitas ninguna de estas, ya las generamos antes en esta misma categoría: ${excludeList.join(", ")}.`
+                  : "";
+              const prompt = `Genera EXACTAMENTE ${askFor} conceptos reales para esta categoría: ${cat.promptHint}${excludeNote}
 
 Reglas estrictas:
 - Cada entrada debe ser una palabra o nombre real y verificable, NUNCA inventado.
@@ -118,20 +154,24 @@ Reglas estrictas:
 - Responde SOLO con un array JSON válido, sin texto antes ni después, sin markdown, con esta forma exacta:
 [{"wordEs":"...","wordEn":"...","distinctiveTrait":"..."}]`;
 
-            const result = (await this.env.AI.run(TEXT_MODEL, {
-              messages: [{ role: "user", content: prompt }],
-              temperature: 0.3,
-              max_tokens: 4096,
-            })) as { response: string };
+              const result = (await this.env.AI.run(TEXT_MODEL, {
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.3,
+                max_tokens: 4096,
+              })) as { response: string };
 
-            const raw = extractJsonArray(result.response);
-            const valid = raw.filter(isGeneratedItem);
-            if (valid.length === 0) {
-              throw new Error(`0 entradas válidas para ${cat.key} parte ${chunk} — respuesta: ${result.response.slice(0, 300)}`);
-            }
-            return valid;
-          },
-        );
+              const raw = extractJsonArray(result.response);
+              const valid = raw.filter(isGeneratedItem);
+              if (valid.length === 0) {
+                throw new Error(`0 entradas válidas para ${cat.key} parte ${chunk} — respuesta: ${result.response.slice(0, 300)}`);
+              }
+              return valid;
+            },
+          );
+        } catch (err) {
+          console.error(`[generar ${cat.key} parte ${chunk}] agotó reintentos, se corta la categoría aquí:`, err);
+          break;
+        }
 
         catGenerated.push(...items);
       }
