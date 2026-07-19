@@ -89,6 +89,19 @@ body {
   padding-inline: 16px;
   padding-bottom: 16px;
   gap: 14px;
+  /* Bug real reportado en vivo ("ya no veo bien todo el panel de la
+     derecha", ventana angosta cerca del breakpoint de 1024px): un
+     grid item con track de ancho FIJO (360px, ver abajo) todavía se
+     puede desbordar más allá de ese track si su contenido no cabe —
+     el `min-width` inicial de un grid item es `auto`, que resuelve al
+     ancho mínimo de su contenido MÁS PROFUNDO, no al ancho del track.
+     Sin min-width:0 aquí, un hijo que no se encoge lo suficiente (ver
+     composer.css .input-wrap) empuja a #side-pane entero más ancho
+     que sus 360px asignados. overflow-x:hidden es la red de
+     seguridad final: si algo TODAVÍA no cupiera, se recorta adentro
+     del dock en vez de deformar el layout o salirse de la ventana. */
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 /* Intermedio — dock de pipeline permanente, sólo en escritorio (ver

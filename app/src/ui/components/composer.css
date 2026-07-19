@@ -54,7 +54,15 @@
 .input-wrap {
   position: relative;
   flex: 1;
-  min-width: 140px;
+  /* 140px -> 90px: dentro del dock de Intermedio (360px fijo, ver
+     style.css #side-pane) el contenido real disponible para `.row`
+     baja a ~290px con el padding del :host y de #side-pane restados —
+     140px de piso más el ancho fijo de `.toggle` (BPE real |
+     Simplificado, ~155px) no siempre cabían en una ventana angosta
+     cerca del breakpoint de 1024px, desbordando el panel (bug real
+     reportado en vivo). 90px sigue siendo un input usable, sólo ya no
+     fuerza el desborde antes de que flex-wrap pueda actuar. */
+  min-width: 90px;
   display: flex;
 }
 
