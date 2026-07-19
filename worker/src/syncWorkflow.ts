@@ -40,6 +40,24 @@ interface ClientConcept {
  * lote nuevo trae verbos/adjetivos. */
 export class SyncConceptsWorkflow extends WorkflowEntrypoint<Env, SyncParams> {
   async run(event: WorkflowEvent<SyncParams>, step: WorkflowStep) {
+    // Bug real encontrado en vivo: liberar el lease sólo al final del
+    // camino feliz dejaba el lease trabado para siempre en cualquier
+    // otra salida (el early-return de "nada que sincronizar", o un
+    // error que agota sus reintentos) — hasta que expirara el TTL de
+    // 10 min, ningún disparo real podía correr. try/finally cubre
+    // TODAS las salidas, no sólo la exitosa con conceptos nuevos.
+    try {
+      await this.runSync(event, step);
+    } finally {
+      await step.do("liberar lease", async () => {
+        await this.env.DB.prepare(
+          "UPDATE sync_lease SET locked_at = NULL, workflow_instance_id = NULL WHERE id = 1",
+        ).run();
+      });
+    }
+  }
+
+  private async runSync(event: WorkflowEvent<SyncParams>, step: WorkflowStep) {
     const { fromIndex } = event.payload;
     const newConcepts = SEED_CONCEPTS.slice(fromIndex);
 
@@ -136,16 +154,6 @@ export class SyncConceptsWorkflow extends WorkflowEntrypoint<Env, SyncParams> {
         partOfSpeech: c.partOfSpeech,
       }));
       await this.env.DATASET.put("concepts.json", JSON.stringify([...current, ...appended]));
-    });
-
-    // Libera el lease AL FINAL, no al principio — mientras el workflow
-    // sigue corriendo, sync-status sigue viendo COUNT(*) viejo (stale),
-    // pero sync-trigger ve el lease tomado y no dispara una segunda
-    // instancia (ver handleSyncTrigger en index.ts).
-    await step.do("liberar lease", async () => {
-      await this.env.DB.prepare(
-        "UPDATE sync_lease SET locked_at = NULL, workflow_instance_id = NULL WHERE id = 1",
-      ).run();
     });
   }
 }
