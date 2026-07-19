@@ -486,6 +486,12 @@ async function main() {
   // todavía no tienen su valor final — se declaran arriba y esta closure
   // los lee por referencia, ya resueltos cuando el usuario llegue a
   // interactuar (mucho después de que termine el splash).
+  // Phase 6 (DOCs/13 §17 presupuestos de rendimiento): downgrade de
+  // calidad en tiempo de ejecución — sólo hacia abajo (nunca de vuelta
+  // a "high" sola, para no parpadear), y sólo importa mientras la
+  // Cámara está a la vista (es lo único con variantes de calidad).
+  let lowFpsStreak = 0;
+  let chamberQualityDowngraded = false;
   engine.start(
     (dt) => {
       // Bug real corregido (ver engine.ts): el giro automático ahora es
@@ -497,6 +503,13 @@ async function main() {
     },
     (fps) => {
       fpsLabel.textContent = `${fps} fps`;
+      if (!chamberQualityDowngraded && contextChamber.group.visible) {
+        lowFpsStreak = fps < 30 ? lowFpsStreak + 1 : 0;
+        if (lowFpsStreak >= 3) {
+          contextChamber.setQuality("low");
+          chamberQualityDowngraded = true;
+        }
+      }
     },
   );
 
