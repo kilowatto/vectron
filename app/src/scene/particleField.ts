@@ -164,12 +164,13 @@ export function createParticleField(
   const mesh = new THREE.InstancedMesh(geometry, material, count);
   const dummy = new THREE.Object3D();
 
-  // Segunda pasada del mismo ajuste (dataset creció de ~2.3k a ~6.7k
-  // conceptos desde la última vez, sobre todo léxico masivo genérico
-  // que además es semánticamente denso — el PCA lo apretuja más que el
-  // dataset temático anterior, agravando el mismo blanqueo por
-  // traslape aditivo). Más chicas otra vez.
-  const baseScaleOf = (concept: Concept) => (concept.distinctiveTrait ? 0.82 : 0.5);
+  // Corrección sobre la corrección: bajar tamaño Y brillo A LA VEZ que
+  // separar el espacio (CUBE_SCALE ×1.52, ver seed.ts) fue demasiado —
+  // el espaciado solo ya resuelve el traslape real; encima achicar y
+  // apagar deja el cubo "tenue y sin vida" en vistas ya poco densas
+  // (Principiante, con muchas menos partículas visibles que Avanzado —
+  // reportado en vivo con captura). Tamaño de vuelta a como estaba.
+  const baseScaleOf = (concept: Concept) => (concept.distinctiveTrait ? 1.0 : 0.62);
 
   concepts.forEach((concept, i) => {
     const hue = DOMAIN_HUES[concept.domain] ?? FALLBACK_HUE;
@@ -506,8 +507,10 @@ export function createParticleField(
   geometry.setAttribute("instanceHighlight", highlightAttribute);
   geometry.setAttribute("instanceFocus", focusAttribute);
 
-  // Segunda pasada (ver baseScaleOf arriba, mismo motivo): 0.5 -> 0.42.
-  const glowStrength = uniform(0.42);
+  // Restaurado (ver baseScaleOf arriba): el espaciado ya hace el
+  // trabajo pesado contra el traslape, no hace falta apagar el rim
+  // tanto — de vuelta cerca del valor original.
+  const glowStrength = uniform(0.58);
   const instanceColor = attribute<"vec3">("instanceColor", "vec3");
   const instancePhase = attribute<"float">("instancePhase", "float");
   const instanceHighlight = attribute<"float">("instanceHighlight", "float");
@@ -524,12 +527,13 @@ export function createParticleField(
 
   material.colorNode = Fn(() => {
     const base = color(instanceColor);
-    // 0.22 -> 0.14 -> 0.10: el "piso" de brillo ambiente de cada
-    // partícula es lo que más se acumula en zonas densas (siempre está
-    // encendido, a diferencia del rim/highlight que son condicionales)
-    // — bajarlo es lo que más ayuda contra el blanqueo por traslape.
+    // 0.22 -> 0.14 -> 0.10 -> 0.18: bajarlo tanto dejó el cubo apagado
+    // en vistas ya poco densas (Principiante) sin que hiciera falta —
+    // el espaciado (CUBE_SCALE, ver seed.ts) es lo que de verdad
+    // resuelve el traslape ahora; este piso vuelve casi a su valor
+    // original para que el cubo se sienta vivo otra vez.
     const glow = base.mul(
-      float(0.1).add(rim.mul(glowStrength)).add(instanceHighlight),
+      float(0.18).add(rim.mul(glowStrength)).add(instanceHighlight),
     );
     return vec3(glow).mul(pulse).mul(instanceFocus);
   })();

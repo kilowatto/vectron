@@ -58,11 +58,11 @@ export async function createEngine(canvas: HTMLCanvasElement): Promise<Engine> {
 
   const scenePass = pass(scene, camera);
   const scenePassColor = scenePass.getTextureNode("output");
-  // Segunda pasada (dataset ~3x desde la última vez, ver
-  // particleField.ts baseScaleOf): threshold 0.62->0.74, strength
-  // 0.24->0.2 — mismo motivo, las zonas densas siguen llegando al
-  // umbral de bloom por pura acumulación de traslape, no brillo real.
-  const bloomPass = bloom(scenePassColor, 0.2, 0.18, 0.74);
+  // Restaurado cerca del original (ver particleField.ts baseScaleOf):
+  // el espaciado real (CUBE_SCALE en seed.ts) ya resuelve el traslape,
+  // apagar el bloom encima de eso dejaba todo sin vida sobre todo en
+  // vistas poco densas como Principiante.
+  const bloomPass = bloom(scenePassColor, 0.27, 0.18, 0.58);
   const renderPipeline = new THREE.RenderPipeline(renderer);
   renderPipeline.outputNode = scenePassColor.add(bloomPass);
 
