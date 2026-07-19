@@ -659,10 +659,35 @@ async function main() {
   // existe para volar a una partícula fijada) para encuadrarla.
   let contextChamberActive = false;
   const CUBE_FOG_DENSITY = (engine.scene.fog as THREE.FogExp2).density;
+  const CUBE_MAX_DISTANCE = engine.controls.maxDistance;
   function setContextChamberActive(active: boolean) {
     if (active === contextChamberActive) return;
     contextChamberActive = active;
     contextChamber.group.visible = active;
+    // Restaura el techo de zoom del cubo al salir — si se dejó subido
+    // (ver setCapacityProfile) alejarse en Cubo llegaría mucho más
+    // lejos de lo pensado el resto de la sesión.
+    if (!active) engine.controls.maxDistance = CUBE_MAX_DISTANCE;
+    // Bug real encontrado en vivo (peor que el de arriba): si venías de
+    // un dolly de escala grande, camera/target quedan a ~22 unidades de
+    // (9,0,0) — `recenterToMode`, que corre unos milisegundos después
+    // como parte del mismo cambio de modo, hace un PAN (conserva la
+    // distancia cámara-target de donde arranca) para centrar el
+    // centroide visible, no un dolly que la corrija. Si lee esa
+    // distancia gigante ANTES de que la animación de flyTo de abajo
+    // alcance a moverla, el cubo aparece del tamaño correcto pero
+    // absurdamente lejos — diminuto en una esquina. Foto instantánea
+    // (sin animar) a una distancia razonable ANTES de que cualquier
+    // otra animación lea camera/target evita que ambos sistemas
+    // partan de un estado fuera de rango.
+    if (!active) {
+      const dist = engine.camera.position.distanceTo(engine.controls.target);
+      if (dist > CUBE_MAX_DISTANCE) {
+        const dir = engine.camera.position.clone().sub(engine.controls.target).normalize();
+        engine.controls.target.set(0, 0, 0);
+        engine.camera.position.copy(dir.multiplyScalar(4.86));
+      }
+    }
     // Bug real encontrado en vivo: FogExp2 con la densidad calibrada
     // para las distancias del cubo (~5-10 unidades) apaga por completo
     // cualquier cosa más allá de ~18 unidades — exactamente donde el
@@ -670,7 +695,13 @@ async function main() {
     // llegar. La Cámara vive en su propia zona del mundo, nunca junto
     // al cubo, así que puede tener su propia densidad sin afectarlo.
     (engine.scene.fog as THREE.FogExp2).density = active ? 0.01 : CUBE_FOG_DENSITY;
-    flyTo(active ? contextChamber.group.position.clone() : null);
+    // Bug real encontrado en vivo: al volver del dolly de escala de
+    // capacidad, `currentDist` dentro de flyTo todavía mide la
+    // distancia GIGANTE de ver Claude Sonnet 5 (~22u) — con
+    // `Math.max(currentDist, 4.86)` eso ganaba y el cubo quedaba fuera
+    // de cuadro (invisible) al volver a Cubo/Principiante/Avanzado.
+    // Pasar 4.86 explícito aquí ignora esa distancia heredada.
+    flyTo(active ? contextChamber.group.position.clone() : null, active ? undefined : 4.86);
   }
 
   // Phase 4 (DOCs/13 §11): capítulos DENTRO de Transformer. "Contexto"
