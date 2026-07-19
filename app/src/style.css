@@ -177,6 +177,27 @@ body {
   }
 }
 
+/* Intermedio angosto — mismo espíritu que el bloque de arriba: Cubo ·
+   Transformer · RAG son superficies hermanas full-bleed (DOCs/13 §3-4),
+   navegadas con <vx-intermediate-surface>. A diferencia de
+   <vx-surface-toggle> (Avanzado), ese nav se reparenta DENTRO de
+   #side-pane cuando la superficie no es "cube" (ver main.ts
+   `placeIntermediateSurfaceNav`) — así siempre queda por delante del
+   panel full-bleed en el mismo contexto de z-index, sin competir con
+   z:60 desde afuera. */
+@media (max-width: 1023px) {
+  #stage[data-mode="intermedio"][data-intermedio-surface]:not(
+      [data-intermedio-surface="cube"]
+    )
+    #side-pane {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+  }
+}
+
 #scene {
   position: absolute;
   inset: 0;
@@ -290,4 +311,22 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* Intermedio — cada superficie (Cubo/Transformer/RAG) agrupa su propio
+   contenido dentro de #side-pane; sólo una está visible a la vez (ver
+   applyIntermediateSurfaceVisibility en main.ts). Mismo gap que el
+   dock mismo, para que el panel visible se vea igual de continuo que
+   el stack plano de antes. */
+.surface-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* `.surface-panel{display:flex}` es más específico que la regla UA
+   `[hidden]{display:none}` — sin este selector compuesto, ocultar un
+   panel no ocultaba nada (bug real encontrado al verificar en vivo). */
+.surface-panel[hidden] {
+  display: none;
 }

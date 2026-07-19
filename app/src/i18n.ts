@@ -178,6 +178,18 @@ const STRINGS = {
   },
   surfaceCube: { es: "Cubo", en: "Cube" },
   surfaceMath: { es: "Matemáticas", en: "Math" },
+  // --- Intermedio: nav de 3 superficies hermanas (DOCs/13 §3-4) ---
+  intermediateSurfaceCube: { es: "Cubo", en: "Cube" },
+  intermediateSurfaceTransformer: { es: "Transformer", en: "Transformer" },
+  intermediateSurfaceRag: { es: "RAG", en: "RAG" },
+  transformerDockIntro: {
+    es: "Cómo se mira, se atiende y se predice el siguiente token dentro del modelo — capítulos Contexto → Atención → Predicción.",
+    en: "How the model looks at, attends to, and predicts the next token — chapters Context → Attention → Prediction.",
+  },
+  ragDockIntro: {
+    es: "Recuperar antes de generar: una pregunta trae trozos reales de un archivo externo a la mesa de trabajo, en vez de que el modelo invente.",
+    en: "Retrieve before generating: a question brings real chunks from an external file to the working desk, instead of the model making things up.",
+  },
   // --- P7: vx-math-arena, pestaña Cosine (primera rebanada real) ---
   mathArenaTabCosine: { es: "Coseno", en: "Cosine" },
   mathArenaCosineEmpty: {

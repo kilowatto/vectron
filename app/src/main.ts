@@ -29,6 +29,12 @@ import type { VxAttentionArcs } from "./ui/components/attentionArcs";
 import "./ui/components/attentionArcs";
 import type { VxRagStub } from "./ui/components/ragStub";
 import "./ui/components/ragStub";
+import type {
+  VxIntermediateSurface,
+  IntermediateSurface,
+  IntermediateSurfaceChangeDetail,
+} from "./ui/components/intermediateSurfaceNav";
+import "./ui/components/intermediateSurfaceNav";
 import type { VxBootSplash } from "./ui/components/bootSplash";
 import "./ui/components/bootSplash";
 import type { VxMathArena } from "./ui/components/mathArena";
@@ -297,6 +303,113 @@ async function main() {
   const isDockLayout = (mode: Mode) =>
     (mode === "intermedio" && matchMedia(DESKTOP_INTERMEDIO).matches) ||
     (mode === "avanzado" && matchMedia(DESKTOP_AVANZADO).matches);
+
+  // DOCs/13-intermedio-3d-journey-implementation.md §2-4 (Phase 1):
+  // Intermedio deja de ser un solo stack plano — tres superficies
+  // hermanas (Cubo · Transformer · RAG) que comparten un composer. En
+  // escritorio el nav vive al tope de #side-pane (dock); en angosto no
+  // hay dock hasta elegir una superficie que no sea "cube" — ahí el
+  // nav se REPARENTA dentro de #side-pane (ver placeIntermediateSurfaceNav)
+  // para quedar SIEMPRE por delante del panel full-bleed, a diferencia
+  // de <vx-surface-toggle> (Avanzado angosto), que flota afuera con un
+  // z-index fijo (16) menor al del panel full-bleed (60) — un bug real
+  // descubierto probando este mismo patrón, no tocado aquí porque
+  // Avanzado está fuera de alcance de esta fase.
+  let intermediateSurface: IntermediateSurface = "cube";
+  let cubePanelEl: HTMLDivElement | null = null;
+  let transformerPanelEl: HTMLDivElement | null = null;
+  let ragPanelEl: HTMLDivElement | null = null;
+  const intermediateSurfaceNav = document.createElement("vx-intermediate-surface") as VxIntermediateSurface;
+  intermediateSurfaceNav.setAttribute("current", intermediateSurface);
+  intermediateSurfaceNav.addEventListener("vx-intermediate-surface-change", (event) => {
+    intermediateSurface = (event as CustomEvent<IntermediateSurfaceChangeDetail>).detail.surface;
+    intermediateSurfaceNav.setAttribute("current", intermediateSurface);
+    applyIntermediateSurfaceVisibility();
+  });
+
+  function placeIntermediateSurfaceNav() {
+    const desktopDock = matchMedia(DESKTOP_INTERMEDIO).matches;
+    const wantsDockStyle = desktopDock || intermediateSurface !== "cube";
+    if (wantsDockStyle) {
+      intermediateSurfaceNav.setAttribute("dock", "");
+      if (sidePaneEl.firstChild !== intermediateSurfaceNav) {
+        sidePaneEl.insertBefore(intermediateSurfaceNav, sidePaneEl.firstChild);
+      }
+    } else {
+      intermediateSurfaceNav.removeAttribute("dock");
+      if (intermediateSurfaceNav.parentElement !== stageEl) stageEl.appendChild(intermediateSurfaceNav);
+    }
+  }
+
+  function applyIntermediateSurfaceVisibility() {
+    if (cubePanelEl) cubePanelEl.hidden = intermediateSurface !== "cube";
+    if (transformerPanelEl) transformerPanelEl.hidden = intermediateSurface !== "transformer";
+    if (ragPanelEl) ragPanelEl.hidden = intermediateSurface !== "rag";
+    stageEl.dataset.intermedioSurface = intermediateSurface;
+    placeIntermediateSurfaceNav();
+  }
+
+  // Los tres paneles (Módulos A/B+G en Cubo, C/D/E en Transformer, F en
+  // RAG — ver DOCs/10-intermedio-licenciatura.md §3 remapeado a
+  // capítulos de DOCs/13 §2) se reconstruyen cada vez que el dock se
+  // remonta (mismo ciclo de vida que composer/strip hoy, ver
+  // mountComposerAndStrip) — no intenta persistir estado entre cambios
+  // de modo, sólo agrupa lo que ya existía bajo la superficie correcta.
+  function buildIntermediateSurfacePanels(composer: VxComposer): {
+    cubePanel: HTMLDivElement;
+    transformerPanel: HTMLDivElement;
+    ragPanel: HTMLDivElement;
+  } {
+    const cubePanel = document.createElement("div");
+    cubePanel.className = "surface-panel";
+    const cubeNote = document.createElement("div");
+    cubeNote.className = "dock-note";
+    cubeNote.innerHTML = `<p>${t("pipelineDockIntro", lang)}</p><p>${t("pipelineDockNeighbors", lang)}</p>`;
+    cubePanel.appendChild(cubeNote);
+    const failureNote = document.createElement("div");
+    failureNote.className = "dock-note";
+    failureNote.innerHTML = `<p>${t("failureModesNote", lang)}</p>`;
+    cubePanel.appendChild(failureNote);
+
+    const transformerPanel = document.createElement("div");
+    transformerPanel.className = "surface-panel";
+    const transformerNote = document.createElement("div");
+    transformerNote.className = "dock-note";
+    transformerNote.innerHTML = `<p>${t("transformerDockIntro", lang)}</p>`;
+    transformerPanel.appendChild(transformerNote);
+    // Orden = capítulos de DOCs/13 §2.7: Contexto → Atención → Predicción.
+    const contextLab = document.createElement("vx-context-lab") as VxContextLab;
+    transformerPanel.appendChild(contextLab);
+    const attentionArcs = document.createElement("vx-attention-arcs") as VxAttentionArcs;
+    transformerPanel.appendChild(attentionArcs);
+    const nextTokenBars = document.createElement("vx-next-token-bars") as VxNextTokenBars;
+    transformerPanel.appendChild(nextTokenBars);
+
+    const ragPanel = document.createElement("div");
+    ragPanel.className = "surface-panel";
+    const ragNote = document.createElement("div");
+    ragNote.className = "dock-note";
+    ragNote.innerHTML = `<p>${t("ragDockIntro", lang)}</p>`;
+    ragPanel.appendChild(ragNote);
+    const ragStub = document.createElement("vx-rag-stub") as VxRagStub;
+    ragStub.onConceptFocus((ids) => field.setSearchHighlights(ids));
+    ragStub.setConceptLookup((id) => field.concepts.find((c) => c.id === id));
+    ragPanel.appendChild(ragStub);
+
+    // Mismo evento que ya alimenta highlights/chain/tokenMode arriba —
+    // un segundo listener en el mismo `vx-tokens-change` es normal en
+    // DOM, sin orden garantizado entre ambos ni falta que lo haya.
+    composer.addEventListener("vx-tokens-change", (event) => {
+      const { tokens, text } = (event as CustomEvent<TokensChangeDetail>).detail;
+      nextTokenBars.setText(text);
+      attentionArcs.setTokens(tokens.map((tok) => tok.text));
+      void tokenizeBGE(text).then((bgeTokens) =>
+        contextLab.setTokens(bgeTokens.map((tok) => tok.text)),
+      );
+    });
+
+    return { cubePanel, transformerPanel, ragPanel };
+  }
 
   const AVANZADO_SASH_KEY = "vectron_avanzado_sash";
   function applySashWidth(pct: number) {
@@ -579,62 +692,42 @@ async function main() {
       }
       tokenMode.setText(text);
     });
-    if (isDockLayout(mode)) {
-      // P6: hijos de flujo normal dentro del dock (Intermedio) o la
-      // consola de ancho completo (Avanzado) — no overlays flotantes.
+    if (mode === "intermedio") {
+      // DOCs/13 §3-4 (Phase 1): tres superficies hermanas comparten UN
+      // composer. En dock de escritorio composer/strip viven arriba de
+      // los tres paneles, siempre visibles; en angosto no hay dock
+      // hasta elegir una superficie que no sea "cube" — ahí composer/
+      // strip siguen flotando sobre el cubo (mismo trade-off que
+      // <vx-surface-toggle> en Avanzado angosto: se pierden de vista
+      // mientras se navega otra superficie, se recuperan al volver a
+      // "Cubo"), y los tres paneles se montan igual dentro de
+      // #side-pane para que el CSS full-bleed (ver style.css) los
+      // muestre por turnos.
+      const desktopDock = isDockLayout(mode);
+      if (desktopDock) {
+        composer.setAttribute("dock", "");
+        strip.setAttribute("dock", "");
+        sidePaneEl.appendChild(composer);
+        sidePaneEl.appendChild(strip);
+      } else {
+        stageEl.appendChild(composer);
+        stageEl.appendChild(strip);
+      }
+      const { cubePanel, transformerPanel, ragPanel } = buildIntermediateSurfacePanels(composer);
+      sidePaneEl.appendChild(cubePanel);
+      sidePaneEl.appendChild(transformerPanel);
+      sidePaneEl.appendChild(ragPanel);
+      cubePanelEl = cubePanel;
+      transformerPanelEl = transformerPanel;
+      ragPanelEl = ragPanel;
+      applyIntermediateSurfaceVisibility();
+    } else if (isDockLayout(mode)) {
+      // P6: hijos de flujo normal dentro de la consola de ancho
+      // completo (Avanzado) — no overlays flotantes.
       composer.setAttribute("dock", "");
       strip.setAttribute("dock", "");
-      const target = mode === "intermedio" ? sidePaneEl : consolePaneEl;
-      if (mode === "intermedio") {
-        target.appendChild(composer);
-        target.appendChild(strip);
-
-        // Currículo de licenciatura en IA (DOCs/10-intermedio-licenciatura.md)
-        // — Módulos A-B ya viven arriba (composer/strip = A; la tarjeta
-        // fijada con coseno real = B); esta nota es sólo el recordatorio
-        // de pipeline. C-G son componentes nuevos, cada uno declara si
-        // sus números son reales o ilustrativos (ver comentarios en cada
-        // archivo — no todo puede serlo sin un modelo generador real).
-        const note = document.createElement("div");
-        note.className = "dock-note";
-        note.innerHTML = `<p>${t("pipelineDockIntro", lang)}</p><p>${t("pipelineDockNeighbors", lang)}</p>`;
-        target.appendChild(note);
-
-        const nextTokenBars = document.createElement("vx-next-token-bars") as VxNextTokenBars;
-        target.appendChild(nextTokenBars);
-
-        const attentionArcs = document.createElement("vx-attention-arcs") as VxAttentionArcs;
-        target.appendChild(attentionArcs);
-
-        const contextLab = document.createElement("vx-context-lab") as VxContextLab;
-        target.appendChild(contextLab);
-
-        const ragStub = document.createElement("vx-rag-stub") as VxRagStub;
-        ragStub.onConceptFocus((ids) => field.setSearchHighlights(ids));
-        ragStub.setConceptLookup((id) => field.concepts.find((c) => c.id === id));
-        target.appendChild(ragStub);
-
-        const failureNote = document.createElement("div");
-        failureNote.className = "dock-note";
-        failureNote.innerHTML = `<p>${t("failureModesNote", lang)}</p>`;
-        target.appendChild(failureNote);
-
-        // Vincula los módulos nuevos a lo que ya se escribe — mismo
-        // evento que arriba alimenta highlights/chain/tokenMode, sin
-        // duplicar esa lógica (dos listeners en el mismo evento es
-        // normal en DOM, no hay problema de orden entre ellos).
-        composer.addEventListener("vx-tokens-change", (event) => {
-          const { tokens, text } = (event as CustomEvent<TokensChangeDetail>).detail;
-          nextTokenBars.setText(text);
-          attentionArcs.setTokens(tokens.map((tok) => tok.text));
-          void tokenizeBGE(text).then((bgeTokens) =>
-            contextLab.setTokens(bgeTokens.map((tok) => tok.text)),
-          );
-        });
-      } else {
-        target.appendChild(strip);
-        target.appendChild(composer);
-      }
+      consolePaneEl.appendChild(strip);
+      consolePaneEl.appendChild(composer);
     } else {
       stageEl.appendChild(composer);
       stageEl.appendChild(strip);
