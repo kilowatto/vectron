@@ -1,5 +1,6 @@
 import { attachShadow } from "./shadow";
 import { getStoredLang, t, type Lang, type StringKey } from "../../i18n";
+import { CONTEXT_PROFILES } from "../../intermediate/contextController";
 import css from "./contextLab.css?inline";
 
 /**
@@ -11,24 +12,36 @@ import css from "./contextLab.css?inline";
  * que el usuario LLENE, DESBORDE y COMPARE una ventana de laboratorio
  * chica contra ventanas reales de modelos de chat de verdad.
  *
- * Números (anti-goals explícitos del doc — NO cambiar sin revisar
- * ahí primero):
- * - Ventana de laboratorio: 500 tokens — ARTIFICIAL, a propósito
- *   chica para que el desborde pase en segundos. Etiquetada como tal.
- * - GPT-5 (familia, API): ~400 000 — comparación de escala, no un
- *   número que Vectron mida en vivo.
- * - Claude Sonnet 5: 1 000 000 — idem.
- * - bge-m3 (el embedder real que ya usa el cubo): 8 192 — nota al
- *   pie, NUNCA el número protagonista (anti-goal explícito: no usar
- *   8192 como si fuera el contexto de un LLM de chat).
+ * Números (una sola fuente de verdad: `CONTEXT_PROFILES` en
+ * contextController.ts, DOCs/13 §5.4 — NO duplicar constantes aquí):
+ * - Ventana de laboratorio: 500 tokens — ARTIFICIAL. Etiquetada
+ *   "simulado".
+ * - ChatGPT Thinking: 256 000 totales (128k in + 128k out) — número
+ *   de PRODUCTO publicado. Etiquetado "real".
+ * - Claude Sonnet 5: 1 000 000 — idem, "real".
+ * - GPT-5 (familia, API) ~400 000 y bge-m3 8 192 son notas al pie
+ *   (`contextLabFootnote`), NUNCA números protagonistas — no
+ *   presentarlos como el límite del producto ChatGPT/Claude.
  * Vectron NO llama a Claude/GPT de verdad aquí — sólo cuenta tokens
  * reales (BPE/BGE) y compara contra ventanas publicadas.
+ *
+ * FIFO: expulsa/atenúa los tokens MÁS VIEJOS (los primeros en
+ * llegar), nunca los más nuevos — bug corregido en Phase 0 (DOCs/13
+ * §18/§19: "FIFO evicts oldest turns, not newest tokens").
  */
-const LAB_MAX = 500;
-const MODEL_WINDOWS: { key: StringKey; tokens: number }[] = [
-  { key: "contextLabModelLab", tokens: LAB_MAX },
-  { key: "contextLabModelGpt5", tokens: 400_000 },
-  { key: "contextLabModelClaude", tokens: 1_000_000 },
+const LAB_MAX = CONTEXT_PROFILES.lab.capacity;
+const MODEL_WINDOWS: { key: StringKey; tokens: number; kind: "simulation" | "published" }[] = [
+  { key: "contextLabModelLab", tokens: CONTEXT_PROFILES.lab.capacity, kind: CONTEXT_PROFILES.lab.kind },
+  {
+    key: "contextLabModelChatgpt",
+    tokens: CONTEXT_PROFILES.chatgptThinking.capacity,
+    kind: CONTEXT_PROFILES.chatgptThinking.kind,
+  },
+  {
+    key: "contextLabModelClaude",
+    tokens: CONTEXT_PROFILES.claudeSonnet5.capacity,
+    kind: CONTEXT_PROFILES.claudeSonnet5.kind,
+  },
 ];
 const MAX_VISIBLE_CHIPS = 40;
 /** Palabras de relleno para la demo de desborde — nunca se afirma que
@@ -147,11 +160,12 @@ export class VxContextLab extends HTMLElement {
       this.#overflowNoteEl.textContent = t("contextLabOverflowNote", lang);
     }
 
-    // Cinta: primeros chips + últimos chips visibles, el resto sólo se
-    // cuenta (renderizar 500 nodos de verdad no ayuda a la intuición,
-    // sólo pesa la página) — los que caen más allá de LAB_MAX se ven
-    // apagados/tachados, los mismos índices sin importar cuántos se
-    // vean de verdad.
+    // Cinta: primeros chips (los más VIEJOS, los que FIFO expulsa
+    // primero) + últimos chips (los más NUEVOS, los que siguen en la
+    // ventana) — renderizar 500 nodos de verdad no ayuda a la
+    // intuición, sólo pesa la página. Umbral: cualquier índice antes
+    // de `n - LAB_MAX` ya cayó fuera de la ventana de laboratorio.
+    const evictBoundary = n - LAB_MAX;
     const headCount = overflowing ? 24 : Math.min(n, MAX_VISIBLE_CHIPS);
     const tailCount = overflowing ? 10 : 0;
     const head = tokens.slice(0, headCount);
@@ -159,7 +173,7 @@ export class VxContextLab extends HTMLElement {
     const hiddenCount = n - head.length - tail.length;
 
     const chipHtml = (tok: string, idx: number) =>
-      `<span class="chip${idx >= LAB_MAX ? " dim" : ""}">${tok.replace(/\s/g, "·") || "·"}</span>`;
+      `<span class="chip${idx < evictBoundary ? " dim" : ""}">${tok.replace(/\s/g, "·") || "·"}</span>`;
 
     let html = head.map((tok, i) => chipHtml(tok, i)).join("");
     if (hiddenCount > 0) {
@@ -175,10 +189,12 @@ export class VxContextLab extends HTMLElement {
     // barra del lab invisible; log es lo honesto para "se ve la
     // diferencia real" sin mentir con proporciones lineales falsas.
     const maxLog = Math.log10(MODEL_WINDOWS[MODEL_WINDOWS.length - 1].tokens);
-    this.#compareEl.innerHTML = MODEL_WINDOWS.map(({ key, tokens }) => {
+    this.#compareEl.innerHTML = MODEL_WINDOWS.map(({ key, tokens, kind }) => {
       const pct = (Math.log10(tokens) / maxLog) * 100;
+      const tagKey = kind === "published" ? "truthLabelReal" : "truthLabelSimulation";
+      const tagClass = kind === "published" ? "real" : "simulation";
       return `<div class="compare-row">
-        <span class="compare-label">${t(key, lang)}</span>
+        <span class="compare-label">${t(key, lang)}<span class="truth-tag ${tagClass}">${t(tagKey, lang)}</span></span>
         <div class="compare-track"><div class="compare-fill" style="width:${pct}%"></div></div>
         <span class="compare-value">${tokens.toLocaleString()}</span>
       </div>`;
