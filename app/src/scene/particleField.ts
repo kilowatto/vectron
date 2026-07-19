@@ -697,10 +697,12 @@ export function createParticleField(
 
   function recomputeHighlights() {
     const active = searchIds.length > 0 || pinnedFocus || tokenFocus;
-    // Atenuado real pero no "casi invisible" — se veía demasiado
-    // agresivo en la práctica, hay que poder seguir ubicando el resto
-    // del cubo como contexto.
-    const dim = active ? 0.16 : 1;
+    // 0.16 -> 0.34: reportado en vivo con capturas ("las partículas
+    // están muy oscuras") — con el piso base en 0.18 (ver colorNode),
+    // 0.16 dejaba el resto del cubo en ~2-10% del color real, casi
+    // negro puro en pantalla. 0.34 sigue de-enfatizando claramente lo
+    // que no coincide sin que desaparezca como contexto.
+    const dim = active ? 0.34 : 1;
     highlightAttrArray.fill(0);
     focusAttrArray.fill(dim);
     const nowFocused = active ? new Set(searchIds) : null;

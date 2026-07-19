@@ -125,6 +125,7 @@ async function main() {
     }
     lang = newLang;
     langSwitcher.setAttribute("current", lang);
+    renderChamberPeekBtn();
     void applyMode(currentMode);
   });
 
@@ -666,7 +667,34 @@ async function main() {
     stageEl.dataset.intermedioSurface = intermediateSurface;
     placeIntermediateSurfaceNav();
     applyTransformerChapter();
+    setChamberPeekActive(false);
   }
+
+  // Bug real reportado en vivo ("en verdad no veo como activar el
+  // vaso"): en angosto, el panel de Transformer/RAG cubre TODA la
+  // pantalla (ver style.css) — incluido #cube-pane, donde vive la
+  // Cámara de Contexto (nunca duplicada dentro del panel de texto).
+  // Este botón vive fuera de #side-pane (montado en stageEl) para
+  // seguir siendo pulsable sin importar cuál panel está encima, y sólo
+  // oculta/muestra #side-pane vía CSS — no toca el estado 3D, que ya
+  // está activo detrás desde que se entró a la superficie.
+  let chamberPeekActive = false;
+  const chamberPeekBtn = document.createElement("button");
+  chamberPeekBtn.type = "button";
+  chamberPeekBtn.id = "chamber-peek-btn";
+  function renderChamberPeekBtn() {
+    chamberPeekBtn.textContent = t(chamberPeekActive ? "chamberPeekHide" : "chamberPeekShow", lang);
+  }
+  function setChamberPeekActive(active: boolean) {
+    if (active === chamberPeekActive) return;
+    chamberPeekActive = active;
+    if (active) stageEl.setAttribute("data-chamber-peek", "");
+    else stageEl.removeAttribute("data-chamber-peek");
+    renderChamberPeekBtn();
+  }
+  chamberPeekBtn.addEventListener("click", () => setChamberPeekActive(!chamberPeekActive));
+  renderChamberPeekBtn();
+  stageEl.appendChild(chamberPeekBtn);
 
   // DOCs/13 anti-goal explícito: "Cubo y Cámara nunca se presentan como
   // el mismo espacio de datos" — activar la cámara oculta el cubo (y su
@@ -809,7 +837,7 @@ async function main() {
     ragNote.innerHTML = `<p>${t("ragDockIntro", lang)}</p>`;
     ragPanel.appendChild(ragNote);
     const ragStub = document.createElement("vx-rag-stub") as VxRagStub;
-    ragStub.onConceptFocus((ids) => field.setSearchHighlights(ids));
+    ragStub.onConceptFocus((ids) => highlightAndFocus(ids));
     ragStub.setConceptLookup((id) => field.concepts.find((c) => c.id === id));
     // Phase 5 (DOCs/13 §5, "RAG → Cámara → Transformer"): lo recuperado
     // ocupa espacio real en la ventana de contexto compartida, no es
@@ -1019,6 +1047,48 @@ async function main() {
     requestAnimationFrame(tick);
   }
 
+  // Pedido explícito en vivo: al escribir/seleccionar una frase (o al
+  // recuperar por RAG), la cámara se centra sola en las partículas que
+  // se encendieron — mismo paneo que recenterToMode (conserva
+  // distancia/zoom actual, sólo re-apunta), pero con su propia
+  // secuencia para no pisarse con el recentrado de modo.
+  const matchFocusState = { id: 0 };
+  function focusOnMatches(ids: number[]) {
+    if (ids.length === 0) return;
+    const centroid = new THREE.Vector3();
+    for (const conceptId of ids) centroid.add(new THREE.Vector3(...field.concepts[conceptId].coords));
+    centroid.divideScalar(ids.length);
+
+    const seq = ++matchFocusState.id;
+    const controls = engine.controls;
+    const camera = engine.camera;
+    const fromT = controls.target.clone();
+    const fromC = camera.position.clone();
+    const delta = centroid.clone().sub(fromT);
+    const toC = fromC.clone().add(delta);
+    const duration = 650;
+    const start = performance.now();
+    function tick() {
+      if (seq !== matchFocusState.id) return;
+      const t = Math.min((performance.now() - start) / duration, 1);
+      const e = 1 - Math.pow(1 - t, 3);
+      controls.target.lerpVectors(fromT, centroid, e);
+      camera.position.lerpVectors(fromC, toC, e);
+      if (t < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  /** `field.setSearchHighlights` + centrar cámara ahí — usar en los
+   * sitios donde "algo brilla" debe llevarte a verlo (escribir/elegir
+   * ejemplo, recuperar por RAG). Aislar un dominio en la leyenda NO
+   * usa esto a propósito — un dominio entero disperso no tiene un
+   * centro visualmente útil, y es sólo explorar, no "buscar algo". */
+  function highlightAndFocus(ids: number[]) {
+    field.setSearchHighlights(ids);
+    focusOnMatches(ids);
+  }
+
   const interaction = setupConceptInteraction({
     canvas,
     camera: engine.camera,
@@ -1133,7 +1203,7 @@ async function main() {
       const { tokens, mode: tokMode, text } = (event as CustomEvent<TokensChangeDetail>).detail;
       void strip.setTokens(tokens, tokMode, text);
       const { matches, ordered } = findWordMatches(text);
-      field.setSearchHighlights(matches);
+      highlightAndFocus(matches);
       const chainObj = field.setChainLines(ordered);
       if (chainObj && ordered.length >= 2) {
         // Hover con similitud de coseno REAL por segmento: los vectores

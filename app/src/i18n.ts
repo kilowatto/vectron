@@ -178,6 +178,13 @@ const STRINGS = {
   },
   surfaceCube: { es: "Cubo", en: "Cube" },
   surfaceMath: { es: "Matemáticas", en: "Math" },
+  // Bug real reportado en vivo ("no veo cómo activar el vaso"): en
+  // angosto, el panel de Transformer/RAG cubre TODA la pantalla
+  // (#side-pane fixed, ver style.css) — sin este botón no hay forma de
+  // ver la Cámara de Contexto (u otra visualización de la superficie),
+  // que sólo existe detrás de ese panel, nunca dentro de él.
+  chamberPeekShow: { es: "Ver escena 3D", en: "View 3D scene" },
+  chamberPeekHide: { es: "Volver al texto", en: "Back to text" },
   // --- Intermedio: nav de 3 superficies hermanas (DOCs/13 §3-4) ---
   intermediateSurfaceCube: { es: "Cubo", en: "Cube" },
   intermediateSurfaceTransformer: { es: "Transformer", en: "Transformer" },

@@ -198,6 +198,55 @@ body {
   }
 }
 
+/* Bug real reportado en vivo ("en verdad no veo como activar el vaso"):
+   la regla de arriba cubre TODA la pantalla en angosto en cuanto la
+   superficie no es "cube" — incluido el #cube-pane donde vive la
+   Cámara de Contexto (nunca se duplica dentro del panel de texto, ver
+   el anti-goal en main.ts `setContextChamberActive`: "cubo y cámara
+   nunca en el mismo espacio de datos"). Sin escape, la Cámara ya está
+   activa y con cámara enfocada detrás del panel — sólo es invisible.
+   Este botón (montado en stageEl, fuera de #side-pane, con su propio
+   z-index) vive siempre por encima del panel full-bleed para poder
+   ocultarlo temporalmente sin perder el estado de scroll/formulario
+   del panel (display:none, no remove). */
+#chamber-peek-btn {
+  display: none;
+  position: fixed;
+  z-index: 65;
+  right: 16px;
+  bottom: max(16px, calc(env(safe-area-inset-bottom) + 8px));
+  background: var(--accent);
+  color: #1a0f04;
+  border: none;
+  border-radius: 20px;
+  padding: 9px 16px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+@media (max-width: 1023px) {
+  #stage[data-mode="intermedio"][data-intermedio-surface]:not(
+      [data-intermedio-surface="cube"]
+    )
+    #chamber-peek-btn {
+    display: block;
+  }
+
+  /* Especificidad a propósito (mismos selectores de ancestro + el
+     atributo nuevo) para ganarle a la regla de arriba sin !important —
+     ver nota de especificidad si se toca cualquiera de las dos. */
+  #stage[data-mode="intermedio"][data-intermedio-surface]:not(
+      [data-intermedio-surface="cube"]
+    )[data-chamber-peek]
+    #side-pane {
+    display: none;
+  }
+}
+
 /* Phase 4 (DOCs/13 §11): capítulos Atención/Bloques/Predicción del
    capítulo Transformer, promovidos a "stage size" sobre #cube-pane —
    fondo opaco a propósito (mismo color que el body) para que nunca se
