@@ -47,12 +47,13 @@ class_name = "AutoGrowWorkflow"
 pattern = "vectron.kilowatto.com"
 custom_domain = true
 
-# Ciclo autónomo (pedido explícito del usuario 2026-07-22): cada 6
-# horas el handler `scheduled` en index.ts revisa el conteo actual de
-# conceptos contra TARGET_TOTAL_CONCEPTS y el presupuesto diario de IA
-# antes de disparar una corrida — ver AutoGrowWorkflow.
+# Ciclo autónomo (pedido explícito del usuario 2026-07-22, cadence
+# subida a cada 30 min el mismo día): el handler `scheduled` en
+# index.ts revisa el conteo actual de conceptos contra
+# TARGET_TOTAL_CONCEPTS y el presupuesto diario de IA antes de
+# disparar una corrida — ver AutoGrowWorkflow.
 [triggers]
-crons = ["0 */6 * * *"]
+crons = ["*/30 * * * *"]
 
 [vars]
 # Repo/rama/ruta donde AutoGrowWorkflow deja un commit de historial
@@ -68,6 +69,7 @@ GITHUB_SEED_PATH = "worker/src/data/seedConcepts.ts"
 TARGET_TOTAL_CONCEPTS = "20457"
 # Tope de llamadas a Workers AI por día UTC (ver migrations/0005,
 # tabla ai_budget) — puramente para no llevarse una sorpresa en la
-# factura si algo queda en bucle; con 4 corridas/día de ~5 categorías
-# cada una, el uso real esperado es muy por debajo de esto.
-AI_DAILY_CALL_CAP = "200"
+# factura si algo queda en bucle. Subido de 200 a 1000 junto con el
+# cron a cada 30 min (48 corridas/día × ~6-11 llamadas/corrida) para
+# que el tope no sea el cuello de botella real de la cadence nueva.
+AI_DAILY_CALL_CAP = "1000"
