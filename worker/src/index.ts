@@ -2,6 +2,7 @@ import { SEED_CONCEPTS } from "./data/seedConcepts";
 
 export { SyncConceptsWorkflow } from "./syncWorkflow";
 export { GenerateConceptsWorkflow } from "./genConceptsWorkflow";
+export { AutoGrowWorkflow } from "./autoGrowWorkflow";
 
 export interface Env {
   AI: Ai;
@@ -11,6 +12,14 @@ export interface Env {
   ASSETS: Fetcher;
   SYNC_WORKFLOW: Workflow;
   GENERATE_WORKFLOW: Workflow;
+  AUTO_GROW_WORKFLOW: Workflow;
+  GITHUB_OWNER: string;
+  GITHUB_REPO: string;
+  GITHUB_BRANCH: string;
+  GITHUB_SEED_PATH: string;
+  GITHUB_TOKEN?: string;
+  TARGET_TOTAL_CONCEPTS: string;
+  AI_DAILY_CALL_CAP: string;
 }
 
 /** TTL del lease de auto-sync (ver DOCs/13 + migrations/0004): más
@@ -379,6 +388,77 @@ async function handleSyncTrigger(env: Env, request: Request): Promise<Response> 
   }
 }
 
+/** Ver AutoGrowWorkflow — el usuario pidió "nada automático, consulto
+ * cuando quiera" en vez de notificaciones por corrida; este endpoint
+ * es ese "cuando quiera" sin tener que leer logs de Cloudflare. */
+async function handleAutoGrowStatus(env: Env, request: Request): Promise<Response> {
+  const countRow = await env.DB.prepare("SELECT COUNT(*) as c FROM concepts").first<{ c: number }>();
+  const day = new Date().toISOString().slice(0, 10);
+  const budgetRow = await env.DB.prepare("SELECT calls_used FROM ai_budget WHERE day = ?")
+    .bind(day)
+    .first<{ calls_used: number }>();
+  const runs = await env.DB.prepare(
+    "SELECT instance_id, started_at, categories_json, generated_count, inserted_count, github_commit_sha, error FROM auto_grow_runs ORDER BY id DESC LIMIT 10",
+  ).all();
+
+  return Response.json(
+    {
+      ok: true,
+      current: countRow?.c ?? 0,
+      target: Number(env.TARGET_TOTAL_CONCEPTS),
+      aiCallsToday: budgetRow?.calls_used ?? 0,
+      aiDailyCap: Number(env.AI_DAILY_CALL_CAP),
+      recentRuns: runs.results,
+    },
+    { headers: corsHeaders(request) },
+  );
+}
+
+/** Disparado por el Cron Trigger en wrangler.toml cada 6 horas — ver
+ * AutoGrowWorkflow. Chequea meta y presupuesto ANTES de crear la
+ * instancia (evita gastar el lease/log de una corrida que de todas
+ * formas no iba a hacer nada), y usa el mismo lease optimista que
+ * handleSyncTrigger para que dos disparos no corran en paralelo. */
+async function maybeTriggerAutoGrow(env: Env): Promise<void> {
+  const countRow = await env.DB.prepare("SELECT COUNT(*) as c FROM concepts").first<{ c: number }>();
+  const current = countRow?.c ?? 0;
+  const target = Number(env.TARGET_TOTAL_CONCEPTS);
+  if (current >= target) {
+    console.log(`[auto-grow] meta alcanzada (${current}/${target}), no se dispara`);
+    return;
+  }
+
+  const day = new Date().toISOString().slice(0, 10);
+  const budgetRow = await env.DB.prepare("SELECT calls_used FROM ai_budget WHERE day = ?")
+    .bind(day)
+    .first<{ calls_used: number }>();
+  const cap = Number(env.AI_DAILY_CALL_CAP);
+  if ((budgetRow?.calls_used ?? 0) >= cap) {
+    console.log(`[auto-grow] presupuesto diario agotado (${budgetRow?.calls_used}/${cap}), no se dispara`);
+    return;
+  }
+
+  const now = new Date();
+  const staleBefore = new Date(now.getTime() - SYNC_LEASE_TTL_MS).toISOString();
+  const claim = await env.DB.prepare(
+    "UPDATE auto_grow_lease SET locked_at = ? WHERE id = 1 AND (locked_at IS NULL OR locked_at < ?)",
+  )
+    .bind(now.toISOString(), staleBefore)
+    .run();
+  if (claim.meta.changes !== 1) {
+    console.log("[auto-grow] ya hay una corrida en curso, no se dispara otra");
+    return;
+  }
+
+  try {
+    const instance = await env.AUTO_GROW_WORKFLOW.create({ params: { runId: crypto.randomUUID() } });
+    await env.DB.prepare("UPDATE auto_grow_lease SET workflow_instance_id = ? WHERE id = 1").bind(instance.id).run();
+  } catch (err) {
+    await env.DB.prepare("UPDATE auto_grow_lease SET locked_at = NULL, workflow_instance_id = NULL WHERE id = 1").run();
+    console.error("[auto-grow] no se pudo crear el workflow:", err);
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -423,6 +503,10 @@ export default {
       return handleSyncTrigger(env, request);
     }
 
+    if (url.pathname === "/api/auto-grow-status") {
+      return handleAutoGrowStatus(env, request);
+    }
+
     if (url.pathname.startsWith("/api/")) {
       return Response.json(
         { ok: false, error: "not found" },
@@ -431,5 +515,9 @@ export default {
     }
 
     return env.ASSETS.fetch(request);
+  },
+
+  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+    await maybeTriggerAutoGrow(env);
   },
 } satisfies ExportedHandler<Env>;

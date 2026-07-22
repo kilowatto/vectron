@@ -38,6 +38,36 @@ name = "vectron-generate-concepts"
 binding = "GENERATE_WORKFLOW"
 class_name = "GenerateConceptsWorkflow"
 
+[[workflows]]
+name = "vectron-auto-grow"
+binding = "AUTO_GROW_WORKFLOW"
+class_name = "AutoGrowWorkflow"
+
 [[routes]]
 pattern = "vectron.kilowatto.com"
 custom_domain = true
+
+# Ciclo autónomo (pedido explícito del usuario 2026-07-22): cada 6
+# horas el handler `scheduled` en index.ts revisa el conteo actual de
+# conceptos contra TARGET_TOTAL_CONCEPTS y el presupuesto diario de IA
+# antes de disparar una corrida — ver AutoGrowWorkflow.
+[triggers]
+crons = ["0 */6 * * *"]
+
+[vars]
+# Repo/rama/ruta donde AutoGrowWorkflow deja un commit de historial
+# por cada corrida — sólo registro, el Worker desplegado no depende
+# de este archivo (lee/escribe D1/Vectorize/R2 directo).
+GITHUB_OWNER = "kilowatto"
+GITHUB_REPO = "vectron"
+GITHUB_BRANCH = "main"
+GITHUB_SEED_PATH = "worker/src/data/seedConcepts.ts"
+# Meta original del push de +10,000 (10,457 al empezar). El cron deja
+# de disparar corridas nuevas en cuanto COUNT(*) en `concepts` alcance
+# este número.
+TARGET_TOTAL_CONCEPTS = "20457"
+# Tope de llamadas a Workers AI por día UTC (ver migrations/0005,
+# tabla ai_budget) — puramente para no llevarse una sorpresa en la
+# factura si algo queda en bucle; con 4 corridas/día de ~5 categorías
+# cada una, el uso real esperado es muy por debajo de esto.
+AI_DAILY_CALL_CAP = "200"
