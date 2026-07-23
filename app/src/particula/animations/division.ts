@@ -1,6 +1,8 @@
 import * as THREE from "three/webgpu";
 import { type Animation, combine, sequence, tween, wait, spawnFlash, spawnSparkBurst, spawnMotes } from "../effects";
 import { easeInOutCubic, easeOutCubic, easeOutBack } from "../easing";
+import { createMitosisBlob, disposeBlob } from "../metaballBlob";
+import { getSharedEnvironment } from "../heroParticle";
 
 /** `parent` sigue en `scene` al empezar (se remueve en el momento que
  * decida la variante — algunas lo esconden antes de separar, otras lo
@@ -44,84 +46,101 @@ const espontanea: DivisionVariant = (scene, parent, childA, childB, posA, posB, 
   );
 };
 
-/** Imita mitosis real: se alarga (elongación), aparece un "cuello" que
- * se estrecha, pausa de tensión, y separación final — más fases
- * visibles que la espontánea. */
-/** Reescrita tras feedback en vivo del usuario ("solo se aplasta, no
- * parece para nada seguro") — la versión original estiraba/aplastaba
- * en los ejes LOCALES fijos de la esfera (X/Z anchos, Y angosto), sin
- * relación con la dirección real hacia la que posA/posB se van a
- * separar; el resultado se veía como un balón aplastado al azar, no
- * como una célula alargándose hacia sus dos futuras mitades. Ahora:
- * (1) `parent.lookAt` alinea el eje local hacia la dirección real de
- * separación antes de estirar, así el alargamiento SIEMPRE apunta
- * hacia donde van a terminar los hijos; (2) un "cuello" citoplasmático
- * real (un cilindro delgado, mismo material/color) conecta a los dos
- * hijos mientras crecen y se separan, angostándose hasta desaparecer
- * — sin esto, dos esferas separándose desde el mismo punto no se ven
- * "conectadas", sólo se ven aparecer y alejarse. */
+/** Segunda reescritura tras verla en vivo (grabación de pantalla del
+ * usuario): la primera reescritura (esfera orientada + cilindro de
+ * "cuello") se veía como una MANCUERNA — un tubo rígido y opaco
+ * uniendo 2 esferas ya completas, no como una célula. El problema de
+ * fondo era la técnica, no sólo los números: 3 mallas rígidas
+ * separadas (2 esferas + 1 cilindro) NUNCA se van a leer como una
+ * superficie continua, sin importar cuánto se afine el radio — hay un
+ * borde/salto de curvatura donde cada pieza se junta con la
+ * siguiente, y una esfera sólida detrás de la unión da la silueta de
+ * "ya está completa" mucho antes de separarse.
+ *
+ * Investigado (ver fuentes en el resumen al usuario): la técnica real
+ * para esto es raymarching de un campo de distancia con "smooth
+ * minimum" (smin) — la misma matemática detrás de gotas de líquido
+ * fusionándose en shader art, y es literalmente lo correcto también
+ * en biología (una célula es básicamente una gota con membrana). Todo
+ * esto vive en metaballBlob.ts: UNA sola superficie (2 esferas-SDF
+ * fusionadas con smin) sin bordes entre piezas, con un cuello que se
+ * adelgaza porque la matemática del blend lo hace, no porque alguien
+ * ajustó un radio a mano. La malla visible durante la mitosis es sólo
+ * una caja contenedora — lo que se ve es enteramente el resultado del
+ * shader.
+ *
+ * Conservación de volumen real: cuando una célula se divide, cada
+ * hija es más chica que la madre (mismo volumen total repartido en 2)
+ * — el radio de cada hija es radioMadre / 2^(1/3) ≈ 0.79× el
+ * original, no el mismo tamaño. Se ve y se anima así aquí; las
+ * partículas reales (childA/childB) heredan esa escala reducida al
+ * revelarse. */
 const mitosisCelular: DivisionVariant = (scene, parent, childA, childB, posA, posB, duration, onDone) => {
   const origin = parent.position.clone();
   const dir = posA.clone().sub(origin).normalize();
-  parent.lookAt(origin.clone().add(dir));
-  childA.position.copy(origin);
-  childB.position.copy(origin);
+  const separation = posA.distanceTo(origin);
+  const parentRadius = (parent.userData.baseRadius as number) ?? 0.32;
+  const daughterRadius = parentRadius / Math.cbrt(2);
+  const daughterScale = daughterRadius / parentRadius;
+
+  const colorA = (childA.userData.baseColor as number) ?? 0xffffff;
+  const colorB = (childB.userData.baseColor as number) ?? 0xffffff;
+
+  removeMesh(scene, parent);
   childA.scale.setScalar(0.001);
   childB.scale.setScalar(0.001);
 
-  const color = (childA.userData.baseColor as number) ?? 0xffffff;
-  const neckGeometry = new THREE.CylinderGeometry(1, 1, 1, 16);
-  const neckMaterial = new THREE.MeshPhysicalMaterial({
-    color,
-    roughness: 0.1,
-    transmission: 0.65,
-    ior: 1.4,
-    transparent: true,
-  });
-  const neck = new THREE.Mesh(neckGeometry, neckMaterial);
-  scene.add(neck);
+  const blob = createMitosisBlob(colorA, colorB, getSharedEnvironment(), (separation + parentRadius) * 2.8);
+  blob.mesh.position.copy(origin);
+  blob.mesh.lookAt(origin.clone().add(dir));
+  blob.uniforms.radiusA.value = parentRadius;
+  blob.uniforms.radiusB.value = parentRadius;
+  scene.add(blob.mesh);
 
-  function updateNeck(pA: THREE.Vector3, pB: THREE.Vector3, radius: number) {
-    const mid = new THREE.Vector3().lerpVectors(pA, pB, 0.5);
-    const length = pA.distanceTo(pB);
-    neck.position.copy(mid);
-    neck.up.set(0, 0, 1);
-    neck.lookAt(pB);
-    neck.rotateX(Math.PI / 2);
-    neck.scale.set(radius, length, radius);
-  }
-  updateNeck(origin, origin, 0.001);
+  const startSep = parentRadius * 0.18;
 
-  const elongate = tween(duration * 0.35, easeOutCubic, (eased) => {
-    parent.scale.set(1 - eased * 0.3, 1 - eased * 0.3, 1 + eased * 0.7);
-  });
-  const pinchAndSplit = tween(
-    duration * 0.65,
+  return tween(
+    duration,
     easeInOutCubic,
     (eased) => {
-      const parentShrink = Math.max(1 - eased * 1.3, 0.001);
-      parent.scale.set(parentShrink * 0.7, parentShrink * 0.7, 1.7 * Math.max(1 - eased, 0.35));
-      (parent.material as THREE.MeshPhysicalMaterial).opacity = Math.max(1 - eased * 1.4, 0);
-      (parent.material as THREE.MeshPhysicalMaterial).transparent = true;
-
-      childA.scale.setScalar(eased);
-      childB.scale.setScalar(eased);
-      childA.position.lerpVectors(origin, posA, eased);
-      childB.position.lerpVectors(origin, posB, eased);
-
-      const neckRadius = 0.16 * Math.pow(1 - eased, 2);
-      updateNeck(childA.position, childB.position, Math.max(neckRadius, 0.001));
-      neckMaterial.opacity = Math.max(1 - eased * 1.2, 0);
+      const sep = startSep + (separation - startSep) * eased;
+      // Bug real encontrado en vivo ("desaparece la partícula nueva y
+      // aparece una nueva" — un salto/intercambio justo al terminar):
+      // Object3D.lookAt orienta el eje LOCAL -Z (no +Z) hacia el
+      // objetivo — con `blob.mesh.lookAt(origin+dir)`, el -Z local es
+      // el que en verdad apunta hacia `dir` en el mundo. Sin este
+      // signo invertido, `centerA` (color A) quedaba visualmente del
+      // lado de `posB` durante toda la mitosis, y al revelar childA en
+      // `posA` al final, saltaba al lado contrario — se leía como que
+      // "desaparece y aparece otra distinta".
+      blob.uniforms.centerA.value.z = -sep;
+      blob.uniforms.centerB.value.z = sep;
+      // k se queda ANCHO (una sola gota elongándose) hasta ~30% del
+      // tiempo, luego se cierra gradualmente hasta 0 hacia ~85% — esa
+      // ventana intermedia es la que de verdad se lee como "el cuello
+      // se adelgaza" en vez de un salto brusco de blob-a-2-esferas.
+      // Primer intento (k cayendo desde el inicio, sin meseta) hacía
+      // que el pinch pasara casi instantáneo — visto en vivo, se
+      // veía como un "pop" en vez de un adelgazamiento real.
+      const kOnset = 0.3;
+      const kClose = 0.85;
+      const kT = Math.min(Math.max((eased - kOnset) / (kClose - kOnset), 0), 1);
+      const kEase = kT * kT * (3 - 2 * kT);
+      blob.uniforms.blendK.value = Math.max(parentRadius * 1.35 * (1 - kEase), 0);
+      const r = parentRadius + (daughterRadius - parentRadius) * eased;
+      blob.uniforms.radiusA.value = r;
+      blob.uniforms.radiusB.value = r;
     },
     () => {
-      removeMesh(scene, parent);
-      scene.remove(neck);
-      neckGeometry.dispose();
-      neckMaterial.dispose();
+      disposeBlob(blob);
+      scene.remove(blob.mesh);
+      childA.position.copy(posA);
+      childB.position.copy(posB);
+      childA.scale.setScalar(daughterScale);
+      childB.scale.setScalar(daughterScale);
       onDone();
     },
   );
-  return sequence(elongate, pinchAndSplit);
 };
 
 /** Vibra/se deforma y se parte abruptamente con un destello de

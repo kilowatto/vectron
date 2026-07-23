@@ -29,6 +29,15 @@ export function ensureEnvironment(renderer: THREE.WebGPURenderer, scene: THREE.S
   return sharedEnvMap;
 }
 
+/** Para que efectos que no son la partícula PBR normal (ej. el blob
+ * raymarcheado de mitosis) puedan muestrear el MISMO entorno y así no
+ * "cambiar de material" a medio de una animación — pedido explícito
+ * del usuario tras verlo en vivo ("se nota que son 2 materiales...
+ * no es el mismo que la partícula"). */
+export function getSharedEnvironment(): THREE.Texture | null {
+  return sharedEnvMap;
+}
+
 export interface HeroParticleOptions {
   color: number;
   radius?: number;
