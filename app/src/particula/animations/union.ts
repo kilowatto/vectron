@@ -1,6 +1,8 @@
 import * as THREE from "three/webgpu";
 import { type Animation, sequence, tween, spawnFlash, spawnExpandingRing } from "../effects";
 import { easeInCubic, easeInOutCubic, easeOutBack, easeOutCubic } from "../easing";
+import { createMitosisBlob, disposeBlob } from "../metaballBlob";
+import { getSharedEnvironment } from "../heroParticle";
 
 /** `meshA`/`meshB` siguen en `scene` en sus posiciones actuales al
  * empezar. `result` ya existe (escala 0, sin agregar a `scene` aún) —
@@ -78,21 +80,79 @@ function autoTween(mesh: THREE.Mesh, duration: number) {
 }
 
 /** Las superficies se deforman y "se derriten" una en la otra (blend
- * de forma) en vez de un choque instantáneo — más orgánico. */
+ * de forma) en vez de un choque instantáneo — más orgánico.
+ *
+ * Reescrita tras feedback en vivo del usuario ("no quedo con el mismo
+ * material... parpadea al unir"): la versión original escalaba las 2
+ * esferas PBR reales de forma NO uniforme (`squash`/`1/squash`) para
+ * simular el achatado — con la cámara acercándose de golpe (ver el fix
+ * de reencuadre en state.ts) esa distorsión no-uniforme convertía los
+ * highlights especulares en parches gigantes y planos, muy distinto
+ * al material real. La fusión es matemáticamente lo mismo que la
+ * mitosis pero al revés (2 gotas SDF que se acercan y se funden en 1,
+ * en vez de 1 que se separa en 2) — reusar el mismo blob raymarcheado
+ * de metaballBlob.ts garantiza que ambas animaciones se vean con
+ * EXACTAMENTE el mismo material, porque literalmente es el mismo
+ * shader. Conservación de volumen real: el radio combinado es
+ * cbrt(rA³+rB³), no un promedio simple. */
 const fusionCelular: UnionVariant = (scene, meshA, meshB, result, resultPos, duration, onDone) => {
   const startA = meshA.position.clone();
   const startB = meshB.position.clone();
+  const radiusA = (meshA.userData.baseRadius as number) ?? 0.32;
+  const radiusB = (meshB.userData.baseRadius as number) ?? 0.32;
+  const resultRadius = Math.cbrt(radiusA ** 3 + radiusB ** 3);
+  const colorA = (meshA.userData.baseColor as number) ?? 0xffffff;
+  const colorB = (meshB.userData.baseColor as number) ?? 0xffffff;
+
+  // `resultPos` ES el punto medio de startA/startB (así lo define
+  // state.ts) y ambas mallas lerpean linealmente hacia ÉL — así que el
+  // punto medio entre ellas se queda fijo en resultPos durante TODA la
+  // animación; sólo la separación se encoge. Eso deja a la caja del
+  // blob quieta en un solo lugar, sin tener que reorientarla cuadro a
+  // cuadro (misma simplificación que aprovecha la mitosis).
+  const offset = startB.clone().sub(startA);
+  const halfDist0 = offset.length() / 2;
+  const dir = halfDist0 > 0.0001 ? offset.normalize() : new THREE.Vector3(1, 0, 0);
+
+  meshA.visible = false;
+  meshB.visible = false;
+
+  const blob = createMitosisBlob(colorA, colorB, getSharedEnvironment(), (halfDist0 * 2 + resultRadius) * 2.8);
+  blob.mesh.position.copy(resultPos);
+  blob.mesh.lookAt(resultPos.clone().add(dir));
+  blob.uniforms.radiusA.value = radiusA;
+  blob.uniforms.radiusB.value = radiusB;
+  blob.uniforms.blendK.value = 0;
+  scene.add(blob.mesh);
+
+  // No cierra a separación 0 exacta: dos centros SDF idénticos vuelven
+  // degenerado el gradiente de `colorAt`/`calcNormal` (0/0). Un resto
+  // pequeño es imperceptible y evita el caso límite.
+  const endSep = resultRadius * 0.12;
+
   return tween(
     duration,
     easeInOutCubic,
     (eased) => {
-      meshA.position.lerpVectors(startA, resultPos, eased);
-      meshB.position.lerpVectors(startB, resultPos, eased);
-      const squash = 1 + Math.sin(eased * Math.PI) * 0.35;
-      meshA.scale.set(squash, 1 / squash, squash);
-      meshB.scale.set(squash, 1 / squash, squash);
+      const halfSep = halfDist0 + (endSep - halfDist0) * eased;
+      // Mismo signo invertido que en mitosis: `lookAt` orienta el eje
+      // local -Z (no +Z) hacia `dir`.
+      blob.uniforms.centerA.value.z = -halfSep;
+      blob.uniforms.centerB.value.z = halfSep;
+      // k arranca en 0 (2 gotas separadas, tal como se veían A y B de
+      // verdad) y crece hacia el final — ventana simétrica a la de
+      // mitosis (ahí bajaba de ancho a 0; aquí sube de 0 a ancho).
+      const kOnset = 0.15;
+      const kFull = 0.75;
+      const kT = Math.min(Math.max((eased - kOnset) / (kFull - kOnset), 0), 1);
+      const kEase = kT * kT * (3 - 2 * kT);
+      blob.uniforms.blendK.value = resultRadius * 1.35 * kEase;
+      blob.uniforms.radiusA.value = radiusA + (resultRadius - radiusA) * eased;
+      blob.uniforms.radiusB.value = radiusB + (resultRadius - radiusB) * eased;
     },
     () => {
+      disposeBlob(blob);
+      scene.remove(blob.mesh);
       result.position.copy(resultPos);
       finish(scene, meshA, meshB, result, onDone);
       autoTween(result, 0.3);

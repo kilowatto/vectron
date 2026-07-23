@@ -87,6 +87,15 @@ const mitosisCelular: DivisionVariant = (scene, parent, childA, childB, posA, po
   const colorB = (childB.userData.baseColor as number) ?? 0xffffff;
 
   removeMesh(scene, parent);
+  // `visible = false` en vez de dejarlas en escala 0.001: aunque
+  // minúsculas, seguían siendo geometría real dentro de la misma caja
+  // que el blob raymarcheado — con la cámara muy cerca (ver el zoom
+  // de reencuadre) su huella en pantalla deja de ser despreciable y
+  // compite en el depth buffer con la superficie marchada, leyéndose
+  // como parpadeo. Ocultarlas del todo mientras el blob es la única
+  // superficie visible lo evita de raíz.
+  childA.visible = false;
+  childB.visible = false;
   childA.scale.setScalar(0.001);
   childB.scale.setScalar(0.001);
 
@@ -138,6 +147,8 @@ const mitosisCelular: DivisionVariant = (scene, parent, childA, childB, posA, po
       childB.position.copy(posB);
       childA.scale.setScalar(daughterScale);
       childB.scale.setScalar(daughterScale);
+      childA.visible = true;
+      childB.visible = true;
       onDone();
     },
   );

@@ -292,7 +292,9 @@ export class ParticulaState {
     const colorA = (recA.mesh.userData.baseColor as number) ?? 0xffffff;
     const colorB = (recB.mesh.userData.baseColor as number) ?? 0xffffff;
     const blended = new THREE.Color(colorA).lerp(new THREE.Color(colorB), 0.5).getHex();
-    const resultPos = new THREE.Vector3().lerpVectors(recA.mesh.position, recB.mesh.position, 0.5);
+    const posA = recA.mesh.position.clone();
+    const posB = recB.mesh.position.clone();
+    const resultPos = new THREE.Vector3().lerpVectors(posA, posB, 0.5);
     const result = createHeroParticle(blended);
     result.position.copy(resultPos);
     result.scale.setScalar(0.001);
@@ -301,7 +303,15 @@ export class ParticulaState {
     this.unregister(neighborId);
     this.busy = true;
     this.onChange();
-    this.reframe([...this.otherPositions([]), resultPos]);
+    // Bug real visto en vivo ("parpadea" al unir): unregister ya quitó
+    // A y B del mapa, así que otherPositions([]) ya NO los incluye —
+    // reencuadrar sólo con resultPos (un punto) le da al cálculo de
+    // radio un boundingRadius casi nulo, y la cámara SALTA a un zoom
+    // extremo de golpe mientras A y B siguen viéndose separados en su
+    // posición real. Pasando también sus posiciones actuales, el
+    // reencuadre parte de un radio que sí las cubre y se cierra
+    // gradualmente conforme de verdad se acercan, sin brinco.
+    this.reframe([...this.otherPositions([]), posA, posB, resultPos]);
 
     let finished = false;
     const anim = variant(this.scene, recA.mesh, recB.mesh, result, resultPos, duration, () => {
