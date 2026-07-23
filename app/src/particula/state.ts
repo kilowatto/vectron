@@ -5,7 +5,15 @@ import { DIVISION_VARIANTS } from "./animations/division";
 import { UNION_VARIANTS } from "./animations/union";
 import { DEATH_VARIANTS } from "./animations/death";
 import { CONNECTOR_STYLES, type Connector } from "./connectorLines";
-import type { Animation } from "./effects";
+import { tween, type Animation } from "./effects";
+import { easeInOutCubic } from "./easing";
+
+/** Sólo necesitamos `target` de OrbitControls aquí — un tipo mínimo
+ * evita acoplar state.ts al import del addon completo sólo por
+ * tipado. */
+interface CameraRig {
+  target: THREE.Vector3;
+}
 
 /** `BirthVariant` no recibe un `onDone` explícito en su firma (a
  * diferencia de división/unión/muerte) porque no necesita decidir
@@ -50,6 +58,9 @@ export class ParticulaState {
   private connector: Connector | null = null;
   private connectorStyleKey = "sinapsis";
   private connectorEnabled = false;
+  private camera: THREE.PerspectiveCamera | null = null;
+  private controls: CameraRig | null = null;
+  private cameraTween: Animation | null = null;
 
   onChange: () => void = () => {};
 
@@ -57,6 +68,58 @@ export class ParticulaState {
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
+  }
+
+  /** main.ts llama esto una sola vez tras crear el engine — sin esto
+   * `reframe()` no tiene nada que mover y se queda callado (no
+   * truena, simplemente no hace nada). */
+  attachCamera(camera: THREE.PerspectiveCamera, controls: CameraRig) {
+    this.camera = camera;
+    this.controls = controls;
+  }
+
+  /** Pedido explícito del usuario tras probarlo en vivo ("le puse
+   * nacer y si nace pero no se mueve la cámara para verlo nacer...
+   * debería alejarse un poco y centrar"): cada acción reencuadra la
+   * cámara hacia donde van a terminar TODAS las partículas (las que
+   * ya estaban + la(s) nueva(s)), no sólo la que cambió — nacer se
+   * aleja para que la partícula nueva entre en cuadro, morir se
+   * acerca de vuelta conforme quedan menos. Corre en paralelo a la
+   * animación de la propia acción (misma duración fija, 0.75s,
+   * independiente del slider de duración — el reencuadre es "cámara
+   * poniéndose al día", no parte de la animación que se está
+   * afinando). */
+  private reframe(positions: THREE.Vector3[]) {
+    if (!this.camera || !this.controls || positions.length === 0) return;
+    const centroid = new THREE.Vector3();
+    positions.forEach((p) => centroid.add(p));
+    centroid.divideScalar(positions.length);
+    let maxDist = 0;
+    positions.forEach((p) => {
+      maxDist = Math.max(maxDist, p.distanceTo(centroid));
+    });
+    const boundingRadius = maxDist + 0.45; // radio real de la partícula (0.32) + margen
+    const fovRad = (this.camera.fov * Math.PI) / 180;
+    const desiredDistance = THREE.MathUtils.clamp((boundingRadius / Math.tan(fovRad / 2)) * 1.5, 0.9, 5.5);
+
+    const startTarget = this.controls.target.clone();
+    const startCamPos = this.camera.position.clone();
+    const dir = startCamPos.clone().sub(startTarget);
+    const dirNorm = dir.lengthSq() > 0.0001 ? dir.normalize() : new THREE.Vector3(0.5, 0.35, 0.8).normalize();
+    const endTarget = centroid;
+    const endCamPos = endTarget.clone().addScaledVector(dirNorm, desiredDistance);
+
+    this.cameraTween = tween(0.75, easeInOutCubic, (eased) => {
+      this.controls!.target.lerpVectors(startTarget, endTarget, eased);
+      this.camera!.position.lerpVectors(startCamPos, endCamPos, eased);
+    });
+  }
+
+  private otherPositions(excludeIds: number[]): THREE.Vector3[] {
+    const exclude = new Set(excludeIds);
+    return Array.from(this.particles.values())
+      .filter((rec) => !exclude.has(rec.id))
+      .map((rec) => rec.mesh.position.clone());
   }
 
   targetId(): number | null {
@@ -164,6 +227,7 @@ export class ParticulaState {
     this.mostRecentId = id;
     this.busy = true;
     this.onChange();
+    this.reframe([...this.otherPositions([id]), pos]);
     const anim = variant(this.scene, mesh, pos, color, duration);
     this.activeAnimations.push(
       onFinish(anim, () => {
@@ -201,6 +265,7 @@ export class ParticulaState {
     const idB = this.register(childB);
     this.busy = true;
     this.onChange();
+    this.reframe([...this.otherPositions([idA, idB]), posA, posB]);
 
     let finished = false;
     const anim = variant(this.scene, rec.mesh, childA, childB, posA, posB, duration, () => {
@@ -236,6 +301,7 @@ export class ParticulaState {
     this.unregister(neighborId);
     this.busy = true;
     this.onChange();
+    this.reframe([...this.otherPositions([]), resultPos]);
 
     let finished = false;
     const anim = variant(this.scene, recA.mesh, recB.mesh, result, resultPos, duration, () => {
@@ -260,6 +326,7 @@ export class ParticulaState {
     this.unregister(id);
     this.busy = true;
     this.onChange();
+    this.reframe(this.otherPositions([]));
 
     let finished = false;
     const anim = variant(this.scene, rec.mesh, color, duration, () => {
@@ -289,6 +356,10 @@ export class ParticulaState {
 
   tick(dt: number) {
     this.activeAnimations = this.activeAnimations.filter((a) => a.update(dt));
+
+    if (this.cameraTween && !this.cameraTween.update(dt)) {
+      this.cameraTween = null;
+    }
 
     if (this.connectorEnabled && this.particles.size >= 2) {
       const id = this.targetId();

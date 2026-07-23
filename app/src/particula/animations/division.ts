@@ -47,36 +47,81 @@ const espontanea: DivisionVariant = (scene, parent, childA, childB, posA, posB, 
 /** Imita mitosis real: se alarga (elongación), aparece un "cuello" que
  * se estrecha, pausa de tensión, y separación final — más fases
  * visibles que la espontánea. */
+/** Reescrita tras feedback en vivo del usuario ("solo se aplasta, no
+ * parece para nada seguro") — la versión original estiraba/aplastaba
+ * en los ejes LOCALES fijos de la esfera (X/Z anchos, Y angosto), sin
+ * relación con la dirección real hacia la que posA/posB se van a
+ * separar; el resultado se veía como un balón aplastado al azar, no
+ * como una célula alargándose hacia sus dos futuras mitades. Ahora:
+ * (1) `parent.lookAt` alinea el eje local hacia la dirección real de
+ * separación antes de estirar, así el alargamiento SIEMPRE apunta
+ * hacia donde van a terminar los hijos; (2) un "cuello" citoplasmático
+ * real (un cilindro delgado, mismo material/color) conecta a los dos
+ * hijos mientras crecen y se separan, angostándose hasta desaparecer
+ * — sin esto, dos esferas separándose desde el mismo punto no se ven
+ * "conectadas", sólo se ven aparecer y alejarse. */
 const mitosisCelular: DivisionVariant = (scene, parent, childA, childB, posA, posB, duration, onDone) => {
   const origin = parent.position.clone();
-  const mid = new THREE.Vector3().lerpVectors(posA, posB, 0.5);
+  const dir = posA.clone().sub(origin).normalize();
+  parent.lookAt(origin.clone().add(dir));
+  childA.position.copy(origin);
+  childB.position.copy(origin);
   childA.scale.setScalar(0.001);
   childB.scale.setScalar(0.001);
 
-  const elongate = tween(duration * 0.4, easeOutCubic, (eased) => {
-    parent.scale.set(1 + eased * 0.4, 1 - eased * 0.25, 1 + eased * 0.4);
+  const color = (childA.userData.baseColor as number) ?? 0xffffff;
+  const neckGeometry = new THREE.CylinderGeometry(1, 1, 1, 16);
+  const neckMaterial = new THREE.MeshPhysicalMaterial({
+    color,
+    roughness: 0.1,
+    transmission: 0.65,
+    ior: 1.4,
+    transparent: true,
   });
-  const tension = wait(duration * 0.12);
-  const split = tween(
-    duration * 0.48,
+  const neck = new THREE.Mesh(neckGeometry, neckMaterial);
+  scene.add(neck);
+
+  function updateNeck(pA: THREE.Vector3, pB: THREE.Vector3, radius: number) {
+    const mid = new THREE.Vector3().lerpVectors(pA, pB, 0.5);
+    const length = pA.distanceTo(pB);
+    neck.position.copy(mid);
+    neck.up.set(0, 0, 1);
+    neck.lookAt(pB);
+    neck.rotateX(Math.PI / 2);
+    neck.scale.set(radius, length, radius);
+  }
+  updateNeck(origin, origin, 0.001);
+
+  const elongate = tween(duration * 0.35, easeOutCubic, (eased) => {
+    parent.scale.set(1 - eased * 0.3, 1 - eased * 0.3, 1 + eased * 0.7);
+  });
+  const pinchAndSplit = tween(
+    duration * 0.65,
     easeInOutCubic,
     (eased) => {
-      const fade = 1 - eased;
-      parent.scale.setScalar(Math.max(fade, 0.001));
-      (parent.material as THREE.MeshPhysicalMaterial).opacity = fade;
+      const parentShrink = Math.max(1 - eased * 1.3, 0.001);
+      parent.scale.set(parentShrink * 0.7, parentShrink * 0.7, 1.7 * Math.max(1 - eased, 0.35));
+      (parent.material as THREE.MeshPhysicalMaterial).opacity = Math.max(1 - eased * 1.4, 0);
       (parent.material as THREE.MeshPhysicalMaterial).transparent = true;
+
       childA.scale.setScalar(eased);
       childB.scale.setScalar(eased);
       childA.position.lerpVectors(origin, posA, eased);
       childB.position.lerpVectors(origin, posB, eased);
-      void mid;
+
+      const neckRadius = 0.16 * Math.pow(1 - eased, 2);
+      updateNeck(childA.position, childB.position, Math.max(neckRadius, 0.001));
+      neckMaterial.opacity = Math.max(1 - eased * 1.2, 0);
     },
     () => {
       removeMesh(scene, parent);
+      scene.remove(neck);
+      neckGeometry.dispose();
+      neckMaterial.dispose();
       onDone();
     },
   );
-  return sequence(elongate, tension, split);
+  return sequence(elongate, pinchAndSplit);
 };
 
 /** Vibra/se deforma y se parte abruptamente con un destello de

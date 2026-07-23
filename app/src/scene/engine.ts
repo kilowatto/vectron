@@ -11,6 +11,11 @@ export interface Engine {
   usingWebGPU: boolean;
   /** Arranca el loop de render; onFrame corre antes de cada cuadro, onFps cada ~0.5s. */
   start(onFrame: (dt: number) => void, onFps: (fps: number) => void): void;
+  /** Renderiza un cuadro ya mismo por el pipeline real (con bloom),
+   * sin esperar al próximo rAF — pensado para herramientas que avanzan
+   * la simulación a mano (ver /particula) donde rAF puede no estar
+   * corriendo. `start()` sigue siendo el camino normal para la app. */
+  renderNow(): void;
 }
 
 function stageSizeOf(canvas: HTMLCanvasElement): { w: number; h: number } {
@@ -122,5 +127,5 @@ export async function createEngine(canvas: HTMLCanvasElement): Promise<Engine> {
     requestAnimationFrame(tick);
   }
 
-  return { renderer, scene, camera, controls, usingWebGPU, start };
+  return { renderer, scene, camera, controls, usingWebGPU, start, renderNow: () => renderPipeline.render() };
 }

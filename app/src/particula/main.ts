@@ -34,6 +34,7 @@ async function main() {
   engine.scene.add(keyLight);
 
   const state = new ParticulaState(engine.scene);
+  state.attachCamera(engine.camera, engine.controls);
 
   // Primera partícula, ya en el centro, revelada con el estilo de
   // nacimiento por defecto pero instantánea (duración corta fija) —
