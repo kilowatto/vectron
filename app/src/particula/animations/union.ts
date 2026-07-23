@@ -160,9 +160,19 @@ const fusionCelular: UnionVariant = (scene, meshA, meshB, result, resultPos, dur
       const kFull = 0.75;
       const kT = Math.min(Math.max((eased - kOnset) / (kFull - kOnset), 0), 1);
       const kEase = kT * kT * (3 - 2 * kT);
-      blob.uniforms.blendK.value = resultRadius * 1.35 * kEase;
-      blob.uniforms.radiusA.value = radiusA + (resultRadius - radiusA) * eased;
-      blob.uniforms.radiusB.value = radiusB + (resultRadius - radiusB) * eased;
+      const k = resultRadius * 1.35 * kEase;
+      blob.uniforms.blendK.value = k;
+      const rA = radiusA + (resultRadius - radiusA) * eased;
+      const rB = radiusB + (resultRadius - radiusB) * eased;
+      // Misma compensación de inflación del smin que en division.ts
+      // (ver el comentario ahí): sin esto, al crecer k con las esferas
+      // ya traslapadas la superficie se bota k/4 hacia afuera y el
+      // resultado se ve más grande/plano/brillante que la partícula
+      // real que lo reemplaza al final.
+      const overlap = Math.min(Math.max(1 - (halfSep * 2) / (rA + rB), 0), 1);
+      const comp = (k / 4) * overlap;
+      blob.uniforms.radiusA.value = rA - comp;
+      blob.uniforms.radiusB.value = rB - comp;
     },
     () => {
       disposeBlob(blob);

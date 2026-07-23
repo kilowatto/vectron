@@ -134,10 +134,24 @@ const mitosisCelular: DivisionVariant = (scene, parent, childA, childB, posA, po
       const kClose = 0.85;
       const kT = Math.min(Math.max((eased - kOnset) / (kClose - kOnset), 0), 1);
       const kEase = kT * kT * (3 - 2 * kT);
-      blob.uniforms.blendK.value = Math.max(parentRadius * 1.35 * (1 - kEase), 0);
+      const k = Math.max(parentRadius * 1.35 * (1 - kEase), 0);
+      blob.uniforms.blendK.value = k;
       const r = parentRadius + (daughterRadius - parentRadius) * eased;
-      blob.uniforms.radiusA.value = r;
-      blob.uniforms.radiusB.value = r;
+      // Causa raíz del "cambia de material/tamaño" reportado 3 veces:
+      // el smin INFLA la superficie donde las esferas se traslapan —
+      // en el plano medio (dA==dB, h=0.5) la superficie queda k/4 más
+      // afuera que la esfera real. Con traslape total eso es TODA la
+      // superficie: el blob aparecía ~k/4 más grande que la partícula
+      // que reemplaza (+34% con k=1.35R), con curvatura más plana →
+      // highlights anchos y difusos → parece otro material aunque el
+      // BRDF sea idéntico. Compensación exacta: restar k/4 escalado
+      // por cuánto se traslapan (1 = mismos centros, 0 = separadas);
+      // así el tamaño aparente se mantiene constante y el bulto del
+      // smin sólo queda donde debe: el cuello.
+      const overlap = Math.min(Math.max(1 - sep / r, 0), 1);
+      const rComp = r - (k / 4) * overlap;
+      blob.uniforms.radiusA.value = rComp;
+      blob.uniforms.radiusB.value = rComp;
     },
     () => {
       disposeBlob(blob);
