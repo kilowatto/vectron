@@ -35,6 +35,7 @@ export interface HeroParticleOptions {
   radius?: number;
 }
 
+
 /** Parámetros del movimiento tipo browniano de una partícula — pedido
  * explícito del usuario ("cada partícula tiene su propio ritmo y
  * dirección, no todas sincronizadas"). En vez de ruido Perlin (más
@@ -64,30 +65,52 @@ function createDrift(radius: number): DriftParams {
   };
 }
 
-/** Esfera PBR con transmisión (vidrio/gota de energía): baja
- * rugosidad + transmisión alta deja pasar y refractar la luz del
- * entorno, iridiscencia le da el matiz de "pompa de jabón" (afinado
- * con la variante de muerte del mismo nombre), clearcoat suma un
- * segundo highlight especular más nítido encima del PBR base, y el
- * núcleo emisivo (emissiveIntensity baja pero > 0) le da algo de
- * "brillo propio" que el bloom del engine puede tomar sin que se vea
- * como una luz plana de video-juego. */
+/** El CUERPO visible (`material.color`, lo que la luz difusa/reflejos
+ * rebotan) y el BRILLO (`material.emissive`, lo que la partícula
+ * "produce" sin depender de luz externa) son intencionalmente colores
+ * DISTINTOS — mismo tono, pero el cuerpo con luminosidad forzada muy
+ * por debajo del brillo (ver DEFAULT_CONFIG.color.bodyLightness).
+ * Bug real de diseño encontrado en vivo ("no se ve eléctrico, no
+ * emite luz"): con cuerpo y brillo casi igual de claros (como estaba
+ * antes) no hay CONTRASTE — todo el material se ve uniformemente
+ * pálido/lechoso, nunca "algo que emite luz propia". Un cuerpo
+ * notablemente más oscuro es lo que le da al emissive algo contra qué
+ * destacar. Se extrae sólo el TONO del color de entrada — la
+ * saturación/luminosidad del cuerpo salen siempre de la config, así
+ * que cualquier color (paleta, semilla, o elegido con el slider) se
+ * ve consistente, sin tener que afinar cada hex a mano. */
+export function bodyColorOf(hex: number): THREE.Color {
+  const hsl = { h: 0, s: 0, l: 0 };
+  // Bug real encontrado en vivo: `Color.setHSL`/`getHSL` sin
+  // `colorSpace` explícito usan `ColorManagement.workingColorSpace`
+  // (lineal), NO sRGB — un "bodyLightness" de 0.28 en espacio lineal
+  // se ve, ya renderizado, tan claro como ~0.55 en sRGB (la curva
+  // gamma ilumina los tonos medios). Por esto NINGÚN ajuste de
+  // material/luces oscurecía nada — el color nunca estuvo tan oscuro
+  // como el número sugería. Pasar SRGBColorSpace hace que
+  // `bodyLightness`/`saturation` signifiquen lo que percibe el ojo,
+  // como en cualquier selector de color.
+  new THREE.Color(hex).getHSL(hsl, THREE.SRGBColorSpace);
+  const c = DEFAULT_CONFIG.color;
+  return new THREE.Color().setHSL(hsl.h, c.saturation, c.bodyLightness, THREE.SRGBColorSpace);
+}
+
+/** Esfera PBR mayormente sólida con sólo un dejo de transmisión (ver
+ * DEFAULT_CONFIG.material): rugosidad baja + clearcoat le dan la
+ * superficie tersa/brillante, iridiscencia le da el matiz de "pompa
+ * de jabón" en los reflejos (afinado con la variante de muerte del
+ * mismo nombre), y el núcleo emisivo (color BRILLANTE, sin oscurecer,
+ * sobre un cuerpo oscurecido — ver bodyColorOf) — con el bloom del
+ * playground calibrado para recogerlo (ver particula/main.ts) — es lo
+ * que de verdad la hace leerse "eléctrica"/con luz propia en vez de
+ * sólo un color plano. */
 export function createHeroParticle(color: number, radius = 0.32): THREE.Mesh {
   const geometry = new THREE.SphereGeometry(radius, 64, 64);
   const material = new THREE.MeshPhysicalMaterial({
-    color,
-    roughness: 0.08,
-    metalness: 0,
-    transmission: 0.75,
-    thickness: 1.2,
-    ior: 1.42,
-    iridescence: 0.55,
-    iridescenceIOR: 1.3,
-    clearcoat: 0.6,
-    clearcoatRoughness: 0.12,
+    ...DEFAULT_CONFIG.material,
+    color: bodyColorOf(color),
     emissive: color,
     emissiveIntensity: DEFAULT_CONFIG.color.intensityDefault,
-    envMapIntensity: 1.4,
   });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.userData.baseRadius = radius;

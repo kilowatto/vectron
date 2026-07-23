@@ -45,18 +45,63 @@ export interface ParticulaConfig {
      * "rebotando". */
     verticalDamping: number;
   };
-  /** Rango del slider de color de la partícula seleccionada. */
+  /** Rango del slider de color de la partícula seleccionada — y la
+   * base de cómo se ve CUALQUIER color de partícula, no sólo los
+   * elegidos por slider (ver heroParticle.ts's `bodyColorOf`). */
   color: {
-    /** Saturación/luminosidad fijas para que el slider de tono barra
-     * un arcoiris parejo — si se derivaran del color actual, una
-     * partícula ya desaturada tendría un rango pobre. */
+    /** Saturación/luminosidad del brillo emisivo — fijas para que el
+     * slider de tono barra un arcoiris parejo y vívido; si se
+     * derivaran del color actual, una partícula ya desaturada tendría
+     * un rango pobre. */
     saturation: number;
     lightness: number;
+    /** Luminosidad del CUERPO (el albedo/difuso visible, no el brillo)
+     * — pedido explícito del usuario ("debe emitir luz... no se ve
+     * eléctrico"): con el cuerpo casi tan claro como el brillo (como
+     * estaba antes, lightness=0.55 para ambos) no hay contraste — se
+     * ve pálido/lechoso, no "algo que emite luz". Un cuerpo
+     * notablemente más oscuro que su propio brillo es lo que de
+     * verdad lee como "emite luz propia" en vez de "es de este
+     * color". Se aplica a TODO color de partícula (paleta, semilla,
+     * slider) vía bodyColorOf — no sólo a los elegidos a mano. */
+    bodyLightness: number;
     hueMinDeg: number;
     hueMaxDeg: number;
     intensityMin: number;
     intensityMax: number;
     intensityDefault: number;
+  };
+  /** MeshPhysicalMaterial de la esfera real (heroParticle.ts) Y del
+   * blob raymarcheado de mitosis/fusión (metaballBlob.ts) — ambos
+   * leen ESTOS mismos valores, nunca una copia local, precisamente
+   * porque dos copias a mano desincronizadas fue la causa real de
+   * "cambia de material" reportado 3 veces en esta sesión. */
+  material: {
+    roughness: number;
+    metalness: number;
+    /** Pedido explícito del usuario ("muy poco transparente pero algo
+     * de transparencia"): mayormente sólida, con sólo un dejo de
+     * profundidad translúcida — no una bolita de vidrio claro. */
+    transmission: number;
+    thickness: number;
+    ior: number;
+    iridescence: number;
+    iridescenceIOR: number;
+    clearcoat: number;
+    clearcoatRoughness: number;
+    envMapIntensity: number;
+  };
+  /** Bloom del engine SÓLO para este playground (ver
+   * scene/engine.ts's `bloomOverride`) — el bloom global de
+   * producción sigue igual; subirlo ahí volaría el contraste del
+   * cubo real con miles de partículas. Aquí sí hace falta más fuerza/
+   * umbral más bajo para que el brillo emisivo de 1-8 partículas se
+   * lea "eléctrico" — pedido explícito del usuario ("no se ve
+   * eléctrico, debe emitir algo de luz"). */
+  bloom: {
+    strength: number;
+    radius: number;
+    threshold: number;
   };
 }
 
@@ -79,13 +124,43 @@ export const DEFAULT_CONFIG: ParticulaConfig = {
     verticalDamping: 0.6,
   },
   color: {
-    saturation: 0.65,
+    saturation: 0.85,
     lightness: 0.55,
+    bodyLightness: 0.28,
     hueMinDeg: 0,
     hueMaxDeg: 360,
     intensityMin: 0,
-    intensityMax: 0.8,
-    intensityDefault: 0.22,
+    intensityMax: 1.4,
+    intensityDefault: 0.55,
+  },
+  material: {
+    // El diagnóstico real (visto en vivo con __debugMat, ya quitado):
+    // `Color.setHSL` sin `colorSpace` explícito interpreta la
+    // luminosidad en espacio LINEAL, no sRGB — un bodyLightness de
+    // 0.28 se veía, ya renderizado, como ~0.49-0.55 (la curva gamma
+    // ilumina los tonos medios). Por eso NINGÚN ajuste de
+    // roughness/clearcoat/envMapIntensity/luces oscurecía nada —
+    // nunca fue el problema real. Con bodyColorOf/setSelectedHue ya
+    // pasando SRGBColorSpace (ver heroParticle.ts/state.ts), el cuerpo
+    // por fin se ve tan oscuro como el número sugiere, así que estos
+    // valores vuelven a un rango con brillo/vidrio real en vez de los
+    // extremos "apagados" a los que llegué mientras perseguía el bug
+    // equivocado.
+    roughness: 0.15,
+    metalness: 0,
+    transmission: 0.15,
+    thickness: 1,
+    ior: 1.42,
+    iridescence: 0.5,
+    iridescenceIOR: 1.3,
+    clearcoat: 0.5,
+    clearcoatRoughness: 0.15,
+    envMapIntensity: 0.75,
+  },
+  bloom: {
+    strength: 0.4,
+    radius: 0.28,
+    threshold: 0.52,
   },
 };
 
@@ -105,6 +180,8 @@ export function loadConfig(): ParticulaConfig {
       styles: { ...DEFAULT_CONFIG.styles, ...saved.styles },
       movement: { ...DEFAULT_CONFIG.movement, ...saved.movement },
       color: { ...DEFAULT_CONFIG.color, ...saved.color },
+      material: { ...DEFAULT_CONFIG.material, ...saved.material },
+      bloom: { ...DEFAULT_CONFIG.bloom, ...saved.bloom },
     };
   } catch {
     return structuredClone(DEFAULT_CONFIG);

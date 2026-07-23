@@ -1,5 +1,5 @@
 import * as THREE from "three/webgpu";
-import { createHeroParticle, nextColor, type DriftParams } from "./heroParticle";
+import { createHeroParticle, nextColor, bodyColorOf, type DriftParams } from "./heroParticle";
 import { BIRTH_VARIANTS } from "./animations/birth";
 import { DIVISION_VARIANTS } from "./animations/division";
 import { UNION_VARIANTS } from "./animations/union";
@@ -425,7 +425,12 @@ export class ParticulaState {
     if (!rec) return null;
     const mat = rec.mesh.material as THREE.MeshPhysicalMaterial;
     const hsl = { h: 0, s: 0, l: 0 };
-    mat.color.getHSL(hsl);
+    // `emissive` (el color BRILLANTE, sin oscurecer) en vez de `color`
+    // (el cuerpo oscurecido) — es el que refleja de verdad el tono que
+    // el usuario eligió. `getHSL` sin colorSpace explícito lee en
+    // espacio lineal, no sRGB — el mismo bug que bodyColorOf, aquí sólo
+    // afectaría el matiz leído de vuelta al slider al reseleccionar.
+    mat.emissive.getHSL(hsl, THREE.SRGBColorSpace);
     return { hue: hsl.h * 360, intensity: mat.emissiveIntensity };
   }
 
@@ -435,9 +440,16 @@ export class ParticulaState {
     if (!rec) return;
     const c = DEFAULT_CONFIG.color;
     const normalized = ((hueDeg % 360) + 360) % 360;
-    const color = new THREE.Color().setHSL(normalized / 360, c.saturation, c.lightness);
+    // Ver bodyColorOf en heroParticle.ts para el porqué de
+    // SRGBColorSpace explícito — sin él, `lightness`/`saturation` no
+    // significan lo que se espera perceptualmente.
+    const color = new THREE.Color().setHSL(normalized / 360, c.saturation, c.lightness, THREE.SRGBColorSpace);
     const mat = rec.mesh.material as THREE.MeshPhysicalMaterial;
-    mat.color.copy(color);
+    // Cuerpo oscurecido / brillo con el tono elegido a full — mismo
+    // contraste que createHeroParticle (ver heroParticle.ts's
+    // bodyColorOf), si no el slider se ve "cambia de color" pero
+    // sigue sin verse eléctrico.
+    mat.color.copy(bodyColorOf(color.getHex()));
     mat.emissive.copy(color);
     // Se guarda como el color "base" de la partícula: así dividir/unir
     // (que leen `baseColor` para heredar/promediar) recogen el tono

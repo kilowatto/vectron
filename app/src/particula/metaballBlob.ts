@@ -19,6 +19,8 @@ import {
   float,
   max,
 } from "three/tsl";
+import { DEFAULT_CONFIG } from "./particulaConfig";
+import { bodyColorOf } from "./heroParticle";
 
 /** Pedido explícito del usuario tras ver la mitosis en vivo ("fatal,
  * no parece nada" — un rodillo rígido y opaco conectando 2 esferas ya
@@ -87,8 +89,15 @@ export function createMitosisBlob(
   const uRadiusA = uniform(0.32);
   const uRadiusB = uniform(0.32);
   const uBlendK = uniform(0.42);
+  // Brillo (emissive) a todo color, cuerpo (albedo) oscurecido — mismo
+  // contraste que createHeroParticle vía bodyColorOf (ver
+  // heroParticle.ts): sin esto el blob se ve más pálido/plano que las
+  // partículas reales que reemplaza durante mitosis/fusión, el mismo
+  // tipo de "cambia de material" que ya se peleó antes en esta sesión.
   const uColorA = uniform(new THREE.Color(colorA));
   const uColorB = uniform(new THREE.Color(colorB));
+  const uBodyColorA = uniform(bodyColorOf(colorA));
+  const uBodyColorB = uniform(bodyColorOf(colorB));
 
   // smin polinomial (Quilez): k controla qué tan ancho/gradual es el
   // cuello — k=0 es un min() normal (2 esferas ya separadas, sin
@@ -117,13 +126,17 @@ export function createMitosisBlob(
 
   // Mezcla de color por cercanía a cada centro — cerca de A se ve del
   // color A, cerca de B del color B, con transición suave en el
-  // cuello (no un corte duro a medio camino).
-  const colorAt: any = Fn(([p]: any) => {
+  // cuello (no un corte duro a medio camino). `colorAt` (brillante)
+  // alimenta el emissiveNode; `bodyColorAt` (oscurecido) alimenta el
+  // colorNode/albedo — mismo par que usa el material real.
+  const mixByProximity: any = Fn(([p, colA, colB]: any) => {
     const dA = length(p.sub(uCenterA));
     const dB = length(p.sub(uCenterB));
     const t = clamp(dA.div(dA.add(dB).max(0.0001)), 0, 1);
-    return mix(uColorA, uColorB, t);
+    return mix(colA, colB, t);
   });
+  const colorAt: any = Fn(([p]: any) => mixByProximity(p, uColorA, uColorB));
+  const bodyColorAt: any = Fn(([p]: any) => mixByProximity(p, uBodyColorA, uBodyColorB));
 
   const calcNormal: any = Fn(([p]: any) => {
     const eps = float(0.0018);
@@ -184,27 +197,16 @@ export function createMitosisBlob(
   const hitPoint = march.xyz;
   const hitFlag = march.w;
 
-  // Mismos parámetros, literal, que createHeroParticle — si aquél
-  // cambia, cambiar aquí igual (no hay forma de compartir el objeto
-  // porque éste es la variante Node del material).
-  const material = new THREE.MeshPhysicalNodeMaterial({
-    roughness: 0.08,
-    metalness: 0,
-    transmission: 0.75,
-    thickness: 1.2,
-    ior: 1.42,
-    iridescence: 0.55,
-    iridescenceIOR: 1.3,
-    clearcoat: 0.6,
-    clearcoatRoughness: 0.12,
-    envMapIntensity: 1.4,
-  });
+  // DEFAULT_CONFIG.material: mismos valores que usa createHeroParticle
+  // (ver heroParticle.ts / particulaConfig.ts) — una sola fuente para
+  // los dos, ya no dos copias a mano que se puedan desincronizar.
+  const material = new THREE.MeshPhysicalNodeMaterial({ ...DEFAULT_CONFIG.material });
   material.colorNode = Fn(() => {
     Discard(hitFlag.lessThan(0.5));
-    return vec4(colorAt(hitPoint), 1);
+    return vec4(bodyColorAt(hitPoint), 1);
   })();
   material.normalNode = normalize(transformNormalToView(calcNormal(hitPoint)));
-  material.emissiveNode = colorAt(hitPoint).mul(0.22);
+  material.emissiveNode = colorAt(hitPoint).mul(DEFAULT_CONFIG.color.intensityDefault);
 
   const geometry = new THREE.BoxGeometry(boxSize, boxSize, boxSize);
   const mesh = new THREE.Mesh(geometry, material);

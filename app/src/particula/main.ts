@@ -12,7 +12,8 @@ import { loadConfig, saveConfig, exportConfigJSON, type ParticulaConfig } from "
 const canvas = document.querySelector<HTMLCanvasElement>("#particula-canvas")!;
 
 async function main() {
-  const engine = await createEngine(canvas);
+  const config = loadConfig();
+  const engine = await createEngine(canvas, config.bloom);
   ensureEnvironment(engine.renderer, engine.scene);
 
   // "que se cree una partícula en el centro con zoom donde se vea
@@ -29,8 +30,17 @@ async function main() {
   // Luz ambiental + direccional suave: MeshPhysicalMaterial necesita
   // luces reales en la escena para que transmisión/clearcoat/fresnel
   // tengan algo que reflejar además del mapa de entorno.
-  engine.scene.add(new THREE.AmbientLight(0xffffff, 0.4));
-  const keyLight = new THREE.DirectionalLight(0xffffff, 1.1);
+  //
+  // Intensidades bajadas (0.4/1.1 -> 0.22/0.55): estaban calibradas
+  // para transmission=0.75, donde buena parte de esa luz seguía de
+  // largo. Con la esfera ahora mucho más opaca (pedido explícito del
+  // usuario, "muy poco transparente"), la MISMA luz se refleja casi
+  // entera de vuelta a cámara — bug real visto en vivo: la esfera se
+  // veía pálida/sobreexpuesta (perdía el color, no "brillaba") aun con
+  // el bloom completamente apagado, confirmando que el problema era la
+  // luz de base, no el bloom ni el emissive.
+  engine.scene.add(new THREE.AmbientLight(0xffffff, 0.22));
+  const keyLight = new THREE.DirectionalLight(0xffffff, 0.55);
   keyLight.position.set(2, 3, 2);
   engine.scene.add(keyLight);
 
@@ -45,7 +55,7 @@ async function main() {
   engine.scene.add(seedMesh);
   state.seed(seedMesh);
 
-  setupUi(state, engine.camera, canvas, loadConfig());
+  setupUi(state, engine.camera, canvas, config);
 
   engine.start(
     (dt) => state.tick(dt),

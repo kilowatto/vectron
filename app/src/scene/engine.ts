@@ -23,12 +23,27 @@ function stageSizeOf(canvas: HTMLCanvasElement): { w: number; h: number } {
   return { w: rect.width, h: rect.height };
 }
 
+export interface BloomOptions {
+  strength?: number;
+  radius?: number;
+  threshold?: number;
+}
+
 /**
  * Motor 3D genérico: renderer WebGPU (con fallback WebGL), cámara,
  * OrbitControls, bloom y el resize/render-loop. No sabe nada de
  * conceptos, modos ni partículas — sólo el "cómo se ve y se mueve".
  */
-export async function createEngine(canvas: HTMLCanvasElement): Promise<Engine> {
+/** `bloomOverride` — pedido explícito del usuario en /particula ("no
+ * se ve eléctrico, debe emitir algo de luz"): el bloom global (0.27
+ * fuerza / 0.18 radio / 0.58 umbral) está calibrado para el cubo real
+ * con miles de partículas de emissiveIntensity baja — subirlo ahí
+ * volaría el contraste de toda la escena de producción. El playground
+ * de partículas necesita su propio umbral/fuerza para que el brillo
+ * "eléctrico" de 1-8 partículas se lea de verdad, sin tocar el valor
+ * que usa la app real (por defecto, si no se pasa `bloomOverride`,
+ * el comportamiento es idéntico al de antes). */
+export async function createEngine(canvas: HTMLCanvasElement, bloomOverride?: BloomOptions): Promise<Engine> {
   const renderer = new THREE.WebGPURenderer({ canvas, antialias: true });
   await renderer.init();
 
@@ -81,7 +96,12 @@ export async function createEngine(canvas: HTMLCanvasElement): Promise<Engine> {
   // el espaciado real (CUBE_SCALE en seed.ts) ya resuelve el traslape,
   // apagar el bloom encima de eso dejaba todo sin vida sobre todo en
   // vistas poco densas como Principiante.
-  const bloomPass = bloom(scenePassColor, 0.27, 0.18, 0.58);
+  const bloomPass = bloom(
+    scenePassColor,
+    bloomOverride?.strength ?? 0.27,
+    bloomOverride?.radius ?? 0.18,
+    bloomOverride?.threshold ?? 0.58,
+  );
   const renderPipeline = new THREE.RenderPipeline(renderer);
   renderPipeline.outputNode = scenePassColor.add(bloomPass);
 
