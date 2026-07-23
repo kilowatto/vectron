@@ -1,0 +1,233 @@
+/* Mobile-first a propósito (pedido explícito del usuario: "lo voy a
+ * estar probando en iPhone") — todo el layout parte del ancho angosto
+ * y sólo se relaja en pantallas grandes, no al revés. */
+
+:root {
+  --bg: #05070a;
+  --panel-bg: rgba(10, 13, 18, 0.92);
+  --panel-border: rgba(255, 255, 255, 0.09);
+  --text: #e8ecf1;
+  --text-dim: #8a94a6;
+  --accent: #5fc9ff;
+  --btn-size: 60px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  overflow: hidden;
+  touch-action: none;
+}
+
+#particula-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+#particula-hud {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px);
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  padding: 10px 0;
+  pointer-events: none;
+}
+
+#particula-hud span {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  background: rgba(0, 0, 0, 0.35);
+  padding: 4px 12px;
+  border-radius: 999px;
+  backdrop-filter: blur(6px);
+}
+
+#particula-controls {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+#particula-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 10px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.55), transparent);
+}
+
+.pbtn {
+  flex: 1;
+  min-height: var(--btn-size);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  background: rgba(20, 24, 32, 0.85);
+  color: var(--text);
+  font-size: 10px;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.pbtn .icon {
+  font-size: 20px;
+}
+
+.pbtn:active:not(:disabled) {
+  background: rgba(95, 201, 255, 0.22);
+  border-color: var(--accent);
+}
+
+.pbtn:disabled {
+  opacity: 0.32;
+}
+
+.pbtn.selected-target {
+  border-color: var(--accent);
+}
+
+/* max-height en vez de transform: translateY(100%) — el sheet es un
+ * hermano ANTES de #particula-actions dentro de la misma columna flex
+ * (para que, abierto, quede apilado justo arriba de los botones); un
+ * translateY relativo a su propia altura lo dejaba flotando ENCIMA de
+ * la barra de acciones en vez de fuera de la pantalla (bug real visto
+ * en vivo en viewport de iPhone). Colapsar la altura a 0 en vez de
+ * desplazarlo evita el problema sin importar dónde caiga en el flujo. */
+#particula-sheet {
+  background: var(--panel-bg);
+  border-top: 1px solid var(--panel-border);
+  padding: 0 16px;
+  max-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: max-height 0.28s ease, padding 0.28s ease;
+}
+
+#particula-sheet.open {
+  max-height: 62vh;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.field label.title {
+  font-size: 12px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.field select {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  padding: 0 10px;
+  font-size: 15px;
+}
+
+.field input[type="range"] {
+  width: 100%;
+  height: 44px;
+}
+
+.duration-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  font-size: 14px;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+}
+
+.checkbox-row input {
+  width: 22px;
+  height: 22px;
+}
+
+.sheet-divider {
+  border: none;
+  border-top: 1px solid var(--panel-border);
+  margin: 2px 0;
+}
+
+/* Pantallas más anchas (tablet/desktop): panel de ajustes como sheet
+ * lateral en vez de ocupar casi toda la altura, botones no forzados a
+ * ancho completo. */
+@media (min-width: 720px) {
+  #particula-actions {
+    justify-content: center;
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  .pbtn {
+    flex: 0 0 100px;
+  }
+  #particula-sheet {
+    max-width: 420px;
+    margin-left: auto;
+    border-left: 1px solid var(--panel-border);
+    border-top: none;
+    max-height: 100vh;
+    position: fixed;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    transform: translateX(100%);
+    transition: transform 0.28s ease;
+    padding-top: calc(16px + env(safe-area-inset-top, 0px));
+  }
+  /* Repite max-height aquí: la regla base `.open{max-height:62vh}`
+   * tiene más especificidad (id+clase) que el `#particula-sheet` sin
+   * calificar de arriba en este mismo media query, así que ganaría
+   * por especificidad aunque venga primero en el archivo — sin este
+   * override el panel lateral de escritorio quedaría limitado a 62vh
+   * en vez de la altura completa. */
+  #particula-sheet.open {
+    max-height: 100vh;
+    transform: translateX(0);
+  }
+}
