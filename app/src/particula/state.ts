@@ -67,6 +67,11 @@ export class ParticulaState {
   private camera: THREE.PerspectiveCamera | null = null;
   private controls: CameraRig | null = null;
   private cameraTween: Animation | null = null;
+  // Multiplicadores GLOBALES sobre la frecuencia/amplitud propia de
+  // cada partícula — pedido explícito del usuario ("pon un slider
+  // para configurar la velocidad y la intensidad del movimiento").
+  private movementSpeed = DEFAULT_CONFIG.movement.speedDefault;
+  private movementIntensity = DEFAULT_CONFIG.movement.intensityDefault;
   private time = 0;
   /** ids cuya posición está siendo manejada por completo por una
    * animación activa (nacer/dividir) — el deriva browniano las salta
@@ -464,6 +469,19 @@ export class ParticulaState {
     (rec.mesh.material as THREE.MeshPhysicalMaterial).emissiveIntensity = value;
   }
 
+  /** Multiplicador global sobre la frecuencia del deriva de TODAS las
+   * partículas — 0 las congela, >1 las acelera. No reemplaza la
+   * frecuencia propia de cada una (ver DriftParams), sólo la escala. */
+  setMovementSpeed(value: number) {
+    this.movementSpeed = value;
+  }
+
+  /** Multiplicador global sobre la amplitud del deriva — 0 las deja
+   * quietas en su `home` exacto, >1 las hace vibrar más lejos. */
+  setMovementIntensity(value: number) {
+    this.movementIntensity = value;
+  }
+
   tick(dt: number) {
     this.time += dt;
     this.activeAnimations = this.activeAnimations.filter((a) => a.update(dt));
@@ -484,10 +502,12 @@ export class ParticulaState {
       const drift = rec.mesh.userData.drift as DriftParams | undefined;
       if (!drift) continue;
       const v = DEFAULT_CONFIG.movement.verticalDamping;
+      const s = this.movementSpeed;
+      const amp = drift.amp * this.movementIntensity;
       rec.mesh.position.set(
-        rec.home.x + Math.sin(this.time * drift.freq.x + drift.phase.x) * drift.amp,
-        rec.home.y + Math.sin(this.time * drift.freq.y + drift.phase.y) * drift.amp * v,
-        rec.home.z + Math.sin(this.time * drift.freq.z + drift.phase.z) * drift.amp,
+        rec.home.x + Math.sin(this.time * drift.freq.x * s + drift.phase.x) * amp,
+        rec.home.y + Math.sin(this.time * drift.freq.y * s + drift.phase.y) * amp * v,
+        rec.home.z + Math.sin(this.time * drift.freq.z * s + drift.phase.z) * amp,
       );
     }
 

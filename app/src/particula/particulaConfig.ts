@@ -25,11 +25,17 @@ export interface ParticulaConfig {
     conector: string;
   };
   connectorEnabled: boolean;
-  /** Movimiento tipo browniano por partícula — fijo por decisión
-   * explícita del usuario ("a 25,000 partículas no puede haber
-   * colisiones"): el jitter se queda siempre dentro de su propio
-   * radio de reposo, nunca deambula libre, así que nunca hace falta
-   * chequear distancia contra las demás. */
+  /** Movimiento tipo browniano por partícula — la AMPLITUD se queda
+   * fija como fracción del radio de reposo (decisión explícita del
+   * usuario, "a 25,000 partículas no puede haber colisiones": el
+   * jitter nunca deambula libre, así que nunca hace falta chequear
+   * distancia contra las demás), pero la VELOCIDAD y la INTENSIDAD
+   * globales sí son ajustables en vivo (sliders en Ajustes, pedido
+   * explícito tras probarlo: "no veo el movimiento browniano... pon
+   * un slider para configurar la velocidad y la intensidad") — son
+   * multiplicadores aplicados en state.ts's tick() encima de la
+   * frecuencia/amplitud aleatoria de cada partícula, no la reemplazan,
+   * así que cada partícula sigue con su propio ritmo relativo. */
   movement: {
     /** Amplitud como fracción del radio de la partícula — rango
      * aleatorio por partícula para que cada una tenga su propio
@@ -38,12 +44,24 @@ export interface ParticulaConfig {
     ampFractionMax: number;
     /** Frecuencia angular (rad/s) por eje, rango aleatorio por
      * partícula — junto con la fase aleatoria es lo que hace que el
-     * recorrido de cada una sea único (tipo Lissajous). */
+     * recorrido de cada una sea único (tipo Lissajous). Bug real
+     * visto en vivo ("no veo movimiento"): con 0.12-0.3 rad/s un ciclo
+     * completo tarda 20-50s — dentro de una prueba de unos segundos,
+     * el ojo no lo alcanza a percibir aunque la posición sí cambie de
+     * verdad cuadro a cuadro (confirmado con el stepper
+     * determinístico). Subido a un rango donde un ciclo tarda unos
+     * pocos segundos por defecto. */
     freqMin: number;
     freqMax: number;
     /** El eje Y vibra menos que X/Z — se ve más "flotando" que
      * "rebotando". */
     verticalDamping: number;
+    speedMin: number;
+    speedMax: number;
+    speedDefault: number;
+    intensityMin: number;
+    intensityMax: number;
+    intensityDefault: number;
   };
   /** Rango del slider de color de la partícula seleccionada — y la
    * base de cómo se ve CUALQUIER color de partícula, no sólo los
@@ -117,11 +135,17 @@ export const DEFAULT_CONFIG: ParticulaConfig = {
   },
   connectorEnabled: false,
   movement: {
-    ampFractionMin: 0.14,
-    ampFractionMax: 0.22,
-    freqMin: 0.12,
-    freqMax: 0.3,
+    ampFractionMin: 0.18,
+    ampFractionMax: 0.32,
+    freqMin: 0.4,
+    freqMax: 0.9,
     verticalDamping: 0.6,
+    speedMin: 0,
+    speedMax: 4,
+    speedDefault: 1.6,
+    intensityMin: 0,
+    intensityMax: 3,
+    intensityDefault: 1.4,
   },
   color: {
     saturation: 0.85,
@@ -148,9 +172,18 @@ export const DEFAULT_CONFIG: ParticulaConfig = {
     // equivocado.
     roughness: 0.15,
     metalness: 0,
-    transmission: 0.15,
-    thickness: 1,
-    ior: 1.42,
+    // Subido de 0.15 — pedido explícito del usuario ("no veo algo de
+    // transparencia"): contra el fondo negro del playground, un poco
+    // de transmisión casi no se distingue de opaco (no hay nada claro
+    // detrás que refractar). Con más transmisión Y más `thickness`
+    // (más absorción tipo Beer-Lambert, lo que tiñe lo transmitido en
+    // vez de dejarlo pasar transparente) el interior/los bordes de la
+    // esfera muestran una profundidad refractada real — sigue siendo
+    // "poco transparente" en el sentido de que el cuerpo domina, pero
+    // ahora hay algo de transparencia que SÍ se ve.
+    transmission: 0.32,
+    thickness: 1.6,
+    ior: 1.48,
     iridescence: 0.5,
     iridescenceIOR: 1.3,
     clearcoat: 0.5,

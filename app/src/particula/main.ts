@@ -96,6 +96,10 @@ function setupUi(state: ParticulaState, camera: THREE.Camera, canvas: HTMLCanvas
   const intensitySlider = document.querySelector<HTMLInputElement>("#color-intensity-slider")!;
   const intensityOutput = document.querySelector<HTMLSpanElement>("#color-intensity-output")!;
   const exportBtn = document.querySelector<HTMLButtonElement>("#export-config-btn")!;
+  const movementSpeedSlider = document.querySelector<HTMLInputElement>("#movement-speed-slider")!;
+  const movementSpeedOutput = document.querySelector<HTMLSpanElement>("#movement-speed-output")!;
+  const movementIntensitySlider = document.querySelector<HTMLInputElement>("#movement-intensity-slider")!;
+  const movementIntensityOutput = document.querySelector<HTMLSpanElement>("#movement-intensity-output")!;
 
   populateSelect(styleNacer, BIRTH_VARIANTS, config.styles.nacer);
   populateSelect(styleDividir, DIVISION_VARIANTS, config.styles.dividir);
@@ -113,6 +117,16 @@ function setupUi(state: ParticulaState, camera: THREE.Camera, canvas: HTMLCanvas
   intensityOutput.textContent = config.color.intensityDefault.toFixed(2);
   hueSlider.min = String(config.color.hueMinDeg);
   hueSlider.max = String(config.color.hueMaxDeg);
+  movementSpeedSlider.min = String(config.movement.speedMin);
+  movementSpeedSlider.max = String(config.movement.speedMax);
+  movementSpeedSlider.value = String(config.movement.speedDefault);
+  movementSpeedOutput.textContent = config.movement.speedDefault.toFixed(2);
+  movementIntensitySlider.min = String(config.movement.intensityMin);
+  movementIntensitySlider.max = String(config.movement.intensityMax);
+  movementIntensitySlider.value = String(config.movement.intensityDefault);
+  movementIntensityOutput.textContent = config.movement.intensityDefault.toFixed(2);
+  state.setMovementSpeed(config.movement.speedDefault);
+  state.setMovementIntensity(config.movement.intensityDefault);
 
   // Todo lo que el usuario ajusta en la UI se auto-guarda de
   // inmediato — pedido explícito ("guardar la configuración que voy
@@ -171,6 +185,27 @@ function setupUi(state: ParticulaState, camera: THREE.Camera, canvas: HTMLCanvas
     const value = Number(intensitySlider.value);
     intensityOutput.textContent = value.toFixed(2);
     state.setSelectedEmissiveIntensity(value);
+  });
+
+  // Sliders de movimiento — pedido explícito tras probarlo en vivo
+  // ("no veo el movimiento browniano... pon un slider para configurar
+  // la velocidad y la intensidad"). Globales (afectan a TODAS las
+  // partículas), a diferencia del slider de color que sólo actúa
+  // sobre la seleccionada — el movimiento no es algo que se "elige"
+  // partícula por partícula.
+  movementSpeedSlider.addEventListener("input", () => {
+    const value = Number(movementSpeedSlider.value);
+    movementSpeedOutput.textContent = value.toFixed(2);
+    state.setMovementSpeed(value);
+    config.movement.speedDefault = value;
+    saveConfig(config);
+  });
+  movementIntensitySlider.addEventListener("input", () => {
+    const value = Number(movementIntensitySlider.value);
+    movementIntensityOutput.textContent = value.toFixed(2);
+    state.setMovementIntensity(value);
+    config.movement.intensityDefault = value;
+    saveConfig(config);
   });
 
   const exportOverlay = document.querySelector<HTMLDivElement>("#export-overlay")!;
