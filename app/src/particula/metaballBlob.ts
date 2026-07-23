@@ -7,11 +7,9 @@ import {
   Discard,
   cameraPosition,
   positionLocal,
-  modelWorldMatrix,
   modelWorldMatrixInverse,
+  transformNormalToView,
   normalize,
-  dot,
-  max,
   mix,
   clamp,
   length,
@@ -19,9 +17,7 @@ import {
   vec3,
   vec4,
   float,
-  pow,
-  reflect,
-  pmremTexture,
+  max,
 } from "three/tsl";
 
 /** Pedido explícito del usuario tras ver la mitosis en vivo ("fatal,
@@ -38,10 +34,31 @@ import {
  * matemáticamente una superficie lisa con un cuello real que se
  * adelgaza, nunca una unión de piezas con bordes visibles.
  *
- * Vive SÓLO durante la animación de mitosis — al terminar (separación
- * total, blendK en 0), la variante la reemplaza por las 2 partículas
- * PBR reales (childA/childB) para que selección/futuras acciones/
- * líneas conectoras sigan funcionando con mallas normales. */
+ * MATERIAL — tercera iteración tras feedback repetido del usuario
+ * ("sigues cambiando los materiales!"): las 2 primeras versiones
+ * imitaban a mano el shading PBR (ambiente+difuso+especular+fresnel,
+ * luego + reflejo de entorno muestreado a mano) sobre un
+ * MeshBasicNodeMaterial — NUNCA va a coincidir con la esfera real,
+ * porque la esfera real es un MeshPhysicalMaterial con transmisión,
+ * iridiscencia, clearcoat y el pipeline de luces/IBL completo de
+ * three. La solución definitiva es NO imitar nada: el blob usa un
+ * MeshPhysicalNodeMaterial con EXACTAMENTE los mismos parámetros que
+ * createHeroParticle, y sólo se le inyecta la superficie raymarcheada
+ * por los hooks TSL del material: `colorNode` (albedo + Discard de
+ * los píxeles que no tocan el SDF), `normalNode` (normal del SDF
+ * convertida a espacio vista con transformNormalToView — verificado
+ * en el código fuente de three: NodeMaterial.setupNormal reemplaza a
+ * materialNormal, cuyo default es normalView, o sea que normalNode
+ * debe venir en espacio VISTA) y `emissiveNode` (mismo
+ * emissive*0.22). La iluminación, el env map (scene.environment, el
+ * mismo PMREM compartido), la transmisión y el tone mapping los
+ * resuelve el MISMO código de three que ilumina la esfera real — ya
+ * no hay dos materiales que empatar.
+ *
+ * Vive SÓLO durante la animación de mitosis/fusión — al terminar la
+ * variante lo reemplaza por las partículas PBR reales para que
+ * selección/futuras acciones/líneas conectoras sigan funcionando con
+ * mallas normales. */
 
 export interface BlobUniforms {
   centerA: { value: THREE.Vector3 };
@@ -63,7 +80,6 @@ const HIT_EPSILON = 0.0015;
 export function createMitosisBlob(
   colorA: number,
   colorB: number,
-  envMap: THREE.Texture | null,
   boxSize = 1.8,
 ): MetaballBlob {
   const uCenterA = uniform(new THREE.Vector3(0.06, 0, 0));
@@ -123,17 +139,21 @@ export function createMitosisBlob(
     );
   });
 
-  const shade = Fn(() => {
-    // Bug real encontrado en vivo: `t` arrancaba en 0.001 — con eso el
-    // primer punto marchado es prácticamente `rayOrigin` (la cámara en
-    // espacio local), NO la superficie de la caja por la que el rayo
-    // ya entró (`positionLocal`). Con MAX_DIST acotado a un poco más
-    // que la propia caja, el rayo nunca alcanzaba a llegar del todo
-    // desde la cámara hasta la mezcla de esferas — se descartaban
-    // TODOS los píxeles (la caja quedaba invisible). Arrancar `t` en
-    // la distancia real cámara->superficie corrige esto: el marchado
-    // empieza justo donde el rayo entra a la caja, no donde está la
-    // cámara.
+  // Bug real encontrado en vivo: `t` arrancaba en 0.001 — con eso el
+  // primer punto marchado es prácticamente `rayOrigin` (la cámara en
+  // espacio local), NO la superficie de la caja por la que el rayo
+  // ya entró (`positionLocal`). Con MAX_DIST acotado a un poco más
+  // que la propia caja, el rayo nunca alcanzaba a llegar del todo
+  // desde la cámara hasta la mezcla de esferas — se descartaban
+  // TODOS los píxeles (la caja quedaba invisible). Arrancar `t` en
+  // la distancia real cámara->superficie corrige esto: el marchado
+  // empieza justo donde el rayo entra a la caja, no donde está la
+  // cámara.
+  //
+  // Este nodo se COMPARTE entre colorNode/normalNode/emissiveNode
+  // (misma instancia de nodo → el builder de TSL lo genera una sola
+  // vez en el shader, no 3 raymarches).
+  const march = Fn(() => {
     const rayOrigin = modelWorldMatrixInverse.mul(vec4(cameraPosition, 1)).xyz.toVar();
     const rayDir = normalize(positionLocal.sub(rayOrigin)).toVar();
     const entryDist = length(positionLocal.sub(rayOrigin)).toVar();
@@ -158,44 +178,33 @@ export function createMitosisBlob(
       });
     });
 
-    Discard(hit.lessThan(0.5));
+    return vec4(p, hit);
+  })();
 
-    const normal = calcNormal(p);
-    const viewDir = normalize(rayOrigin.sub(p));
-    const lightDir = normalize(vec3(0.5, 0.75, 0.5));
-    const halfVec = normalize(viewDir.add(lightDir));
+  const hitPoint = march.xyz;
+  const hitFlag = march.w;
 
-    const baseColor = colorAt(p);
-    const ambient = baseColor.mul(0.22);
-    const diffuse = baseColor.mul(max(dot(normal, lightDir), 0).mul(0.75));
-    const specular = pow(max(dot(normal, halfVec), 0), 40).mul(1.4);
-    const fresnelTerm = pow(float(1).sub(max(dot(normal, viewDir), 0)), 3).mul(0.6);
-    const rim = baseColor.add(vec3(1, 1, 1)).mul(0.5).mul(fresnelTerm);
-
-    // Pedido explícito del usuario tras verlo en vivo ("se nota que
-    // son 2 materiales... no es el mismo que la partícula") — sin
-    // esto el blob se ve "plano" comparado con la esfera PBR real
-    // (que refleja el mismo cuarto/PMREM). Convertimos punto/normal a
-    // espacio MUNDO (el env map se muestrea en mundo, no en el
-    // espacio local de la caja) y reflejamos la vista real contra él,
-    // igual que MeshPhysicalMaterial hace internamente.
-    let envReflection: any = vec3(0, 0, 0);
-    if (envMap) {
-      const worldPos = modelWorldMatrix.mul(vec4(p, 1)).xyz;
-      const worldNormal = normalize(modelWorldMatrix.mul(vec4(normal, 0)).xyz);
-      const worldViewDir = normalize(cameraPosition.sub(worldPos));
-      const reflectDir = reflect(worldViewDir.negate(), worldNormal);
-      envReflection = pmremTexture(envMap, reflectDir, float(0.35)).rgb;
-    }
-    const fresnelReflect = pow(float(1).sub(max(dot(normal, viewDir), 0)), 2).mul(0.85).add(0.15);
-    const reflection = envReflection.mul(fresnelReflect).mul(0.8);
-
-    const finalColor = ambient.add(diffuse.mul(0.6)).add(rim.mul(0.5)).add(reflection).add(vec3(specular, specular, specular));
-    return vec4(finalColor, 1);
+  // Mismos parámetros, literal, que createHeroParticle — si aquél
+  // cambia, cambiar aquí igual (no hay forma de compartir el objeto
+  // porque éste es la variante Node del material).
+  const material = new THREE.MeshPhysicalNodeMaterial({
+    roughness: 0.08,
+    metalness: 0,
+    transmission: 0.75,
+    thickness: 1.2,
+    ior: 1.42,
+    iridescence: 0.55,
+    iridescenceIOR: 1.3,
+    clearcoat: 0.6,
+    clearcoatRoughness: 0.12,
+    envMapIntensity: 1.4,
   });
-
-  const material = new THREE.MeshBasicNodeMaterial();
-  material.colorNode = shade();
+  material.colorNode = Fn(() => {
+    Discard(hitFlag.lessThan(0.5));
+    return vec4(colorAt(hitPoint), 1);
+  })();
+  material.normalNode = normalize(transformNormalToView(calcNormal(hitPoint)));
+  material.emissiveNode = colorAt(hitPoint).mul(0.22);
 
   const geometry = new THREE.BoxGeometry(boxSize, boxSize, boxSize);
   const mesh = new THREE.Mesh(geometry, material);

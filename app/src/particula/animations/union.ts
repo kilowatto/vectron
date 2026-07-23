@@ -2,7 +2,6 @@ import * as THREE from "three/webgpu";
 import { type Animation, sequence, tween, spawnFlash, spawnExpandingRing } from "../effects";
 import { easeInCubic, easeInOutCubic, easeOutBack, easeOutCubic } from "../easing";
 import { createMitosisBlob, disposeBlob } from "../metaballBlob";
-import { getSharedEnvironment } from "../heroParticle";
 
 /** `meshA`/`meshB` siguen en `scene` en sus posiciones actuales al
  * empezar. `result` ya existe (escala 0, sin agregar a `scene` aún) —
@@ -122,7 +121,7 @@ const fusionCelular: UnionVariant = (scene, meshA, meshB, result, resultPos, dur
   meshA.visible = false;
   meshB.visible = false;
 
-  const blob = createMitosisBlob(colorA, colorB, getSharedEnvironment(), (halfDist0 * 2 + resultRadius) * 2.8);
+  const blob = createMitosisBlob(colorA, colorB, (halfDist0 * 2 + resultRadius) * 2.8);
   blob.mesh.position.copy(resultPos);
   blob.mesh.lookAt(resultPos.clone().add(dir));
   blob.uniforms.radiusA.value = radiusA;

@@ -2,7 +2,6 @@ import * as THREE from "three/webgpu";
 import { type Animation, combine, sequence, tween, wait, spawnFlash, spawnSparkBurst, spawnMotes } from "../effects";
 import { easeInOutCubic, easeOutCubic, easeOutBack } from "../easing";
 import { createMitosisBlob, disposeBlob } from "../metaballBlob";
-import { getSharedEnvironment } from "../heroParticle";
 
 /** `parent` sigue en `scene` al empezar (se remueve en el momento que
  * decida la variante — algunas lo esconden antes de separar, otras lo
@@ -99,7 +98,7 @@ const mitosisCelular: DivisionVariant = (scene, parent, childA, childB, posA, po
   childA.scale.setScalar(0.001);
   childB.scale.setScalar(0.001);
 
-  const blob = createMitosisBlob(colorA, colorB, getSharedEnvironment(), (separation + parentRadius) * 2.8);
+  const blob = createMitosisBlob(colorA, colorB, (separation + parentRadius) * 2.8);
   blob.mesh.position.copy(origin);
   blob.mesh.lookAt(origin.clone().add(dir));
   blob.uniforms.radiusA.value = parentRadius;
