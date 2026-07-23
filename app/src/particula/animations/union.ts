@@ -98,8 +98,13 @@ function autoTween(mesh: THREE.Mesh, duration: number) {
 const fusionCelular: UnionVariant = (scene, meshA, meshB, result, resultPos, duration, onDone) => {
   const startA = meshA.position.clone();
   const startB = meshB.position.clone();
-  const radiusA = (meshA.userData.baseRadius as number) ?? 0.32;
-  const radiusB = (meshB.userData.baseRadius as number) ?? 0.32;
+  // `baseRadius` es el radio de construcción de la geometría, SIN
+  // aplicar `mesh.scale` — si A o B vienen de una división reciente
+  // (escala reducida por conservación de volumen, ver division.ts),
+  // usar `baseRadius` a secas los infla al tamaño ANTES de haberse
+  // encogido, dándole al blob un radio mayor al que en verdad se veía.
+  const radiusA = ((meshA.userData.baseRadius as number) ?? 0.32) * meshA.scale.x;
+  const radiusB = ((meshB.userData.baseRadius as number) ?? 0.32) * meshB.scale.x;
   const resultRadius = Math.cbrt(radiusA ** 3 + radiusB ** 3);
   const colorA = (meshA.userData.baseColor as number) ?? 0xffffff;
   const colorB = (meshB.userData.baseColor as number) ?? 0xffffff;
@@ -130,9 +135,19 @@ const fusionCelular: UnionVariant = (scene, meshA, meshB, result, resultPos, dur
   // pequeño es imperceptible y evita el caso límite.
   const endSep = resultRadius * 0.12;
 
+  // Bug real visto en vivo ("no se que pruebas o ves!! esto esta peor"):
+  // con `easeInOutCubic` (progreso ~lineal en la mitad del tiempo), para
+  // el 30-40% de la duración YA se veían fusionadas en una sola gota —
+  // el resto de la animación no mostraba nada nuevo, un final aburrido y
+  // estático en vez de una fusión visible. `easeInCubic` (t³) mantiene
+  // el progreso casi plano durante la primera mitad — las 2 esferas se
+  // ven claramente separadas y acercándose (la misma acción "siempre
+  // visible" que hace que la mitosis se lea bien) — y comprime el cierre
+  // real + la mezcla hacia el último ~40%, terminando con una fusión
+  // clara justo antes del final en vez de al principio.
   return tween(
     duration,
-    easeInOutCubic,
+    easeInCubic,
     (eased) => {
       const halfSep = halfDist0 + (endSep - halfDist0) * eased;
       // Mismo signo invertido que en mitosis: `lookAt` orienta el eje

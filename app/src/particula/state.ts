@@ -206,6 +206,30 @@ export class ParticulaState {
     return bestId;
   }
 
+  /** Bug real visto en vivo (grabación de pantalla): el eje de división
+   * se elegía con un ángulo totalmente al azar en 3D, sin ninguna
+   * relación con hacia dónde mira la cámara. Cuando ese eje caía casi
+   * paralelo a la línea de vista, las 2 mitades se separaban en
+   * profundidad (una detrás de otra desde la cámara) — en pantalla se
+   * proyectan una encima de la otra y TODO el proceso (mitosis o su
+   * reverso, la fusión) se ve como una sola esfera que no hace nada,
+   * aunque en 3D la separación sea perfectamente real. Restringir el
+   * eje al plano PERPENDICULAR a la vista de la cámara (aleatorio sólo
+   * en ese plano) garantiza que la separación siempre se lea como
+   * movimiento lateral en pantalla, nunca como "hacia adentro/afuera". */
+  private randomLateralAxis(): THREE.Vector3 {
+    if (!this.camera || !this.controls) {
+      const angle = Math.random() * Math.PI * 2;
+      return new THREE.Vector3(Math.cos(angle), (Math.random() - 0.5) * 0.4, Math.sin(angle));
+    }
+    const viewDir = this.camera.position.clone().sub(this.controls.target).normalize();
+    const arbitrary = Math.abs(viewDir.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
+    const right = new THREE.Vector3().crossVectors(viewDir, arbitrary).normalize();
+    const up = new THREE.Vector3().crossVectors(right, viewDir).normalize();
+    const angle = Math.random() * Math.PI * 2;
+    return right.multiplyScalar(Math.cos(angle)).add(up.multiplyScalar(Math.sin(angle))).normalize();
+  }
+
   private randomSpawnPosition(): THREE.Vector3 {
     if (this.particles.size === 0) return new THREE.Vector3(0, 0, 0);
     const angle = Math.random() * Math.PI * 2;
@@ -246,8 +270,7 @@ export class ParticulaState {
     const origin = rec.mesh.position.clone();
     const color = (rec.mesh.userData.baseColor as number) ?? nextColor();
 
-    const angle = Math.random() * Math.PI * 2;
-    const dir = new THREE.Vector3(Math.cos(angle), (Math.random() - 0.5) * 0.4, Math.sin(angle));
+    const dir = this.randomLateralAxis();
     const separation = 0.55;
     const posA = origin.clone().addScaledVector(dir, separation);
     const posB = origin.clone().addScaledVector(dir, -separation);
