@@ -1,5 +1,5 @@
 import * as THREE from "three/webgpu";
-import { createHeroParticle, nextColor } from "./heroParticle";
+import { createHeroParticle, nextColor, type DriftParams } from "./heroParticle";
 import { BIRTH_VARIANTS } from "./animations/birth";
 import { DIVISION_VARIANTS } from "./animations/division";
 import { UNION_VARIANTS } from "./animations/union";
@@ -7,6 +7,7 @@ import { DEATH_VARIANTS } from "./animations/death";
 import { CONNECTOR_STYLES, type Connector } from "./connectorLines";
 import { tween, type Animation } from "./effects";
 import { easeInOutCubic } from "./easing";
+import { DEFAULT_CONFIG } from "./particulaConfig";
 
 /** Sólo necesitamos `target` de OrbitControls aquí — un tipo mínimo
  * evita acoplar state.ts al import del addon completo sólo por
@@ -38,6 +39,11 @@ function onFinish(anim: Animation, onDone: () => void): Animation {
 export interface ParticleRecord {
   id: number;
   mesh: THREE.Mesh;
+  /** Posición de reposo — el deriva browniano oscila ALREDEDOR de
+   * esto, nunca reemplaza la posición "real" de la partícula. Se
+   * actualiza sólo cuando una animación termina y la partícula queda
+   * quieta en su lugar definitivo (ver `lockedIds` en la clase). */
+  home: THREE.Vector3;
 }
 
 /** Estado central del playground — main.ts sólo llama a estos métodos
@@ -61,6 +67,13 @@ export class ParticulaState {
   private camera: THREE.PerspectiveCamera | null = null;
   private controls: CameraRig | null = null;
   private cameraTween: Animation | null = null;
+  private time = 0;
+  /** ids cuya posición está siendo manejada por completo por una
+   * animación activa (nacer/dividir) — el deriva browniano las salta
+   * para no pelearse cuadro a cuadro con el tween que las mueve. No
+   * hace falta para unión/muerte: esas partículas ya se desregistran
+   * ANTES de arrancar la variante, así que `tick()` nunca las toca. */
+  private lockedIds = new Set<number>();
 
   onChange: () => void = () => {};
 
@@ -180,7 +193,7 @@ export class ParticulaState {
   private register(mesh: THREE.Mesh): number {
     const id = this.nextId++;
     mesh.userData.particleId = id;
-    this.particles.set(id, { id, mesh });
+    this.particles.set(id, { id, mesh, home: mesh.position.clone() });
     return id;
   }
 
@@ -250,11 +263,18 @@ export class ParticulaState {
     const id = this.register(mesh);
     this.mostRecentId = id;
     this.busy = true;
+    // Bloqueada mientras nace: algunos estilos de nacimiento mueven la
+    // posición durante la animación (no sólo escala) — el deriva no
+    // debe pelearse con eso.
+    this.lockedIds.add(id);
     this.onChange();
     this.reframe([...this.otherPositions([id]), pos]);
     const anim = variant(this.scene, mesh, pos, color, duration);
     this.activeAnimations.push(
       onFinish(anim, () => {
+        const rec = this.particles.get(id);
+        if (rec) rec.home.copy(pos);
+        this.lockedIds.delete(id);
         this.busy = false;
         this.onChange();
       }),
@@ -286,6 +306,8 @@ export class ParticulaState {
     this.unregister(id);
     const idA = this.register(childA);
     const idB = this.register(childB);
+    this.lockedIds.add(idA);
+    this.lockedIds.add(idB);
     this.busy = true;
     this.onChange();
     this.reframe([...this.otherPositions([idA, idB]), posA, posB]);
@@ -296,7 +318,12 @@ export class ParticulaState {
       finished = true;
       this.mostRecentId = idB;
       this.busy = false;
-      void idA;
+      const recA = this.particles.get(idA);
+      if (recA) recA.home.copy(posA);
+      const recB = this.particles.get(idB);
+      if (recB) recB.home.copy(posB);
+      this.lockedIds.delete(idA);
+      this.lockedIds.delete(idB);
       this.onChange();
     });
     this.activeAnimations.push(anim);
@@ -387,11 +414,69 @@ export class ParticulaState {
     }
   }
 
+  /** Color/"vida" de la partícula seleccionada — pedido explícito del
+   * usuario ("si le selecciono una me sale un slider para moverme por
+   * toda la gama de colores"). Sólo actúa sobre `selectedId` (no
+   * `targetId()`): el slider debe aparecer/actuar sobre una selección
+   * explícita, no caer en la "más reciente" por defecto. */
+  getSelectedColor(): { hue: number; intensity: number } | null {
+    if (this.selectedId === null) return null;
+    const rec = this.particles.get(this.selectedId);
+    if (!rec) return null;
+    const mat = rec.mesh.material as THREE.MeshPhysicalMaterial;
+    const hsl = { h: 0, s: 0, l: 0 };
+    mat.color.getHSL(hsl);
+    return { hue: hsl.h * 360, intensity: mat.emissiveIntensity };
+  }
+
+  setSelectedHue(hueDeg: number) {
+    if (this.selectedId === null) return;
+    const rec = this.particles.get(this.selectedId);
+    if (!rec) return;
+    const c = DEFAULT_CONFIG.color;
+    const normalized = ((hueDeg % 360) + 360) % 360;
+    const color = new THREE.Color().setHSL(normalized / 360, c.saturation, c.lightness);
+    const mat = rec.mesh.material as THREE.MeshPhysicalMaterial;
+    mat.color.copy(color);
+    mat.emissive.copy(color);
+    // Se guarda como el color "base" de la partícula: así dividir/unir
+    // (que leen `baseColor` para heredar/promediar) recogen el tono
+    // elegido sin código adicional — ya funcionaba así antes de esto.
+    rec.mesh.userData.baseColor = color.getHex();
+  }
+
+  setSelectedEmissiveIntensity(value: number) {
+    if (this.selectedId === null) return;
+    const rec = this.particles.get(this.selectedId);
+    if (!rec) return;
+    (rec.mesh.material as THREE.MeshPhysicalMaterial).emissiveIntensity = value;
+  }
+
   tick(dt: number) {
+    this.time += dt;
     this.activeAnimations = this.activeAnimations.filter((a) => a.update(dt));
 
     if (this.cameraTween && !this.cameraTween.update(dt)) {
       this.cameraTween = null;
+    }
+
+    // Movimiento tipo browniano — pedido explícito del usuario ("cada
+    // partícula tiene su ritmo y dirección, no todas sincronizadas").
+    // Oscila alrededor de `home`, nunca lo reemplaza, y con amplitud
+    // acotada a una fracción del radio (ver DEFAULT_CONFIG.movement):
+    // a cualquier escala (incluidas las ~25,000 partículas del cubo
+    // real) cada una se queda dentro de su propio espacio, así que
+    // nunca hace falta comparar contra las demás para evitar choques.
+    for (const rec of this.particles.values()) {
+      if (this.lockedIds.has(rec.id)) continue;
+      const drift = rec.mesh.userData.drift as DriftParams | undefined;
+      if (!drift) continue;
+      const v = DEFAULT_CONFIG.movement.verticalDamping;
+      rec.mesh.position.set(
+        rec.home.x + Math.sin(this.time * drift.freq.x + drift.phase.x) * drift.amp,
+        rec.home.y + Math.sin(this.time * drift.freq.y + drift.phase.y) * drift.amp * v,
+        rec.home.z + Math.sin(this.time * drift.freq.z + drift.phase.z) * drift.amp,
+      );
     }
 
     if (this.connectorEnabled && this.particles.size >= 2) {

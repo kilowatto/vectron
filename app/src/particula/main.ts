@@ -7,6 +7,7 @@ import { DIVISION_VARIANTS } from "./animations/division";
 import { UNION_VARIANTS } from "./animations/union";
 import { DEATH_VARIANTS } from "./animations/death";
 import { CONNECTOR_STYLES } from "./connectorLines";
+import { loadConfig, saveConfig, exportConfigJSON, type ParticulaConfig } from "./particulaConfig";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#particula-canvas")!;
 
@@ -44,7 +45,7 @@ async function main() {
   engine.scene.add(seedMesh);
   state.seed(seedMesh);
 
-  setupUi(state, engine.camera, canvas);
+  setupUi(state, engine.camera, canvas, loadConfig());
 
   engine.start(
     (dt) => state.tick(dt),
@@ -66,7 +67,7 @@ function populateSelect(select: HTMLSelectElement, variants: Record<string, { la
   select.value = defaultKey;
 }
 
-function setupUi(state: ParticulaState, camera: THREE.Camera, canvas: HTMLCanvasElement) {
+function setupUi(state: ParticulaState, camera: THREE.Camera, canvas: HTMLCanvasElement, config: ParticulaConfig) {
   const durationSlider = document.querySelector<HTMLInputElement>("#duration-slider")!;
   const durationOutput = document.querySelector<HTMLSpanElement>("#duration-output")!;
   const styleNacer = document.querySelector<HTMLSelectElement>("#style-nacer")!;
@@ -79,15 +80,39 @@ function setupUi(state: ParticulaState, camera: THREE.Camera, canvas: HTMLCanvas
   const sheet = document.querySelector<HTMLDivElement>("#particula-sheet")!;
   const countEl = document.querySelector<HTMLSpanElement>("#particula-count")!;
   const actionButtons = document.querySelectorAll<HTMLButtonElement>(".pbtn[data-action]");
+  const colorSection = document.querySelector<HTMLDivElement>("#color-section")!;
+  const hueSlider = document.querySelector<HTMLInputElement>("#color-hue-slider")!;
+  const hueOutput = document.querySelector<HTMLSpanElement>("#color-hue-output")!;
+  const intensitySlider = document.querySelector<HTMLInputElement>("#color-intensity-slider")!;
+  const intensityOutput = document.querySelector<HTMLSpanElement>("#color-intensity-output")!;
+  const exportBtn = document.querySelector<HTMLButtonElement>("#export-config-btn")!;
 
-  populateSelect(styleNacer, BIRTH_VARIANTS, "fundido");
-  populateSelect(styleDividir, DIVISION_VARIANTS, "espontanea");
-  populateSelect(styleUnir, UNION_VARIANTS, "gravitacional");
-  populateSelect(styleMorir, DEATH_VARIANTS, "burbuja");
-  populateSelect(styleConector, CONNECTOR_STYLES, "sinapsis");
+  populateSelect(styleNacer, BIRTH_VARIANTS, config.styles.nacer);
+  populateSelect(styleDividir, DIVISION_VARIANTS, config.styles.dividir);
+  populateSelect(styleUnir, UNION_VARIANTS, config.styles.unir);
+  populateSelect(styleMorir, DEATH_VARIANTS, config.styles.morir);
+  populateSelect(styleConector, CONNECTOR_STYLES, config.styles.conector);
+  durationSlider.value = String(config.duration);
+  durationOutput.textContent = `${config.duration.toFixed(1)}s`;
+  connectorToggle.checked = config.connectorEnabled;
+  state.setConnectorEnabled(config.connectorEnabled);
+  state.setConnectorStyle(config.styles.conector);
+  intensitySlider.min = String(config.color.intensityMin);
+  intensitySlider.max = String(config.color.intensityMax);
+  intensitySlider.value = String(config.color.intensityDefault);
+  intensityOutput.textContent = config.color.intensityDefault.toFixed(2);
+  hueSlider.min = String(config.color.hueMinDeg);
+  hueSlider.max = String(config.color.hueMaxDeg);
 
+  // Todo lo que el usuario ajusta en la UI se auto-guarda de
+  // inmediato — pedido explícito ("guardar la configuración que voy
+  // haciendo") para que no se pierda entre recargas mientras se
+  // prueba, y para que "Exportar configuración" siempre refleje
+  // exactamente lo que se ve en pantalla, no un snapshot viejo.
   durationSlider.addEventListener("input", () => {
     durationOutput.textContent = `${Number(durationSlider.value).toFixed(1)}s`;
+    config.duration = Number(durationSlider.value);
+    saveConfig(config);
   });
 
   settingsToggle.addEventListener("click", () => {
@@ -96,9 +121,72 @@ function setupUi(state: ParticulaState, camera: THREE.Camera, canvas: HTMLCanvas
 
   connectorToggle.addEventListener("change", () => {
     state.setConnectorEnabled(connectorToggle.checked);
+    config.connectorEnabled = connectorToggle.checked;
+    saveConfig(config);
   });
   styleConector.addEventListener("change", () => {
     state.setConnectorStyle(styleConector.value);
+    config.styles.conector = styleConector.value;
+    saveConfig(config);
+  });
+  styleNacer.addEventListener("change", () => {
+    config.styles.nacer = styleNacer.value;
+    saveConfig(config);
+  });
+  styleDividir.addEventListener("change", () => {
+    config.styles.dividir = styleDividir.value;
+    saveConfig(config);
+  });
+  styleUnir.addEventListener("change", () => {
+    config.styles.unir = styleUnir.value;
+    saveConfig(config);
+  });
+  styleMorir.addEventListener("change", () => {
+    config.styles.morir = styleMorir.value;
+    saveConfig(config);
+  });
+
+  // Slider de color — pedido explícito ("si le selecciono una me sale
+  // un slider para moverme por toda la gama de colores"). Sólo actúa
+  // sobre la partícula EXPLÍCITAMENTE seleccionada (ver
+  // state.getSelectedColor/setSelectedHue), no sobre la "más
+  // reciente" — por eso el panel se muestra/oculta con
+  // `state.getSelectedId()`, no con `targetId()`.
+  hueSlider.addEventListener("input", () => {
+    const hue = Number(hueSlider.value);
+    hueOutput.textContent = `${Math.round(hue)}°`;
+    state.setSelectedHue(hue);
+  });
+  intensitySlider.addEventListener("input", () => {
+    const value = Number(intensitySlider.value);
+    intensityOutput.textContent = value.toFixed(2);
+    state.setSelectedEmissiveIntensity(value);
+  });
+
+  const exportOverlay = document.querySelector<HTMLDivElement>("#export-overlay")!;
+  const exportTextarea = document.querySelector<HTMLTextAreaElement>("#export-textarea")!;
+  const exportCloseBtn = document.querySelector<HTMLButtonElement>("#export-close-btn")!;
+
+  // `navigator.clipboard.writeText` puede fallar en silencio en varios
+  // contextos (sin "activación confiable" del click, iOS Safari en
+  // ciertos casos, HTTP sin TLS) — en vez de depender de que funcione,
+  // SIEMPRE se muestra el JSON completo y seleccionado en un textarea;
+  // el usuario tiene garantizado poder llevárselo aunque el
+  // portapapeles automático no haya funcionado.
+  exportBtn.addEventListener("click", async () => {
+    const json = exportConfigJSON(config);
+    exportTextarea.value = json;
+    exportOverlay.hidden = false;
+    exportTextarea.focus();
+    exportTextarea.select();
+    try {
+      await navigator.clipboard.writeText(json);
+    } catch {
+      /* ya queda visible y seleccionado para copiar a mano */
+    }
+  });
+  exportCloseBtn.addEventListener("click", () => {
+    exportOverlay.hidden = true;
   });
 
   function duration(): number {
@@ -138,6 +226,13 @@ function setupUi(state: ParticulaState, camera: THREE.Camera, canvas: HTMLCanvas
     pick(e.clientX, e.clientY);
   });
 
+  // Sólo se vuelve a leer el color desde `state` cuando la SELECCIÓN
+  // cambia (no en cada refreshUi) — si no, cada vez que el usuario
+  // arrastra el hue slider, éste dispara setSelectedHue -> onChange ->
+  // refreshUi, que le leería el mismo color de vuelta al slider en
+  // pleno arrastre (inofensivo pero redundante, y frágil si el
+  // redondeo de HSL<->hex no fuera exacto).
+  let lastSyncedSelection: number | null = null;
   function refreshUi() {
     const n = state.count();
     countEl.textContent = `${n} ${n === 1 ? "partícula" : "partículas"}`;
@@ -150,6 +245,19 @@ function setupUi(state: ParticulaState, camera: THREE.Camera, canvas: HTMLCanvas
       else if (action === "morir") enabled = state.canDie();
       btn.disabled = !enabled;
     });
+
+    const selectedId = state.getSelectedId();
+    colorSection.hidden = selectedId === null;
+    if (selectedId !== lastSyncedSelection) {
+      lastSyncedSelection = selectedId;
+      const c = selectedId !== null ? state.getSelectedColor() : null;
+      if (c) {
+        hueSlider.value = String(Math.round(c.hue));
+        hueOutput.textContent = `${Math.round(c.hue)}°`;
+        intensitySlider.value = String(c.intensity);
+        intensityOutput.textContent = c.intensity.toFixed(2);
+      }
+    }
   }
   state.onChange = refreshUi;
   refreshUi();

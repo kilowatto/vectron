@@ -1,5 +1,6 @@
 import * as THREE from "three/webgpu";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { DEFAULT_CONFIG } from "./particulaConfig";
 
 /** El material plano de particleField.ts (MeshBasicNodeMaterial, sin
  * luz, sólo un tinte por dominio) es intencional ahí — miles de
@@ -29,18 +30,38 @@ export function ensureEnvironment(renderer: THREE.WebGPURenderer, scene: THREE.S
   return sharedEnvMap;
 }
 
-/** Para que efectos que no son la partícula PBR normal (ej. el blob
- * raymarcheado de mitosis) puedan muestrear el MISMO entorno y así no
- * "cambiar de material" a medio de una animación — pedido explícito
- * del usuario tras verlo en vivo ("se nota que son 2 materiales...
- * no es el mismo que la partícula"). */
-export function getSharedEnvironment(): THREE.Texture | null {
-  return sharedEnvMap;
-}
-
 export interface HeroParticleOptions {
   color: number;
   radius?: number;
+}
+
+/** Parámetros del movimiento tipo browniano de una partícula — pedido
+ * explícito del usuario ("cada partícula tiene su propio ritmo y
+ * dirección, no todas sincronizadas"). En vez de ruido Perlin (más
+ * caro, necesita librería), 3 senoidales independientes por eje con
+ * frecuencia Y fase propias por partícula trazan una curva tipo
+ * Lissajous — nunca se repite exactamente, nunca dos partículas
+ * vibran igual, y es literalmente gratis de calcular por cuadro.
+ * `amp` ya viene resuelta en unidades de mundo (fracción del radio),
+ * no como fracción — así state.ts no necesita saber el radio para
+ * usarla. */
+export interface DriftParams {
+  freq: THREE.Vector3;
+  phase: THREE.Vector3;
+  amp: number;
+}
+
+function randRange(min: number, max: number): number {
+  return min + Math.random() * (max - min);
+}
+
+function createDrift(radius: number): DriftParams {
+  const m = DEFAULT_CONFIG.movement;
+  return {
+    freq: new THREE.Vector3(randRange(m.freqMin, m.freqMax), randRange(m.freqMin, m.freqMax), randRange(m.freqMin, m.freqMax)),
+    phase: new THREE.Vector3(randRange(0, Math.PI * 2), randRange(0, Math.PI * 2), randRange(0, Math.PI * 2)),
+    amp: radius * randRange(m.ampFractionMin, m.ampFractionMax),
+  };
 }
 
 /** Esfera PBR con transmisión (vidrio/gota de energía): baja
@@ -65,12 +86,13 @@ export function createHeroParticle(color: number, radius = 0.32): THREE.Mesh {
     clearcoat: 0.6,
     clearcoatRoughness: 0.12,
     emissive: color,
-    emissiveIntensity: 0.22,
+    emissiveIntensity: DEFAULT_CONFIG.color.intensityDefault,
     envMapIntensity: 1.4,
   });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.userData.baseRadius = radius;
   mesh.userData.baseColor = color;
+  mesh.userData.drift = createDrift(radius);
   return mesh;
 }
 

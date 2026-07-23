@@ -194,6 +194,123 @@ body {
   margin: 2px 0;
 }
 
+/* La pista arcoiris ES el mapa de valores del slider — así "recorrer
+ * toda la gama de colores" (pedido explícito del usuario) es visible
+ * en la barra misma, no algo que haya que imaginar. Un thumb con
+ * borde blanco se necesita para verse encima de cualquier tramo del
+ * arcoiris (un thumb del color de acento se perdería sobre tonos
+ * parecidos). */
+.hue-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    hsl(0 65% 55%),
+    hsl(60 65% 55%),
+    hsl(120 65% 55%),
+    hsl(180 65% 55%),
+    hsl(240 65% 55%),
+    hsl(300 65% 55%),
+    hsl(360 65% 55%)
+  );
+}
+
+.hue-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+
+.hue-slider::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+
+.secondary-btn {
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-size: 14px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.secondary-btn:active {
+  background: rgba(95, 201, 255, 0.22);
+  border-color: var(--accent);
+}
+
+.secondary-btn.confirmed {
+  background: rgba(95, 255, 160, 0.18);
+  border-color: #5fffa0;
+  color: #5fffa0;
+}
+
+/* Modal de exportación — siempre muestra el JSON seleccionable, sin
+ * importar si `navigator.clipboard.writeText` funcionó o no (falla en
+ * silencio en varios contextos: sin gesto de usuario "confiable" para
+ * la API, iOS Safari en ciertos casos, HTTP sin TLS). Así el usuario
+ * siempre tiene una forma de llevarse la configuración aunque el
+ * portapapeles automático no haya funcionado. */
+/* `:not([hidden])` en vez de aplicar `display:flex` directo al id: un
+ * selector de id le gana en especificidad a la regla `[hidden]
+ * {display:none}` del user-agent, así que sin este calificador el
+ * modal se ve SIEMPRE sin importar el atributo `hidden` — bug real
+ * visto en vivo (el overlay aparecía ya abierto justo al cargar la
+ * página, antes de tocar el botón de exportar). */
+#export-overlay:not([hidden]) {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+#export-modal {
+  width: 100%;
+  max-width: 520px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 16px;
+}
+
+#export-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+#export-textarea {
+  flex: 1;
+  min-height: 240px;
+  resize: none;
+  border-radius: 10px;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  padding: 10px;
+}
+
 /* Pantallas más anchas (tablet/desktop): panel de ajustes como sheet
  * lateral en vez de ocupar casi toda la altura, botones no forzados a
  * ancho completo. */
