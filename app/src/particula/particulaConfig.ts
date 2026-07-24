@@ -97,7 +97,15 @@ export interface ParticulaConfig {
      * sí. Sólo el TONO muta; saturación/luminosidad de cada hija se
      * quedan igual que las del padre (ver heroParticle.ts's
      * `mutateHue`) — así se ve como "la misma familia de color
-     * evolucionando", no un color al azar. */
+     * evolucionando", no un color al azar.
+     * Subido de 12 a 35: con un paso simétrico de +/-12 grados, tras
+     * ~10 generaciones (lo que toma llegar a ~1000 vía duplicación en
+     * el lote masivo) la dispersión resultante es de sólo std ~22°
+     * (paseo aleatorio: std ~= paso*sqrt(generaciones/3)) — visualmente
+     * "atorado en azul" como reportó el usuario en vivo con 856
+     * partículas. 35° da una dispersión mucho más amplia sin que un
+     * sólo paso individual (padre -> hija) se vea como un salto de
+     * color abrupto. */
     mutationDeg: number;
   };
   /** Disparar cientos/miles de divisiones o uniones en una sola
@@ -207,7 +215,7 @@ export const DEFAULT_CONFIG: ParticulaConfig = {
     intensityMin: 0,
     intensityMax: 1.4,
     intensityDefault: 0.55,
-    mutationDeg: 12,
+    mutationDeg: 35,
   },
   batch: {
     mode: "dividir",

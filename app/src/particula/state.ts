@@ -16,6 +16,16 @@ interface CameraRig {
   target: THREE.Vector3;
 }
 
+/** Factor sobre la SUMA de radios que cuenta como "demasiado cerca" —
+ * una sola constante compartida por el reintento al crear
+ * (`startDivide`'s retry) y por la relajación continua (`declump`) en
+ * vez de dos números afinados por separado, precisamente porque dos
+ * copias de la misma idea desincronizándose ya causó bugs reales en
+ * esta sesión (ver comentario de DEFAULT_CONFIG.material). >1 deja un
+ * margen sobre "apenas tocándose" para que el jitter browniano no
+ * las haga rozarse visiblemente. */
+const MIN_SEPARATION_FACTOR = 1.15;
+
 /** `BirthVariant` no recibe un `onDone` explícito en su firma (a
  * diferencia de división/unión/muerte) porque no necesita decidir
  * CUÁNDO remover nada de la escena — sólo revela una malla que ya
@@ -90,7 +100,25 @@ export class ParticulaState {
   // para configurar la velocidad y la intensidad del movimiento").
   private movementSpeed = DEFAULT_CONFIG.movement.speedDefault;
   private movementIntensity = DEFAULT_CONFIG.movement.intensityDefault;
+  // Grados máximos de mutación de tono por división — ver comentario
+  // en `startDivide` y en DEFAULT_CONFIG.color.mutationDeg.
+  private mutationDeg = DEFAULT_CONFIG.color.mutationDeg;
   private time = 0;
+  /** Buffers reutilizados entre cuadros por `declump` — evita
+   * reasignar arrays nuevos (y objetos `THREE.Vector3` de empuje) cada
+   * cuadro; sólo se reasignan si `n` crece más allá de la capacidad
+   * actual. */
+  private declumpScratch: {
+    capacity: number;
+    homeRefs: THREE.Vector3[];
+    px: Float64Array;
+    py: Float64Array;
+    pz: Float64Array;
+    r: Float64Array;
+    pushX: Float64Array;
+    pushY: Float64Array;
+    pushZ: Float64Array;
+  } | null = null;
   /** ids cuya posición está siendo manejada por completo por una
    * animación activa (nacer/dividir) — el deriva browniano las salta
    * para no pelearse cuadro a cuadro con el tween que las mueve. No
@@ -256,36 +284,184 @@ export class ParticulaState {
     return bestId;
   }
 
-  /** Bug real visto en vivo (grabación de pantalla): el eje de división
-   * se elegía con un ángulo totalmente al azar en 3D, sin ninguna
-   * relación con hacia dónde mira la cámara. Cuando ese eje caía casi
-   * paralelo a la línea de vista, las 2 mitades se separaban en
-   * profundidad (una detrás de otra desde la cámara) — en pantalla se
-   * proyectan una encima de la otra y TODO el proceso (mitosis o su
-   * reverso, la fusión) se ve como una sola esfera que no hace nada,
-   * aunque en 3D la separación sea perfectamente real. Restringir el
-   * eje al plano PERPENDICULAR a la vista de la cámara (aleatorio sólo
-   * en ese plano) garantiza que la separación siempre se lea como
-   * movimiento lateral en pantalla, nunca como "hacia adentro/afuera". */
-  private randomLateralAxis(): THREE.Vector3 {
-    if (!this.camera || !this.controls) {
-      const angle = Math.random() * Math.PI * 2;
-      return new THREE.Vector3(Math.cos(angle), (Math.random() - 0.5) * 0.4, Math.sin(angle));
+  /** Bug real visto en vivo, en un lote masivo de cientos de
+   * divisiones ("puso todo en un plano, no en una nube... y se
+   * encima entre ellas"): la versión anterior restringía el eje de
+   * división al plano PERPENDICULAR a la vista de la cámara — pensado
+   * para que una división SUELTA nunca se viera "de frente" (el eje
+   * alineado con la cámara hace que las 2 mitades se proyecten una
+   * encima de otra en pantalla). Eso funciona para una sola prueba,
+   * pero el modo masivo no rota la cámara — así que TODAS las
+   * divisiones de la corrida entera usaban el mismo plano fijo, y
+   * cientos de generaciones subdividiendo ese mismo plano terminan
+   * literalmente aplanadas, no en una nube 3D como el cubo real
+   * (ver worker/scripts/pca.ts — production distribuye en volumen,
+   * no en un plano). Isotrópico en 3D de verdad (método de rechazo de
+   * Marsaglia: un punto uniforme dentro de la esfera unitaria,
+   * normalizado — a diferencia de usar ángulos esféricos directos,
+   * esto NO se acumula en los polos) es lo correcto para que la nube
+   * crezca en volumen real. */
+  private randomIsotropicAxis(): THREE.Vector3 {
+    let x = 0;
+    let y = 0;
+    let z = 0;
+    let lenSq = 0;
+    do {
+      x = Math.random() * 2 - 1;
+      y = Math.random() * 2 - 1;
+      z = Math.random() * 2 - 1;
+      lenSq = x * x + y * y + z * z;
+    } while (lenSq > 1 || lenSq < 1e-6);
+    const invLen = 1 / Math.sqrt(lenSq);
+    return new THREE.Vector3(x * invLen, y * invLen, z * invLen);
+  }
+
+  /** ¿`pos` cae demasiado cerca de alguna partícula EXISTENTE que no
+   * sea parte de la operación que la está creando? No es la
+   * relajación completa que usa production (worker/scripts/pca.ts's
+   * `declumpPoints`, una pasada global de cientos de iteraciones —
+   * carísima para correr en vivo cuadro a cuadro); aquí basta
+   * rechazar/reintentar el eje al azar unas pocas veces hasta que no
+   * choque, barato porque sólo se hace al CREAR una posición nueva,
+   * no todos los cuadros. */
+  private isTooClose(pos: THREE.Vector3, excludeIds: Set<number>, minDist: number): boolean {
+    for (const [id, rec] of this.particles) {
+      if (excludeIds.has(id)) continue;
+      if (rec.mesh.position.distanceTo(pos) < minDist) return true;
     }
-    const viewDir = this.camera.position.clone().sub(this.controls.target).normalize();
-    const arbitrary = Math.abs(viewDir.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
-    const right = new THREE.Vector3().crossVectors(viewDir, arbitrary).normalize();
-    const up = new THREE.Vector3().crossVectors(right, viewDir).normalize();
-    const angle = Math.random() * Math.PI * 2;
-    return right.multiplyScalar(Math.cos(angle)).add(up.multiplyScalar(Math.sin(angle))).normalize();
+    return false;
   }
 
   private randomSpawnPosition(): THREE.Vector3 {
     if (this.particles.size === 0) return new THREE.Vector3(0, 0, 0);
-    const angle = Math.random() * Math.PI * 2;
-    const tilt = (Math.random() - 0.5) * 0.6;
     const radius = 0.9 + Math.random() * 0.4;
-    return new THREE.Vector3(Math.cos(angle) * radius, tilt, Math.sin(angle) * radius);
+    return this.randomIsotropicAxis().multiplyScalar(radius);
+  }
+
+  /** Anti-encimado CONTINUO, corrido cada cuadro — bug real reportado
+   * en vivo con un lote de ~850 ("se encima entre ellas"): el reintento
+   * de `isTooClose` al CREAR una división ayuda, pero en zonas ya
+   * densas puede agotar sus intentos y colocar una partícula
+   * encimada de todos modos (origen y separación fijos por intento,
+   * sólo cambia la dirección — si ninguna dirección libre existe
+   * cerca del origen, ningún reintento la va a encontrar). Esto es el
+   * equivalente en vivo/barato de la relajación real de production
+   * (worker/scripts/pca.ts's `declumpPoints`, 300 iteraciones en una
+   * sola pasada — carísimo correr así cuadro a cuadro): un hash
+   * espacial (celdas del tamaño de la distancia mínima, así sólo hace
+   * falta mirar la propia celda + vecinas, nunca las N² parejas) que
+   * empuja cada par encimado una fracción pequeña de la superposición
+   * por cuadro. Se acumula sobre `home` (no `mesh.position` — la
+   * deriva browniana ya lee `home` cada cuadro, ver el bloque de abajo
+   * en `tick`), así el ajuste persiste y converge en un par de
+   * segundos en vez de ser una corrección de un solo instante. */
+  private declump(dt: number) {
+    // Claves de celda ENTERAS empaquetadas en un solo número (bit
+    // shifting), no strings tipo `${cx},${cy},${cz}` — a cientos de
+    // partículas, un Map<string,...> reconstruido cada cuadro con
+    // template literals resultó medible en vivo (~11ms/cuadro con 900
+    // partículas, la mitad del presupuesto de un cuadro a 60fps).
+    // Buffers planos (Float64Array) para posición/radio/empuje en vez
+    // de un array de objetos `THREE.Vector3` — evita esa misma
+    // cantidad de asignaciones nuevas cada cuadro (presión de GC).
+    let n = 0;
+    for (const [id] of this.particles) {
+      if (!this.lockedIds.has(id)) n++;
+    }
+    if (n < 2) return;
+    if (!this.declumpScratch || this.declumpScratch.capacity < n) {
+      const capacity = Math.max(n, 64);
+      this.declumpScratch = {
+        capacity,
+        homeRefs: new Array(capacity),
+        px: new Float64Array(capacity),
+        py: new Float64Array(capacity),
+        pz: new Float64Array(capacity),
+        r: new Float64Array(capacity),
+        pushX: new Float64Array(capacity),
+        pushY: new Float64Array(capacity),
+        pushZ: new Float64Array(capacity),
+      };
+    }
+    const s = this.declumpScratch;
+    let i = 0;
+    let maxRadius = 0;
+    for (const [id, rec] of this.particles) {
+      if (this.lockedIds.has(id)) continue;
+      s.homeRefs[i] = rec.home;
+      s.px[i] = rec.home.x;
+      s.py[i] = rec.home.y;
+      s.pz[i] = rec.home.z;
+      const radius = (rec.mesh.userData.baseRadius as number) ?? 0.32;
+      s.r[i] = radius;
+      if (radius > maxRadius) maxRadius = radius;
+      s.pushX[i] = 0;
+      s.pushY[i] = 0;
+      s.pushZ[i] = 0;
+      i++;
+    }
+
+    const cellSize = maxRadius * 2 * 1.1;
+    const invCellSize = 1 / cellSize;
+    // Offset/máscara de 10 bits por eje: soporta celdas en
+    // [-512, 511] por eje (miles de unidades de mundo a este tamaño de
+    // celda) antes de que dos celdas distintas puedan colisionar en la
+    // misma clave.
+    const CELL_BITS = 10;
+    const CELL_OFFSET = 1 << (CELL_BITS - 1);
+    const CELL_MASK = (1 << CELL_BITS) - 1;
+    const keyOf = (cx: number, cy: number, cz: number) =>
+      (((cx + CELL_OFFSET) & CELL_MASK) << (2 * CELL_BITS)) | (((cy + CELL_OFFSET) & CELL_MASK) << CELL_BITS) | ((cz + CELL_OFFSET) & CELL_MASK);
+
+    const cells = new Map<number, number[]>();
+    const cx = new Int32Array(n);
+    const cy = new Int32Array(n);
+    const cz = new Int32Array(n);
+    for (let k = 0; k < n; k++) {
+      cx[k] = Math.floor(s.px[k] * invCellSize);
+      cy[k] = Math.floor(s.py[k] * invCellSize);
+      cz[k] = Math.floor(s.pz[k] * invCellSize);
+      const key = keyOf(cx[k], cy[k], cz[k]);
+      const arr = cells.get(key);
+      if (arr) arr.push(k);
+      else cells.set(key, [k]);
+    }
+
+    const correctionRate = 6; // fracción de la superposición corregida por segundo
+    for (let a = 0; a < n; a++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dz = -1; dz <= 1; dz++) {
+            const arr = cells.get(keyOf(cx[a] + dx, cy[a] + dy, cz[a] + dz));
+            if (!arr) continue;
+            for (const b of arr) {
+              if (b <= a) continue;
+              const diffX = s.px[a] - s.px[b];
+              const diffY = s.py[a] - s.py[b];
+              const diffZ = s.pz[a] - s.pz[b];
+              const d = Math.sqrt(diffX * diffX + diffY * diffY + diffZ * diffZ);
+              const minDist = (s.r[a] + s.r[b]) * MIN_SEPARATION_FACTOR;
+              if (d > 1e-6 && d < minDist) {
+                const overlap = minDist - d;
+                const mag = overlap * 0.5 * correctionRate * dt;
+                const invD = mag / d;
+                s.pushX[a] += diffX * invD;
+                s.pushY[a] += diffY * invD;
+                s.pushZ[a] += diffZ * invD;
+                s.pushX[b] -= diffX * invD;
+                s.pushY[b] -= diffY * invD;
+                s.pushZ[b] -= diffZ * invD;
+              }
+            }
+          }
+        }
+      }
+    }
+    for (let k = 0; k < n; k++) {
+      if (s.pushX[k] !== 0 || s.pushY[k] !== 0 || s.pushZ[k] !== 0) {
+        (s.homeRefs[k] as THREE.Vector3).set(s.px[k] + s.pushX[k], s.py[k] + s.pushY[k], s.pz[k] + s.pushZ[k]);
+      }
+    }
   }
 
   birth(variantKey: string, duration: number) {
@@ -350,18 +526,36 @@ export class ParticulaState {
     const origin = rec.mesh.position.clone();
     const parentColor = (rec.mesh.userData.baseColor as number) ?? nextColor();
 
-    const dir = this.randomLateralAxis();
+    const parentRadius = (rec.mesh.userData.baseRadius as number) ?? 0.32;
     const separation = 0.55;
-    const posA = origin.clone().addScaledVector(dir, separation);
-    const posB = origin.clone().addScaledVector(dir, -separation);
+    const excludeSelf = new Set([id]);
+    // Reintenta el eje al azar unas pocas veces si cualquiera de las 2
+    // posiciones nuevas cae encima de OTRA partícula (no relacionada,
+    // ya existente) — ver `isTooClose`. Con un eje isotrópico de
+    // verdad esto casi nunca hace falta más de 1-2 intentos salvo en
+    // zonas ya muy densas.
+    const minDist = parentRadius * 2 * MIN_SEPARATION_FACTOR;
+    let dir = this.randomIsotropicAxis();
+    let posA = origin.clone().addScaledVector(dir, separation);
+    let posB = origin.clone().addScaledVector(dir, -separation);
+    for (let attempt = 0; attempt < 8 && (this.isTooClose(posA, excludeSelf, minDist) || this.isTooClose(posB, excludeSelf, minDist)); attempt++) {
+      dir = this.randomIsotropicAxis();
+      posA = origin.clone().addScaledVector(dir, separation);
+      posB = origin.clone().addScaledVector(dir, -separation);
+    }
 
     // Pedido explícito del usuario: "cada partícula al dividirse tenga
     // otro color pero muy sutil, otro tono en camino a cambiar de
     // color" — cada hija muta el tono del padre por su cuenta (ver
-    // mutateHue en heroParticle.ts), así A y B también diverGen entre
-    // sí, no sólo del padre.
-    const colorA = mutateHue(parentColor);
-    const colorB = mutateHue(parentColor);
+    // mutateHue en heroParticle.ts), así A y B también divergen entre
+    // sí, no sólo del padre. `this.mutationDeg` (ver DEFAULT_CONFIG.
+    // color.mutationDeg) — bug real visto en vivo en un lote de ~850
+    // ("se quedó en azul"): con sólo ±12° por paso, tras ~10
+    // generaciones (2^10≈1000) la caminata aleatoria apenas se aleja
+    // del tono semilla — matemáticamente correcto pero demasiado sutil
+    // para notarse a esa escala; subido a 35°.
+    const colorA = mutateHue(parentColor, this.mutationDeg);
+    const colorB = mutateHue(parentColor, this.mutationDeg);
     const childA = createHeroParticle(colorA);
     const childB = createHeroParticle(colorB);
     childA.position.copy(origin);
@@ -700,6 +894,8 @@ export class ParticulaState {
         }
       }
     }
+
+    this.declump(dt);
 
     // Movimiento tipo browniano — pedido explícito del usuario ("cada
     // partícula tiene su ritmo y dirección, no todas sincronizadas").
