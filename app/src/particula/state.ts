@@ -175,7 +175,16 @@ export class ParticulaState {
     });
     const boundingRadius = maxDist + 0.45; // radio real de la partícula (0.32) + margen
     const fovRad = (this.camera.fov * Math.PI) / 180;
-    const desiredDistance = THREE.MathUtils.clamp((boundingRadius / Math.tan(fovRad / 2)) * 1.5, 0.9, 5.5);
+    // Tope subido de 5.5 a 25 — bug real reportado en vivo ("no hace
+    // zoom out para poder ver todo") con apenas 267 partículas: medido
+    // con el stepper determinístico, un lote de 267 ya llega a
+    // boundingRadius~3.8 (desiredDistance~12), y uno de 2000 a ~6.15
+    // (desiredDistance~20) — muy por encima del tope anterior, así que
+    // la cámara se quedaba pegada mucho más cerca de lo que el lote
+    // necesitaba sin importar cuánto creciera la nube. El tope de 25
+    // deja margen bajo `controlsMaxDistance`/`cameraFar` de
+    // SceneOverrides en particula/main.ts (ver scene/engine.ts).
+    const desiredDistance = THREE.MathUtils.clamp((boundingRadius / Math.tan(fovRad / 2)) * 1.5, 0.9, 25);
 
     const startTarget = this.controls.target.clone();
     const startCamPos = this.camera.position.clone();
@@ -549,13 +558,19 @@ export class ParticulaState {
     // color" — cada hija muta el tono del padre por su cuenta (ver
     // mutateHue en heroParticle.ts), así A y B también divergen entre
     // sí, no sólo del padre. `this.mutationDeg` (ver DEFAULT_CONFIG.
-    // color.mutationDeg) — bug real visto en vivo en un lote de ~850
-    // ("se quedó en azul"): con sólo ±12° por paso, tras ~10
-    // generaciones (2^10≈1000) la caminata aleatoria apenas se aleja
-    // del tono semilla — matemáticamente correcto pero demasiado sutil
-    // para notarse a esa escala; subido a 35°.
-    const colorA = mutateHue(parentColor, this.mutationDeg);
-    const colorB = mutateHue(parentColor, this.mutationDeg);
+    // color.mutationDeg).
+    // Signo FIJO por hija (A:+1, B:-1), no al azar cada una — bug real
+    // reportado en vivo con un lote de 267 ("no pasa a colores
+    // cálidos, le faltan muchos colores"): con signo random
+    // independiente por hija, la mitad de las divisiones mandan A y B
+    // para el MISMO lado, cancelando el avance — la caminata de la
+    // población entera no tiene sesgo neto y difunde muy lento
+    // (sqrt(generaciones)), nunca garantizado a llegar lejos del
+    // semilla. Con signo fijo, la rama que siempre hereda "+" (o
+    // siempre "-") acumula magnitud SIEMPRE en la misma dirección
+    // (lineal en generaciones) — ver el comentario de `mutateHue`.
+    const colorA = mutateHue(parentColor, this.mutationDeg, 1);
+    const colorB = mutateHue(parentColor, this.mutationDeg, -1);
     const childA = createHeroParticle(colorA);
     const childB = createHeroParticle(colorB);
     childA.position.copy(origin);

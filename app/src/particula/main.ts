@@ -13,7 +13,17 @@ const canvas = document.querySelector<HTMLCanvasElement>("#particula-canvas")!;
 
 async function main() {
   const config = loadConfig();
-  const engine = await createEngine(canvas, config.bloom);
+  // Lote masivo puede formar una nube de decenas de unidades de radio
+  // — muy por encima de lo que el cubo real necesita — así que aquí
+  // se pide alcance de cámara/niebla mucho mayor (ver SceneOverrides
+  // en scene/engine.ts); el cubo real (src/main.ts, sin overrides)
+  // sigue exactamente igual.
+  const engine = await createEngine(canvas, {
+    bloom: config.bloom,
+    fogDensity: null,
+    cameraFar: 60,
+    controlsMaxDistance: 30,
+  });
   ensureEnvironment(engine.renderer, engine.scene);
 
   // "que se cree una partícula en el centro con zoom donde se vea
@@ -24,7 +34,6 @@ async function main() {
   engine.camera.position.set(0.9, 0.65, 1.5);
   engine.controls.target.set(0, 0, 0);
   engine.controls.minDistance = 0.5;
-  engine.controls.maxDistance = 6;
   engine.controls.autoRotate = false;
 
   // Luz ambiental + direccional suave: MeshPhysicalMaterial necesita

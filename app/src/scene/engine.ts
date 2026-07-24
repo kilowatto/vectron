@@ -29,6 +29,27 @@ export interface BloomOptions {
   threshold?: number;
 }
 
+/** Igual que `bloomOverride` — el cubo real (miles de partículas
+ * dentro de CUBE_SCALE~1.9) nunca necesita alejar la cámara más de
+ * ~9.9 unidades ni niebla más allá de density=0.22, así que esos
+ * números viven hardcoded abajo. /particula's lote masivo puede crecer
+ * a una nube de mucho más volumen (bug real reportado en vivo:
+ * "no hace zoom out para poder ver todo" con apenas 267 partículas) —
+ * necesita poder pedir un alcance de cámara/niebla mucho mayor sin
+ * tocar los valores calibrados de producción. Omitir `overrides` (como
+ * ya hace src/main.ts) deja el comportamiento idéntico al de antes. */
+export interface SceneOverrides {
+  bloom?: BloomOptions;
+  /** `null` apaga la niebla por completo — a las distancias que puede
+   * necesitar un lote masivo (decenas de unidades) la FogExp2 real
+   * (density=0.22, cuadrática) ya funde todo con el fondo negro mucho
+   * antes de esa distancia, así que no basta con sólo alejar la
+   * cámara. */
+  fogDensity?: number | null;
+  cameraFar?: number;
+  controlsMaxDistance?: number;
+}
+
 /**
  * Motor 3D genérico: renderer WebGPU (con fallback WebGL), cámara,
  * OrbitControls, bloom y el resize/render-loop. No sabe nada de
@@ -43,7 +64,7 @@ export interface BloomOptions {
  * "eléctrico" de 1-8 partículas se lea de verdad, sin tocar el valor
  * que usa la app real (por defecto, si no se pasa `bloomOverride`,
  * el comportamiento es idéntico al de antes). */
-export async function createEngine(canvas: HTMLCanvasElement, bloomOverride?: BloomOptions): Promise<Engine> {
+export async function createEngine(canvas: HTMLCanvasElement, overrides?: SceneOverrides): Promise<Engine> {
   const renderer = new THREE.WebGPURenderer({ canvas, antialias: true });
   await renderer.init();
 
@@ -54,10 +75,15 @@ export async function createEngine(canvas: HTMLCanvasElement, bloomOverride?: Bl
     (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend === true;
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(0x05070a, 0.22);
+  // `??` no distingue `null` explícito de "no vino" (undefined) — con
+  // `overrides?.fogDensity ?? 0.22` un `fogDensity: null` (pedido por
+  // /particula para apagar la niebla) se colaba de vuelta a 0.22,
+  // bug real visto en vivo (la niebla seguía activa pese al override).
+  const fogDensity = overrides && "fogDensity" in overrides ? overrides.fogDensity : 0.22;
+  scene.fog = fogDensity === null ? null : new THREE.FogExp2(0x05070a, fogDensity);
 
   const { w: initW, h: initH } = stageSizeOf(canvas);
-  const camera = new THREE.PerspectiveCamera(50, initW / initH, 0.05, 50);
+  const camera = new THREE.PerspectiveCamera(50, initW / initH, 0.05, overrides?.cameraFar ?? 50);
   // Escalado ×1.52 junto con CUBE_SCALE en seed.ts (1.25->1.9): el cubo
   // real ahora ocupa más volumen, la cámara/órbita tienen que crecer en
   // la misma proporción o quedarían calibradas para un cubo que ya no
@@ -73,7 +99,7 @@ export async function createEngine(canvas: HTMLCanvasElement, bloomOverride?: Bl
   // original (0.35 vs 1.8) y el zoom de la rueda va HACIA el cursor,
   // no hacia el centro — es lo que hace posible "bucear" a un clúster.
   controls.minDistance = 0.53;
-  controls.maxDistance = 9.9;
+  controls.maxDistance = overrides?.controlsMaxDistance ?? 9.9;
   controls.zoomToCursor = true;
   // Bug real reportado en vivo con grabación de pantalla: el giro
   // automático (antes: field.group.rotation.y += ...) rotaba TODO el
@@ -96,6 +122,7 @@ export async function createEngine(canvas: HTMLCanvasElement, bloomOverride?: Bl
   // el espaciado real (CUBE_SCALE en seed.ts) ya resuelve el traslape,
   // apagar el bloom encima de eso dejaba todo sin vida sobre todo en
   // vistas poco densas como Principiante.
+  const bloomOverride = overrides?.bloom;
   const bloomPass = bloom(
     scenePassColor,
     bloomOverride?.strength ?? 0.27,

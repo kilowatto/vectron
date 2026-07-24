@@ -122,16 +122,32 @@ export function createHeroParticle(color: number, radius = 0.32): THREE.Mesh {
 /** Pedido explícito del usuario: "cada partícula al dividirse tenga
  * otro color pero muy sutil, otro tono en camino a cambiar de color".
  * Sólo se desplaza el TONO (grados en la rueda de color) un poco al
- * azar en cualquier dirección — saturación/luminosidad del color de
- * ENTRADA se conservan tal cual, para no aplanar la variedad que ya
- * trae la paleta o el slider. Llamar esto 2 veces con el mismo padre
- * (una por hija) hace que ambas hijas empiecen a diverger entre sí,
- * no sólo del padre — cada rama de la "familia" deriva su propio
- * tono con el tiempo, como pidió el usuario. */
-export function mutateHue(hex: number, maxDeltaDeg = DEFAULT_CONFIG.color.mutationDeg): number {
+ * azar, magnitud entre 0 y `maxDeltaDeg` — saturación/luminosidad del
+ * color de ENTRADA se conservan tal cual, para no aplanar la variedad
+ * que ya trae la paleta o el slider.
+ *
+ * `sign` fija la DIRECCIÓN (no la magnitud, que sigue al azar):
+ * bug real reportado en vivo con un lote real de 267 ("no pasa a
+ * colores cálidos, le faltan muchos colores") — con las 2 hijas
+ * mutando cada una con signo random INDEPENDIENTE (como estaba antes),
+ * el tono de la población hace una caminata aleatoria SIN sesgo neto;
+ * estadísticamente difunde (crece con sqrt(generaciones)) pero no hay
+ * garantía de alcanzar tonos lejos del semilla en pocas generaciones —
+ * en la práctica, la mitad de las veces ambas hijas de una división se
+ * mueven para el MISMO lado y se cancela el avance. Con signo FIJO por
+ * hija (A siempre +, B siempre -) cada división separa a sus 2 hijas
+ * en direcciones opuestas garantizado — la rama que siempre hereda el
+ * signo "+" (o siempre "-") de división en división ACUMULA magnitud
+ * en una sola dirección (crece LINEAL con generaciones, no sqrt), así
+ * que llega de verdad a tonos lejanos (cálidos, si el semilla es frío)
+ * en un número de generaciones realista, sin depender de que la
+ * caminata aleatoria "tenga suerte". Llamar sin `sign` (ej. desde el
+ * botón individual "Dividir") mantiene el comportamiento anterior. */
+export function mutateHue(hex: number, maxDeltaDeg = DEFAULT_CONFIG.color.mutationDeg, sign: -1 | 0 | 1 = 0): number {
   const hsl = { h: 0, s: 0, l: 0 };
   new THREE.Color(hex).getHSL(hsl, THREE.SRGBColorSpace);
-  const deltaDeg = (Math.random() * 2 - 1) * maxDeltaDeg;
+  const magnitude = Math.random() * maxDeltaDeg;
+  const deltaDeg = sign === 0 ? (Math.random() < 0.5 ? -1 : 1) * magnitude : sign * magnitude;
   const hueDeg = (((hsl.h * 360 + deltaDeg) % 360) + 360) % 360;
   return new THREE.Color().setHSL(hueDeg / 360, hsl.s, hsl.l, THREE.SRGBColorSpace).getHex();
 }
