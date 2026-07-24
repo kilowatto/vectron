@@ -1,5 +1,6 @@
 import * as THREE from "three/webgpu";
-import { createHeroParticle, nextColor, bodyColorOf, mutateHue, type DriftParams } from "./heroParticle";
+import { createHeroParticle, createDrift, nextColor, bodyColorOf, mutateHue, type DriftParams } from "./heroParticle";
+import { createInstancedField, INSTANCE_RADIUS, type InstancedField } from "./instancedField";
 import { BIRTH_VARIANTS } from "./animations/birth";
 import { DIVISION_VARIANTS } from "./animations/division";
 import { UNION_VARIANTS } from "./animations/union";
@@ -35,6 +36,63 @@ const MIN_SEPARATION_FACTOR = 1.15;
  * gradual con el crecimiento del lote, no un salto. Ver `declump`. */
 const BRAIN_RAMP_START = 500;
 const BRAIN_RAMP_RANGE = 700;
+
+/** A partir de este conteo, las partículas NUEVAS (nacer/dividir/unir)
+ * dejan de crearse como malla PBR individual y pasan al nivel
+ * instanciado (ver instancedField.ts) — pedido explícito del usuario
+ * ("quiero ver qué pasa si tenemos 25000"): cada malla PBR individual
+ * (SphereGeometry 64×64 + MeshPhysicalMaterial propio) es carísima de
+ * verdad — a 2000+ ya se medía en vivo cerca de colgar la pestaña.
+ * Coincide con `BRAIN_RAMP_START` a propósito: pasado ese punto ya
+ * estamos en "modo nube grande", performance y forma cambian juntas.
+ * Por debajo, todo sigue exactamente igual que antes (animación de
+ * mitosis/fusión, PBR "hiperrealista", selección por clic). */
+const INSTANCE_THRESHOLD = 500;
+/** Tope real del pool de instancias — debe alcanzar
+ * `DEFAULT_CONFIG.batch.targetMax` (ver particulaConfig.ts). Un
+ * InstancedMesh necesita su capacidad fija desde que se crea. */
+const INSTANCE_CAPACITY = 25000;
+
+/** Probabilidad, por hija, de que en vez de mutar el tono del padre
+ * (la deriva sutil ya pedida) reciba un color totalmente nuevo de la
+ * paleta — bug real reportado en vivo ("no hay muchos colores"): una
+ * sola caminata de tono, sin importar cuánto se le suba el grado de
+ * mutación, sigue siendo UNA familia de tonos derivando junta; nunca
+ * produce la variedad "muchos colores por categoría" del cubo real.
+ * Un salto ocasional a un color fresco de la paleta introduce nuevas
+ * "ramas" de color dentro de la misma nube, sin que la mayoría de las
+ * divisiones deje de verse como una deriva sutil (pedido explícito
+ * también, "sutil" — por eso la probabilidad es baja, no cada vez). */
+const COLOR_JUMP_PROBABILITY = 0.05;
+
+/** 14 offsets (la propia celda + 13 "hacia adelante" de las 26
+ * vecinas), no las 27 completas — bug de rendimiento real medido en
+ * vivo con 25,000 partículas: 27 vecinas por partícula visita cada
+ * PAR de celdas dos veces (una desde cada lado), duplicando el
+ * trabajo. Cada offset distinto de cero tiene un opuesto exacto
+ * (`(dx,dy,dz)` y `(-dx,-dy,-dz)`); quedarse sólo con el "positivo" en
+ * orden lexicográfico (dz>0, o dz=0&&dy>0, o dz=dy=0&&dx>0) cubre cada
+ * PAR de celdas una sola vez sin perder ninguna pareja de partículas
+ * — el filtro `b<=a` de siempre sigue haciendo falta sólo para la
+ * propia celda (offset 0,0,0, siempre el primero de la lista), donde
+ * ambos siguen siendo el mismo array. Aplanado a un solo Int8Array
+ * (3 números por offset) en vez de un array de tuplas — desestructurar
+ * `[dx,dy,dz]` 25,000×14 veces por cuadro también se notó en vivo. */
+const NEIGHBOR_CELL_OFFSETS: Int8Array = (() => {
+  const offsets: number[] = [0, 0, 0];
+  for (let dz = -1; dz <= 1; dz++) {
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0 && dz === 0) continue;
+        if (dz > 0 || (dz === 0 && dy > 0) || (dz === 0 && dy === 0 && dx > 0)) {
+          offsets.push(dx, dy, dz);
+        }
+      }
+    }
+  }
+  return new Int8Array(offsets);
+})();
+const NEIGHBOR_OFFSET_COUNT = NEIGHBOR_CELL_OFFSETS.length / 3;
 
 /** Aplica UNA VEZ (al crear la partícula, nunca cuadro a cuadro — ver
  * el comentario largo en `declump`) la anisotropía que le da su
@@ -104,14 +162,40 @@ export interface BatchStatus {
   inFlight: number;
 }
 
+/** Exactamente UNA de `mesh`/`instanceSlot` está poblada — cuál,
+ * depende de en qué nivel se creó la partícula (ver
+ * `INSTANCE_THRESHOLD`): `mesh` es una malla PBR propia (nivel
+ * individual, pocas partículas, la que ya existía toda la sesión);
+ * `instanceSlot` es un índice dentro del `InstancedMesh` compartido
+ * (nivel instanciado, agregado para soportar miles). Sacar
+ * `baseColor`/`baseRadius`/`drift` de `mesh.userData` a campos propios
+ * aquí (antes vivían sólo ahí) es lo que permite que ambos niveles
+ * comparen la misma metadata sin que el nivel instanciado necesite un
+ * `THREE.Object3D` para nada. */
 export interface ParticleRecord {
   id: number;
-  mesh: THREE.Mesh;
+  mesh: THREE.Mesh | null;
+  instanceSlot: number | null;
+  baseColor: number;
+  baseRadius: number;
+  drift: DriftParams;
+  /** Dirección unitaria fija hacia la silueta de cerebro — ver
+   * `computeBrainDir`; se asigna una sola vez, la primera vez que
+   * `declump` procesa la partícula (nunca al crearla, porque la
+   * posición de reposo definitiva a veces sólo se conoce al terminar
+   * una animación). */
+  brainDir: THREE.Vector3 | null;
   /** Posición de reposo — el deriva browniano oscila ALREDEDOR de
    * esto, nunca reemplaza la posición "real" de la partícula. Se
    * actualiza sólo cuando una animación termina y la partícula queda
    * quieta en su lugar definitivo (ver `lockedIds` en la clase). */
   home: THREE.Vector3;
+  /** Última posición RENDERIZADA (home + deriva browniano de este
+   * cuadro) — única fuente de verdad para "dónde está esta partícula
+   * ahora mismo" en vez de `mesh.position` (que no existe para
+   * partículas instanciadas). Se actualiza una vez por cuadro en
+   * `tick()`. */
+  renderPos: THREE.Vector3;
 }
 
 /** Estado central del playground — main.ts sólo llama a estos métodos
@@ -135,6 +219,16 @@ export class ParticulaState {
   private camera: THREE.PerspectiveCamera | null = null;
   private controls: CameraRig | null = null;
   private cameraTween: Animation | null = null;
+  /** Pool del nivel instanciado (ver INSTANCE_THRESHOLD) — se crea
+   * perezosamente, la primera vez que de verdad hace falta (nunca si
+   * el usuario se queda siempre por debajo del umbral). `slotOwners`
+   * es el mapeo inverso índice→partícula, necesario para el patrón
+   * "swap con el último y quitar" al liberar un slot (mantiene el
+   * rango activo [0, activeCount) siempre contiguo, sin huecos, para
+   * que `InstancedMesh.count` sea suficiente para esconder el resto). */
+  private instancedField: InstancedField | null = null;
+  private instanceActiveCount = 0;
+  private slotOwners: ParticleRecord[] = [];
   // Multiplicadores GLOBALES sobre la frecuencia/amplitud propia de
   // cada partícula — pedido explícito del usuario ("pon un slider
   // para configurar la velocidad y la intensidad del movimiento").
@@ -218,16 +312,16 @@ export class ParticulaState {
     });
     const boundingRadius = maxDist + 0.45; // radio real de la partícula (0.32) + margen
     const fovRad = (this.camera.fov * Math.PI) / 180;
-    // Tope subido de 5.5 a 25 — bug real reportado en vivo ("no hace
-    // zoom out para poder ver todo") con apenas 267 partículas: medido
-    // con el stepper determinístico, un lote de 267 ya llega a
-    // boundingRadius~3.8 (desiredDistance~12), y uno de 2000 a ~6.15
-    // (desiredDistance~20) — muy por encima del tope anterior, así que
-    // la cámara se quedaba pegada mucho más cerca de lo que el lote
-    // necesitaba sin importar cuánto creciera la nube. El tope de 25
-    // deja margen bajo `controlsMaxDistance`/`cameraFar` de
-    // SceneOverrides en particula/main.ts (ver scene/engine.ts).
-    const desiredDistance = THREE.MathUtils.clamp((boundingRadius / Math.tan(fovRad / 2)) * 1.5, 0.9, 25);
+    // Tope subido de 5.5 a 25, y luego a 130 — bug real reportado en
+    // vivo ("no hace zoom out para poder ver todo") con apenas 267
+    // partículas: medido con el stepper determinístico, un lote de
+    // 267 ya llega a boundingRadius~3.8 (desiredDistance~12), uno de
+    // 2000 a ~6.15 (desiredDistance~20). Subido de nuevo para soportar
+    // el nivel instanciado (ver INSTANCE_THRESHOLD, pedido explícito
+    // "quiero ver qué pasa si tenemos 25000") — deja margen bajo
+    // `controlsMaxDistance`/`cameraFar` de SceneOverrides en
+    // particula/main.ts (ver scene/engine.ts).
+    const desiredDistance = THREE.MathUtils.clamp((boundingRadius / Math.tan(fovRad / 2)) * 1.5, 0.9, 130);
 
     const startTarget = this.controls.target.clone();
     const startCamPos = this.camera.position.clone();
@@ -246,7 +340,7 @@ export class ParticulaState {
     const exclude = new Set(excludeIds);
     return Array.from(this.particles.values())
       .filter((rec) => !exclude.has(rec.id))
-      .map((rec) => rec.mesh.position.clone());
+      .map((rec) => rec.renderPos.clone());
   }
 
   targetId(): number | null {
@@ -269,8 +363,66 @@ export class ParticulaState {
     return this.particles.size;
   }
 
+  /** Sólo las partículas del nivel INDIVIDUAL — las del nivel
+   * instanciado no son mallas propias (ver ParticleRecord), así que no
+   * pueden aparecer en un raycast de selección por clic (main.ts's
+   * `raycaster.intersectObjects(state.meshes())`). Es una limitación de
+   * alcance aceptada a propósito: la selección/edición de color de UNA
+   * partícula sigue siendo del nivel individual (pocas, interactivas);
+   * el nivel instanciado es para ver el comportamiento/forma/
+   * rendimiento a escala, no para manipular una por una. */
   meshes(): THREE.Mesh[] {
-    return Array.from(this.particles.values(), (p) => p.mesh);
+    const result: THREE.Mesh[] = [];
+    for (const rec of this.particles.values()) {
+      if (rec.mesh) result.push(rec.mesh);
+    }
+    return result;
+  }
+
+  private isInstancedTier(): boolean {
+    return this.particles.size >= INSTANCE_THRESHOLD;
+  }
+
+  private ensureInstancedField(): InstancedField {
+    if (!this.instancedField) {
+      this.instancedField = createInstancedField(this.scene, INSTANCE_CAPACITY);
+    }
+    return this.instancedField;
+  }
+
+  /** Asigna el siguiente slot libre del pool instanciado — siempre al
+   * final del rango activo (`instanceActiveCount`), nunca reutiliza un
+   * hueco a medias: los huecos se evitan del todo con el patrón
+   * "swap con el último" en `freeInstanceSlot`, así el rango activo
+   * [0, instanceActiveCount) siempre queda contiguo y `mesh.count`
+   * (un solo número) basta para esconder el resto. */
+  private allocateInstanceSlot(rec: ParticleRecord, position: THREE.Vector3): number {
+    const field = this.ensureInstancedField();
+    const slot = this.instanceActiveCount++;
+    this.slotOwners[slot] = rec;
+    field.setSlot(slot, position, rec.baseColor);
+    field.setActiveCount(this.instanceActiveCount);
+    return slot;
+  }
+
+  private freeInstanceSlot(rec: ParticleRecord) {
+    if (rec.instanceSlot === null || !this.instancedField) return;
+    const slot = rec.instanceSlot;
+    const lastSlot = this.instanceActiveCount - 1;
+    if (slot !== lastSlot) {
+      const moved = this.slotOwners[lastSlot];
+      this.slotOwners[slot] = moved;
+      moved.instanceSlot = slot;
+      // No hace falta copiar los buffers de posición/color del slot
+      // movido aquí — el bloque de deriva browniano en `tick()` vuelve
+      // a escribir CADA partícula instanciada, cada cuadro, a partir
+      // de `instanceSlot` (que ya quedó actualizado arriba); el
+      // siguiente cuadro lo deja correcto solo.
+    }
+    this.slotOwners.pop();
+    this.instanceActiveCount--;
+    rec.instanceSlot = null;
+    this.instancedField.setActiveCount(this.instanceActiveCount);
   }
 
   isBusy(): boolean {
@@ -307,14 +459,54 @@ export class ParticulaState {
     return id;
   }
 
+  /** Nivel INDIVIDUAL — `mesh` ya viene creada por `createHeroParticle`
+   * (con `baseColor`/`baseRadius`/`drift` puestos en su `userData`);
+   * se copian a la propia `ParticleRecord` aquí para que el resto del
+   * código nunca necesite tocar `mesh.userData` directamente. */
   private register(mesh: THREE.Mesh): number {
     const id = this.nextId++;
     mesh.userData.particleId = id;
-    this.particles.set(id, { id, mesh, home: mesh.position.clone() });
+    const baseColor = (mesh.userData.baseColor as number) ?? 0xffffff;
+    const baseRadius = (mesh.userData.baseRadius as number) ?? 0.32;
+    const drift = (mesh.userData.drift as DriftParams) ?? createDrift(baseRadius);
+    this.particles.set(id, {
+      id,
+      mesh,
+      instanceSlot: null,
+      baseColor,
+      baseRadius,
+      drift,
+      brainDir: null,
+      home: mesh.position.clone(),
+      renderPos: mesh.position.clone(),
+    });
+    return id;
+  }
+
+  /** Nivel INSTANCIADO (ver INSTANCE_THRESHOLD) — no hay `THREE.Mesh`
+   * propia; la posición/color viven como un slot dentro del
+   * `InstancedMesh` compartido (ver instancedField.ts). */
+  private registerInstanced(color: number, radius: number, position: THREE.Vector3): number {
+    const id = this.nextId++;
+    const rec: ParticleRecord = {
+      id,
+      mesh: null,
+      instanceSlot: null,
+      baseColor: color,
+      baseRadius: radius,
+      drift: createDrift(radius),
+      brainDir: null,
+      home: position.clone(),
+      renderPos: position.clone(),
+    };
+    rec.instanceSlot = this.allocateInstanceSlot(rec, position);
+    this.particles.set(id, rec);
     return id;
   }
 
   private unregister(id: number) {
+    const rec = this.particles.get(id);
+    if (rec) this.freeInstanceSlot(rec);
     this.particles.delete(id);
     if (this.selectedId === id) this.selectedId = null;
     if (this.mostRecentId === id) this.mostRecentId = null;
@@ -327,7 +519,7 @@ export class ParticulaState {
     let bestDist = Infinity;
     for (const [otherId, rec] of this.particles) {
       if (otherId === id) continue;
-      const d = origin.mesh.position.distanceTo(rec.mesh.position);
+      const d = origin.renderPos.distanceTo(rec.renderPos);
       if (d < bestDist) {
         bestDist = d;
         bestId = otherId;
@@ -379,7 +571,7 @@ export class ParticulaState {
   private isTooClose(pos: THREE.Vector3, excludeIds: Set<number>, minDist: number): boolean {
     for (const [id, rec] of this.particles) {
       if (excludeIds.has(id)) continue;
-      if (rec.mesh.position.distanceTo(pos) < minDist) return true;
+      if (rec.renderPos.distanceTo(pos) < minDist) return true;
     }
     return false;
   }
@@ -447,19 +639,19 @@ export class ParticulaState {
       s.px[i] = rec.home.x;
       s.py[i] = rec.home.y;
       s.pz[i] = rec.home.z;
-      const radius = (rec.mesh.userData.baseRadius as number) ?? 0.32;
+      const radius = rec.baseRadius;
       s.r[i] = radius;
       if (radius > maxRadius) maxRadius = radius;
       // Partículas creadas antes de que existiera esta forma (ej. la
       // semilla inicial, sembrada directo en main.ts) no tienen
       // `brainDir` asignado — se calcula una vez aquí, a partir de su
-      // dirección actual desde el origen, y se cachea en userData para
-      // no repetir el cálculo cada cuadro.
-      let brainDir = rec.mesh.userData.brainDir as THREE.Vector3 | undefined;
+      // dirección actual desde el origen, y se cachea en el propio
+      // ParticleRecord para no repetir el cálculo cada cuadro.
+      let brainDir = rec.brainDir;
       if (!brainDir) {
         const fallbackDir = rec.home.lengthSq() > 1e-6 ? rec.home.clone().normalize() : this.randomIsotropicAxis();
         brainDir = computeBrainDir(fallbackDir);
-        rec.mesh.userData.brainDir = brainDir;
+        rec.brainDir = brainDir;
       }
       s.brainDirX[i] = brainDir.x;
       s.brainDirY[i] = brainDir.y;
@@ -470,7 +662,21 @@ export class ParticulaState {
       i++;
     }
 
-    const cellSize = maxRadius * 2 * 1.1;
+    // El radio del nivel INSTANCIADO (más chico) para el tamaño de
+    // celda cuando hay instancias en juego, no el máximo global — bug
+    // de rendimiento real medido en vivo: unas pocas partículas
+    // individuales (radio 0.32) mezcladas entre miles de instanciadas
+    // (radio 0.12) hacían que TODA la cuadrícula usara celdas basadas
+    // en 0.32, ~4.5x más grandes en volumen que las que en realidad
+    // necesita la inmensa mayoría — cada celda terminaba con muchos
+    // más vecinos que revisar. Con el radio correcto, ~75ms/cuadro con
+    // 25,000 partículas bajó a algo manejable. El riesgo aceptado: una
+    // partícula individual (rara, ≤500 como mucho) podría no detectar
+    // una instanciada vecina si cae más allá de la cuadrícula de 3×3×3
+    // celdas — un caso de borde raro entre los dos niveles, no un
+    // problema sistemático.
+    const cellRadius = this.instanceActiveCount > 0 ? INSTANCE_RADIUS : maxRadius;
+    const cellSize = cellRadius * 2 * 1.1;
     const invCellSize = 1 / cellSize;
     // Offset/máscara de 10 bits por eje: soporta celdas en
     // [-512, 511] por eje (miles de unidades de mundo a este tamaño de
@@ -498,30 +704,41 @@ export class ParticulaState {
 
     const correctionRate = 6; // fracción de la superposición corregida por segundo
     for (let a = 0; a < n; a++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dz = -1; dz <= 1; dz++) {
-            const arr = cells.get(keyOf(cx[a] + dx, cy[a] + dy, cz[a] + dz));
-            if (!arr) continue;
-            for (const b of arr) {
-              if (b <= a) continue;
-              const diffX = s.px[a] - s.px[b];
-              const diffY = s.py[a] - s.py[b];
-              const diffZ = s.pz[a] - s.pz[b];
-              const d = Math.sqrt(diffX * diffX + diffY * diffY + diffZ * diffZ);
-              const minDist = (s.r[a] + s.r[b]) * MIN_SEPARATION_FACTOR;
-              if (d > 1e-6 && d < minDist) {
-                const overlap = minDist - d;
-                const mag = overlap * 0.5 * correctionRate * dt;
-                const invD = mag / d;
-                s.pushX[a] += diffX * invD;
-                s.pushY[a] += diffY * invD;
-                s.pushZ[a] += diffZ * invD;
-                s.pushX[b] -= diffX * invD;
-                s.pushY[b] -= diffY * invD;
-                s.pushZ[b] -= diffZ * invD;
-              }
-            }
+      const acx = cx[a];
+      const acy = cy[a];
+      const acz = cz[a];
+      for (let oi = 0; oi < NEIGHBOR_OFFSET_COUNT; oi++) {
+        const o3 = oi * 3;
+        // Clave inlinead (no una llamada a `keyOf`) — 25,000×14 veces
+        // por cuadro, la indirección de la función también se notó.
+        const key =
+          (((acx + NEIGHBOR_CELL_OFFSETS[o3] + CELL_OFFSET) & CELL_MASK) << (2 * CELL_BITS)) |
+          (((acy + NEIGHBOR_CELL_OFFSETS[o3 + 1] + CELL_OFFSET) & CELL_MASK) << CELL_BITS) |
+          ((acz + NEIGHBOR_CELL_OFFSETS[o3 + 2] + CELL_OFFSET) & CELL_MASK);
+        const arr = cells.get(key);
+        if (!arr) continue;
+        // El filtro `b<=a` sólo aplica a la propia celda (offset
+        // 0,0,0, siempre `oi===0`) — para cualquier otro offset, `arr`
+        // es la lista de OTRA celda distinta, así que cada partícula
+        // ahí ya es una pareja nueva sin importar el índice.
+        const isSelfCell = oi === 0;
+        for (const b of arr) {
+          if (isSelfCell && b <= a) continue;
+          const diffX = s.px[a] - s.px[b];
+          const diffY = s.py[a] - s.py[b];
+          const diffZ = s.pz[a] - s.pz[b];
+          const d = Math.sqrt(diffX * diffX + diffY * diffY + diffZ * diffZ);
+          const minDist = (s.r[a] + s.r[b]) * MIN_SEPARATION_FACTOR;
+          if (d > 1e-6 && d < minDist) {
+            const overlap = minDist - d;
+            const mag = overlap * 0.5 * correctionRate * dt;
+            const invD = mag / d;
+            s.pushX[a] += diffX * invD;
+            s.pushY[a] += diffY * invD;
+            s.pushZ[a] += diffZ * invD;
+            s.pushX[b] -= diffX * invD;
+            s.pushY[b] -= diffY * invD;
+            s.pushZ[b] -= diffZ * invD;
           }
         }
       }
@@ -591,10 +808,22 @@ export class ParticulaState {
 
   birth(variantKey: string, duration: number) {
     if (!this.canBirth()) return;
-    const variant = BIRTH_VARIANTS[variantKey]?.run ?? BIRTH_VARIANTS.fundido.run;
     const color = nextColor();
-    const mesh = createHeroParticle(color);
     const pos = this.randomSpawnPosition();
+
+    // Nivel instanciado (ver INSTANCE_THRESHOLD) — mismo motivo que
+    // `startDivide`/`startUnite`: sin malla PBR individual no hay nada
+    // que animar con `BIRTH_VARIANTS`, aparece directo.
+    if (this.isInstancedTier()) {
+      const id = this.registerInstanced(color, INSTANCE_RADIUS, pos);
+      this.mostRecentId = id;
+      this.onChange();
+      this.reframe([...this.otherPositions([id]), pos]);
+      return;
+    }
+
+    const variant = BIRTH_VARIANTS[variantKey]?.run ?? BIRTH_VARIANTS.fundido.run;
+    const mesh = createHeroParticle(color);
     mesh.position.copy(pos);
     mesh.scale.setScalar(0.001);
     this.scene.add(mesh);
@@ -644,14 +873,32 @@ export class ParticulaState {
    * lote: con decenas lanzándose por segundo, reencuadrar la cámara en
    * CADA una sería un mareo — el lote reencuadra una sola vez, aparte
    * (ver `tick`). */
+  /** Pedido explícito del usuario: "cada partícula al dividirse tenga
+   * otro color pero muy sutil, otro tono en camino a cambiar de
+   * color" — cada hija muta el tono del padre por su cuenta (ver
+   * mutateHue en heroParticle.ts), así A y B también divergen entre sí,
+   * no sólo del padre. Signo FIJO por hija (no al azar cada una) — bug
+   * real reportado en vivo con un lote de 267 ("no pasa a colores
+   * cálidos"): con signo random independiente, la mitad de las
+   * divisiones mandan A y B para el MISMO lado, cancelando el avance.
+   * Con signo fijo, la rama que siempre hereda el mismo signo acumula
+   * magnitud SIEMPRE en la misma dirección (lineal en generaciones, no
+   * sqrt). Aparte, `COLOR_JUMP_PROBABILITY` (bug real reportado en
+   * vivo, "no hay muchos colores"): una sola caminata de tono nunca
+   * produce la variedad "muchos colores por categoría" del cubo real,
+   * sin importar cuánto se suba el grado de mutación — un salto
+   * ocasional a un color fresco de la paleta abre nuevas ramas. */
+  private childColor(parentColor: number, sign: 1 | -1): number {
+    if (Math.random() < COLOR_JUMP_PROBABILITY) return nextColor();
+    return mutateHue(parentColor, this.mutationDeg, sign);
+  }
+
   private startDivide(id: number, variantKey: string, duration: number, onComplete: (idA: number, idB: number) => void, opts: { reframe?: boolean } = {}): boolean {
     const rec = this.particles.get(id);
     if (!rec) return false;
-    const variant = DIVISION_VARIANTS[variantKey]?.run ?? DIVISION_VARIANTS.espontanea.run;
-    const origin = rec.mesh.position.clone();
-    const parentColor = (rec.mesh.userData.baseColor as number) ?? nextColor();
-
-    const parentRadius = (rec.mesh.userData.baseRadius as number) ?? 0.32;
+    const origin = rec.renderPos.clone();
+    const parentColor = rec.baseColor;
+    const parentRadius = rec.baseRadius;
     const separation = 0.55;
     const excludeSelf = new Set([id]);
     // Reintenta el eje al azar unas pocas veces si cualquiera de las 2
@@ -669,24 +916,60 @@ export class ParticulaState {
       posB = origin.clone().addScaledVector(dir, -separation);
     }
 
-    // Pedido explícito del usuario: "cada partícula al dividirse tenga
-    // otro color pero muy sutil, otro tono en camino a cambiar de
-    // color" — cada hija muta el tono del padre por su cuenta (ver
-    // mutateHue en heroParticle.ts), así A y B también divergen entre
-    // sí, no sólo del padre. `this.mutationDeg` (ver DEFAULT_CONFIG.
-    // color.mutationDeg).
-    // Signo FIJO por hija (A:+1, B:-1), no al azar cada una — bug real
-    // reportado en vivo con un lote de 267 ("no pasa a colores
-    // cálidos, le faltan muchos colores"): con signo random
-    // independiente por hija, la mitad de las divisiones mandan A y B
-    // para el MISMO lado, cancelando el avance — la caminata de la
-    // población entera no tiene sesgo neto y difunde muy lento
-    // (sqrt(generaciones)), nunca garantizado a llegar lejos del
-    // semilla. Con signo fijo, la rama que siempre hereda "+" (o
-    // siempre "-") acumula magnitud SIEMPRE en la misma dirección
-    // (lineal en generaciones) — ver el comentario de `mutateHue`.
-    const colorA = mutateHue(parentColor, this.mutationDeg, 1);
-    const colorB = mutateHue(parentColor, this.mutationDeg, -1);
+    const colorA = this.childColor(parentColor, 1);
+    const colorB = this.childColor(parentColor, -1);
+
+    // Nivel INSTANCIADO (ver INSTANCE_THRESHOLD) — pedido explícito del
+    // usuario ("quiero ver qué pasa si tenemos 25000"): a esta escala
+    // no hay animación de mitosis (el blob raymarcheado de
+    // metaballBlob.ts asume mallas PBR individuales, carísimo repetir
+    // miles de veces) — las 2 hijas aparecen directo en su posición
+    // final, igual que el cubo real no anima la aparición de cada
+    // concepto uno por uno.
+    // `canAnimate` (¿el padre tiene malla real?) y `useInstanced` (¿en
+    // qué nivel deben nacer las hijas, según el conteo) son
+    // DECISIONES DISTINTAS — bug real encontrado antes de deployar:
+    // unir la misma condición ("sin malla" ⇒ "instanciado") hacía que
+    // una nube ya instanciada nunca pudiera volver al nivel individual
+    // al encogerse de vuelta por debajo del umbral (verificado en
+    // vivo: de 10,000 a 100 con unión masiva, las 100 seguían
+    // instanciadas). Aquí el padre puede carecer de malla (ya era
+    // instanciado) y aun así las hijas deben nacer individuales si el
+    // conteo ya volvió a estar por debajo del umbral.
+    const canAnimate = rec.mesh !== null;
+    const useInstanced = this.isInstancedTier();
+
+    if (!canAnimate || useInstanced) {
+      if (rec.mesh) {
+        this.scene.remove(rec.mesh);
+        rec.mesh.geometry.dispose();
+        (rec.mesh.material as THREE.Material).dispose();
+      }
+      this.unregister(id);
+      let idA: number;
+      let idB: number;
+      if (useInstanced) {
+        idA = this.registerInstanced(colorA, INSTANCE_RADIUS, posA);
+        idB = this.registerInstanced(colorB, INSTANCE_RADIUS, posB);
+      } else {
+        const childA = createHeroParticle(colorA);
+        const childB = createHeroParticle(colorB);
+        childA.position.copy(posA);
+        childB.position.copy(posB);
+        this.scene.add(childA, childB);
+        idA = this.register(childA);
+        idB = this.register(childB);
+      }
+      this.particles.get(idA)!.home.copy(posA);
+      this.particles.get(idB)!.home.copy(posB);
+      if (opts.reframe ?? true) {
+        this.reframe([...this.otherPositions([idA, idB]), posA, posB]);
+      }
+      onComplete(idA, idB);
+      return true;
+    }
+
+    const variant = DIVISION_VARIANTS[variantKey]?.run ?? DIVISION_VARIANTS.espontanea.run;
     const childA = createHeroParticle(colorA);
     const childB = createHeroParticle(colorB);
     childA.position.copy(origin);
@@ -695,6 +978,7 @@ export class ParticulaState {
     childB.scale.setScalar(0.001);
     this.scene.add(childA, childB);
 
+    const parentMesh = rec.mesh!;
     this.unregister(id);
     const idA = this.register(childA);
     const idB = this.register(childB);
@@ -705,7 +989,7 @@ export class ParticulaState {
     }
 
     let finished = false;
-    const anim = variant(this.scene, rec.mesh, childA, childB, posA, posB, duration, () => {
+    const anim = variant(this.scene, parentMesh, childA, childB, posA, posB, duration, () => {
       if (finished) return;
       finished = true;
       const recA = this.particles.get(idA);
@@ -746,20 +1030,32 @@ export class ParticulaState {
     const recA = this.particles.get(idA);
     const recB = this.particles.get(idB);
     if (!recA || !recB) return false;
-    const variant = UNION_VARIANTS[variantKey]?.run ?? UNION_VARIANTS.gravitacional.run;
 
-    const colorA = (recA.mesh.userData.baseColor as number) ?? 0xffffff;
-    const colorB = (recB.mesh.userData.baseColor as number) ?? 0xffffff;
+    const colorA = recA.baseColor;
+    const colorB = recB.baseColor;
     const blended = new THREE.Color(colorA).lerp(new THREE.Color(colorB), 0.5).getHex();
-    const posA = recA.mesh.position.clone();
-    const posB = recB.mesh.position.clone();
+    const posA = recA.renderPos.clone();
+    const posB = recB.renderPos.clone();
     const resultPos = new THREE.Vector3().lerpVectors(posA, posB, 0.5);
-    const result = createHeroParticle(blended);
-    result.position.copy(resultPos);
-    result.scale.setScalar(0.001);
 
+    const meshA = recA.mesh;
+    const meshB = recB.mesh;
+    // Si a CUALQUIERA le falta malla no hay 2 mallas reales que animar
+    // juntas — pero eso es sólo sobre la ANIMACIÓN, no sobre en qué
+    // nivel debe nacer el resultado (bug real encontrado antes de
+    // deployar: la primera versión usaba "falta malla" para forzar
+    // TAMBIÉN el nivel instanciado, así que una vez que la nube entera
+    // pasaba a instanciada, unir nunca la devolvía al nivel individual
+    // sin importar cuánto se achicara después — verificado en vivo,
+    // de 10,000 a 100 quedaban las 100 instanciadas igual). El nivel sí
+    // depende sólo del conteo, decidido DESPUÉS de quitar A y B (la
+    // unión ACHICA la población, así que puede cruzar el umbral hacia
+    // abajo).
+    const canAnimate = meshA !== null && meshB !== null;
     this.unregister(idA);
     this.unregister(idB);
+    const useInstanced = this.isInstancedTier();
+
     if (opts.reframe ?? true) {
       // Bug real visto en vivo ("parpadea" al unir): unregister ya
       // quitó A y B del mapa, así que otherPositions([]) ya NO los
@@ -773,14 +1069,45 @@ export class ParticulaState {
       this.reframe([...this.otherPositions([]), posA, posB, resultPos]);
     }
 
-    let finished = false;
-    const anim = variant(this.scene, recA.mesh, recB.mesh, result, resultPos, duration, () => {
-      if (finished) return;
-      finished = true;
-      const resultId = this.register(result);
-      onComplete(resultId);
-    });
-    this.activeAnimations.push(anim);
+    if (canAnimate && !useInstanced) {
+      const variant = UNION_VARIANTS[variantKey]?.run ?? UNION_VARIANTS.gravitacional.run;
+      const result = createHeroParticle(blended);
+      result.position.copy(resultPos);
+      result.scale.setScalar(0.001);
+
+      let finished = false;
+      const anim = variant(this.scene, meshA!, meshB!, result, resultPos, duration, () => {
+        if (finished) return;
+        finished = true;
+        const resultId = this.register(result);
+        onComplete(resultId);
+      });
+      this.activeAnimations.push(anim);
+      return true;
+    }
+
+    // Sin animación (nivel instanciado, o alguno de los 2 ya lo era) —
+    // el resultado nace directo, en el nivel que le toque por conteo.
+    if (meshA) {
+      this.scene.remove(meshA);
+      meshA.geometry.dispose();
+      (meshA.material as THREE.Material).dispose();
+    }
+    if (meshB) {
+      this.scene.remove(meshB);
+      meshB.geometry.dispose();
+      (meshB.material as THREE.Material).dispose();
+    }
+    let resultId: number;
+    if (useInstanced) {
+      resultId = this.registerInstanced(blended, INSTANCE_RADIUS, resultPos);
+    } else {
+      const result = createHeroParticle(blended);
+      result.position.copy(resultPos);
+      this.scene.add(result);
+      resultId = this.register(result);
+    }
+    onComplete(resultId);
     return true;
   }
 
@@ -789,16 +1116,25 @@ export class ParticulaState {
     const id = this.targetId();
     if (id === null) return;
     const rec = this.particles.get(id)!;
-    const variant = DEATH_VARIANTS[variantKey]?.run ?? DEATH_VARIANTS.burbuja.run;
-    const color = (rec.mesh.userData.baseColor as number) ?? 0xffffff;
+    const mesh = rec.mesh;
 
     this.unregister(id);
     this.busy = true;
     this.onChange();
     this.reframe(this.otherPositions([]));
 
+    // Sin malla (partícula del nivel instanciado, ver
+    // INSTANCE_THRESHOLD) no hay nada que animar — desaparece directo.
+    if (!mesh) {
+      this.busy = false;
+      this.onChange();
+      return;
+    }
+
+    const variant = DEATH_VARIANTS[variantKey]?.run ?? DEATH_VARIANTS.burbuja.run;
+    const color = rec.baseColor;
     let finished = false;
-    const anim = variant(this.scene, rec.mesh, color, duration, () => {
+    const anim = variant(this.scene, mesh, color, duration, () => {
       if (finished) return;
       finished = true;
       this.busy = false;
@@ -831,7 +1167,12 @@ export class ParticulaState {
   getSelectedColor(): { hue: number; intensity: number } | null {
     if (this.selectedId === null) return null;
     const rec = this.particles.get(this.selectedId);
-    if (!rec) return null;
+    // `rec.mesh` sólo puede ser null para partículas del nivel
+    // instanciado (ver INSTANCE_THRESHOLD) — y esas nunca pueden estar
+    // seleccionadas (no aparecen en el raycast de `meshes()`), así que
+    // esto en la práctica nunca debería disparar; se deja como guardia
+    // defensiva en vez de asumirlo.
+    if (!rec || !rec.mesh) return null;
     const mat = rec.mesh.material as THREE.MeshPhysicalMaterial;
     const hsl = { h: 0, s: 0, l: 0 };
     // `emissive` (el color BRILLANTE, sin oscurecer) en vez de `color`
@@ -846,7 +1187,7 @@ export class ParticulaState {
   setSelectedHue(hueDeg: number) {
     if (this.selectedId === null) return;
     const rec = this.particles.get(this.selectedId);
-    if (!rec) return;
+    if (!rec || !rec.mesh) return;
     const c = DEFAULT_CONFIG.color;
     const normalized = ((hueDeg % 360) + 360) % 360;
     // Ver bodyColorOf en heroParticle.ts para el porqué de
@@ -863,13 +1204,14 @@ export class ParticulaState {
     // Se guarda como el color "base" de la partícula: así dividir/unir
     // (que leen `baseColor` para heredar/promediar) recogen el tono
     // elegido sin código adicional — ya funcionaba así antes de esto.
+    rec.baseColor = color.getHex();
     rec.mesh.userData.baseColor = color.getHex();
   }
 
   setSelectedEmissiveIntensity(value: number) {
     if (this.selectedId === null) return;
     const rec = this.particles.get(this.selectedId);
-    if (!rec) return;
+    if (!rec || !rec.mesh) return;
     (rec.mesh.material as THREE.MeshPhysicalMaterial).emissiveIntensity = value;
   }
 
@@ -970,11 +1312,11 @@ export class ParticulaState {
     while (launched < slots && eligible.size >= 2 && this.particles.size - launched > opts.targetCount) {
       const idA = eligible.values().next().value as number;
       eligible.delete(idA);
-      const posA = this.particles.get(idA)!.mesh.position;
+      const posA = this.particles.get(idA)!.renderPos;
       let bestId: number | null = null;
       let bestDist = Infinity;
       for (const otherId of eligible) {
-        const d = posA.distanceTo(this.particles.get(otherId)!.mesh.position);
+        const d = posA.distanceTo(this.particles.get(otherId)!.renderPos);
         if (d < bestDist) {
           bestDist = d;
           bestId = otherId;
@@ -1035,18 +1377,32 @@ export class ParticulaState {
     // a cualquier escala (incluidas las ~25,000 partículas del cubo
     // real) cada una se queda dentro de su propio espacio, así que
     // nunca hace falta comparar contra las demás para evitar choques.
+    // `rec.renderPos` es la única fuente de verdad de "dónde está esta
+    // partícula ahora" — se escribe siempre, sin importar el nivel; la
+    // malla individual copia de ahí, la instanciada escribe su matriz
+    // (una sola llamada a `markMatrixDirty()` al final, no una por
+    // partícula — con miles de instancias eso sí se nota en vivo).
+    let anyInstancedMoved = false;
     for (const rec of this.particles.values()) {
       if (this.lockedIds.has(rec.id)) continue;
-      const drift = rec.mesh.userData.drift as DriftParams | undefined;
-      if (!drift) continue;
+      const drift = rec.drift;
       const v = DEFAULT_CONFIG.movement.verticalDamping;
       const s = this.movementSpeed;
       const amp = drift.amp * this.movementIntensity;
-      rec.mesh.position.set(
+      rec.renderPos.set(
         rec.home.x + Math.sin(this.time * drift.freq.x * s + drift.phase.x) * amp,
         rec.home.y + Math.sin(this.time * drift.freq.y * s + drift.phase.y) * amp * v,
         rec.home.z + Math.sin(this.time * drift.freq.z * s + drift.phase.z) * amp,
       );
+      if (rec.mesh) {
+        rec.mesh.position.copy(rec.renderPos);
+      } else if (rec.instanceSlot !== null && this.instancedField) {
+        this.instancedField.setPosition(rec.instanceSlot, rec.renderPos);
+        anyInstancedMoved = true;
+      }
+    }
+    if (anyInstancedMoved && this.instancedField) {
+      this.instancedField.markMatrixDirty();
     }
 
     if (this.connectorEnabled && this.particles.size >= 2) {
@@ -1055,11 +1411,10 @@ export class ParticulaState {
       if (id !== null && neighborId !== null) {
         if (!this.connector) {
           const rec = this.particles.get(id)!;
-          const color = (rec.mesh.userData.baseColor as number) ?? 0xffffff;
-          this.connector = CONNECTOR_STYLES[this.connectorStyleKey].create(this.scene, color);
+          this.connector = CONNECTOR_STYLES[this.connectorStyleKey].create(this.scene, rec.baseColor);
         }
-        const a = this.particles.get(id)!.mesh.position;
-        const b = this.particles.get(neighborId)!.mesh.position;
+        const a = this.particles.get(id)!.renderPos;
+        const b = this.particles.get(neighborId)!.renderPos;
         this.connector.update(dt, a, b);
       }
     } else if (this.connector) {

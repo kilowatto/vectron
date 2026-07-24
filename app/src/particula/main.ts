@@ -17,12 +17,16 @@ async function main() {
   // — muy por encima de lo que el cubo real necesita — así que aquí
   // se pide alcance de cámara/niebla mucho mayor (ver SceneOverrides
   // en scene/engine.ts); el cubo real (src/main.ts, sin overrides)
-  // sigue exactamente igual.
+  // sigue exactamente igual. Subido de nuevo (60/30 -> 350/180) para
+  // el nivel instanciado (ver INSTANCE_THRESHOLD en state.ts, pedido
+  // explícito "quiero ver qué pasa si tenemos 25000") — a esa escala
+  // el radio de la nube puede pasar largamente de lo que necesitaba el
+  // lote de sólo 2000 de antes.
   const engine = await createEngine(canvas, {
     bloom: config.bloom,
     fogDensity: null,
-    cameraFar: 60,
-    controlsMaxDistance: 30,
+    cameraFar: 350,
+    controlsMaxDistance: 180,
   });
   ensureEnvironment(engine.renderer, engine.scene);
 

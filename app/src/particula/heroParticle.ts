@@ -56,7 +56,7 @@ function randRange(min: number, max: number): number {
   return min + Math.random() * (max - min);
 }
 
-function createDrift(radius: number): DriftParams {
+export function createDrift(radius: number): DriftParams {
   const m = DEFAULT_CONFIG.movement;
   return {
     freq: new THREE.Vector3(randRange(m.freqMin, m.freqMax), randRange(m.freqMin, m.freqMax), randRange(m.freqMin, m.freqMax)),
@@ -152,10 +152,21 @@ export function mutateHue(hex: number, maxDeltaDeg = DEFAULT_CONFIG.color.mutati
   return new THREE.Color().setHSL(hueDeg / 360, hsl.s, hsl.l, THREE.SRGBColorSpace).getHex();
 }
 
-/** Paleta de colores rotando para partículas nuevas — nada que ver con
- * DOMAIN_HUES de la app real (este playground no representa
- * conceptos, sólo el comportamiento de nacer/morir/dividir/unir). */
-const PALETTE = [0x5fc9ff, 0xff6ec7, 0x8ef58b, 0xffc857, 0xb388ff, 0xff8a5c, 0x5ce6d0];
+/** Paleta de colores rotando para partículas nuevas — bug real
+ * reportado en vivo ("no hay muchos [colores]... en el cubo tenemos
+ * muchos colores por categoría"): 7 colores arbitrarios se sentían
+ * pobres comparado con el cubo real, que tiene ~35 tonos categóricos
+ * distintos (DOMAIN_HUES en scene/particleField.ts). Aquí no hay
+ * categorías reales que colorear (este playground no representa
+ * conceptos), así que se toma prestado el MISMO repertorio de colores
+ * ya afinados a mano (evita reinventar una paleta desde cero) como
+ * fuente de variedad para partículas nuevas y para los "saltos" de
+ * color ocasionales durante una división masiva (ver `mutateHue`'s uso
+ * en state.ts's `startDivide`). */
+const PALETTE = [
+  0x4fb8c4, 0x8f7fe0, 0xc94f6d, 0x6fbe8c, 0xb7d444, 0xd9c24f, 0xd98a34, 0x5f7fd9, 0xd9598a, 0xa67c52, 0x9d4edd, 0x2ee6a8, 0x2196f3, 0xe63946, 0xff6b4a,
+  0xe05fc4, 0xffb703, 0x06d6a0, 0x8ecae6, 0xbc6c25, 0xff4d94, 0x6d7bd9, 0x89c2ff, 0x7209b7, 0xf72585, 0xffc857,
+];
 let paletteIndex = 0;
 export function nextColor(): number {
   const c = PALETTE[paletteIndex % PALETTE.length];

@@ -221,7 +221,7 @@ export const DEFAULT_CONFIG: ParticulaConfig = {
     mode: "dividir",
     targetCount: 1000,
     targetMin: 2,
-    targetMax: 2000,
+    targetMax: 25000,
     duration: 0.4,
     durationMin: 0.1,
     durationMax: 3,
