@@ -100,6 +100,18 @@ function setupUi(state: ParticulaState, camera: THREE.Camera, canvas: HTMLCanvas
   const movementSpeedOutput = document.querySelector<HTMLSpanElement>("#movement-speed-output")!;
   const movementIntensitySlider = document.querySelector<HTMLInputElement>("#movement-intensity-slider")!;
   const movementIntensityOutput = document.querySelector<HTMLSpanElement>("#movement-intensity-output")!;
+  const batchModeToggle = document.querySelector<HTMLDivElement>("#batch-mode-toggle")!;
+  const batchModeButtons = batchModeToggle.querySelectorAll<HTMLButtonElement>(".segment");
+  const batchTargetInput = document.querySelector<HTMLInputElement>("#batch-target-input")!;
+  const batchDurationSlider = document.querySelector<HTMLInputElement>("#batch-duration-slider")!;
+  const batchDurationOutput = document.querySelector<HTMLSpanElement>("#batch-duration-output")!;
+  const batchConcurrentSlider = document.querySelector<HTMLInputElement>("#batch-concurrent-slider")!;
+  const batchConcurrentOutput = document.querySelector<HTMLSpanElement>("#batch-concurrent-output")!;
+  const batchStaggerSlider = document.querySelector<HTMLInputElement>("#batch-stagger-slider")!;
+  const batchStaggerOutput = document.querySelector<HTMLSpanElement>("#batch-stagger-output")!;
+  const batchReframeToggle = document.querySelector<HTMLInputElement>("#batch-reframe-toggle")!;
+  const batchStartBtn = document.querySelector<HTMLButtonElement>("#batch-start-btn")!;
+  const batchStatus = document.querySelector<HTMLParagraphElement>("#batch-status")!;
 
   populateSelect(styleNacer, BIRTH_VARIANTS, config.styles.nacer);
   populateSelect(styleDividir, DIVISION_VARIANTS, config.styles.dividir);
@@ -127,6 +139,26 @@ function setupUi(state: ParticulaState, camera: THREE.Camera, canvas: HTMLCanvas
   movementIntensityOutput.textContent = config.movement.intensityDefault.toFixed(2);
   state.setMovementSpeed(config.movement.speedDefault);
   state.setMovementIntensity(config.movement.intensityDefault);
+
+  batchTargetInput.min = String(config.batch.targetMin);
+  batchTargetInput.max = String(config.batch.targetMax);
+  batchTargetInput.value = String(config.batch.targetCount);
+  batchDurationSlider.min = String(config.batch.durationMin);
+  batchDurationSlider.max = String(config.batch.durationMax);
+  batchDurationSlider.value = String(config.batch.duration);
+  batchDurationOutput.textContent = `${config.batch.duration.toFixed(2)}s`;
+  batchConcurrentSlider.min = String(config.batch.maxConcurrentMin);
+  batchConcurrentSlider.max = String(config.batch.maxConcurrentMax);
+  batchConcurrentSlider.value = String(config.batch.maxConcurrent);
+  batchConcurrentOutput.textContent = String(config.batch.maxConcurrent);
+  batchStaggerSlider.min = String(config.batch.staggerMin);
+  batchStaggerSlider.max = String(config.batch.staggerMax);
+  batchStaggerSlider.value = String(config.batch.staggerSeconds);
+  batchStaggerOutput.textContent = `${config.batch.staggerSeconds.toFixed(2)}s`;
+  batchReframeToggle.checked = config.batch.autoReframe;
+  batchModeButtons.forEach((btn) => {
+    btn.classList.toggle("selected", btn.dataset.mode === config.batch.mode);
+  });
 
   // Todo lo que el usuario ajusta en la UI se auto-guarda de
   // inmediato — pedido explícito ("guardar la configuración que voy
@@ -206,6 +238,66 @@ function setupUi(state: ParticulaState, camera: THREE.Camera, canvas: HTMLCanvas
     state.setMovementIntensity(value);
     config.movement.intensityDefault = value;
     saveConfig(config);
+  });
+
+  // Animación masiva ("dividir o unir mil en una animación") — pedido
+  // explícito del usuario, pensado a detalle: además de cuántas
+  // (cantidad objetivo) y cuánto dura cada una, expone cuántas pueden
+  // animarse A LA VEZ (simultáneas por oleada) y qué tan separadas en
+  // el tiempo salen las oleadas (retraso) — juntos son lo que hace la
+  // diferencia entre "explosión instantánea" y "cascada legible", y
+  // entre "fluido" y "el framerate se cae" en celular con estilos
+  // pesados (mitosis/fusión son shaders raymarcheados, más caros que
+  // una esfera simple).
+  batchModeButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const mode = btn.dataset.mode as "dividir" | "unir";
+      config.batch.mode = mode;
+      batchModeButtons.forEach((b) => b.classList.toggle("selected", b === btn));
+      saveConfig(config);
+    });
+  });
+  batchTargetInput.addEventListener("input", () => {
+    config.batch.targetCount = Number(batchTargetInput.value);
+    saveConfig(config);
+  });
+  batchDurationSlider.addEventListener("input", () => {
+    const value = Number(batchDurationSlider.value);
+    batchDurationOutput.textContent = `${value.toFixed(2)}s`;
+    config.batch.duration = value;
+    saveConfig(config);
+  });
+  batchConcurrentSlider.addEventListener("input", () => {
+    const value = Number(batchConcurrentSlider.value);
+    batchConcurrentOutput.textContent = String(value);
+    config.batch.maxConcurrent = value;
+    saveConfig(config);
+  });
+  batchStaggerSlider.addEventListener("input", () => {
+    const value = Number(batchStaggerSlider.value);
+    batchStaggerOutput.textContent = `${value.toFixed(2)}s`;
+    config.batch.staggerSeconds = value;
+    saveConfig(config);
+  });
+  batchReframeToggle.addEventListener("change", () => {
+    config.batch.autoReframe = batchReframeToggle.checked;
+    saveConfig(config);
+  });
+  batchStartBtn.addEventListener("click", () => {
+    if (state.isBatchActive()) {
+      state.stopBatch();
+      return;
+    }
+    const variantKey = config.batch.mode === "dividir" ? styleDividir.value : styleUnir.value;
+    state.startBatch({
+      mode: config.batch.mode,
+      variantKey,
+      targetCount: config.batch.targetCount,
+      duration: config.batch.duration,
+      maxConcurrent: config.batch.maxConcurrent,
+      staggerSeconds: config.batch.staggerSeconds,
+      autoReframe: config.batch.autoReframe,
+    });
   });
 
   const exportOverlay = document.querySelector<HTMLDivElement>("#export-overlay")!;
@@ -303,6 +395,25 @@ function setupUi(state: ParticulaState, camera: THREE.Camera, canvas: HTMLCanvas
         intensityOutput.textContent = c.intensity.toFixed(2);
       }
     }
+
+    const runningBatch = state.getBatchStatus();
+    if (runningBatch) {
+      batchStartBtn.textContent = "Detener animación masiva";
+      batchStartBtn.classList.add("active");
+      batchStatus.hidden = false;
+      const noun = runningBatch.mode === "dividir" ? "dividiendo" : "uniendo";
+      batchStatus.textContent = `${noun}… ${runningBatch.count} / ${runningBatch.target} partículas (${runningBatch.inFlight} en vuelo)`;
+    } else {
+      batchStartBtn.textContent = "Iniciar animación masiva";
+      batchStartBtn.classList.remove("active");
+      batchStatus.hidden = true;
+    }
+    // Mientras corre el lote, los controles individuales de
+    // nacer/dividir/unir/morir ya se deshabilitan arriba (canBirth()
+    // etc. devuelven false con batchActive) — pero el propio botón de
+    // iniciar/detener el lote debe seguir habilitado siempre para
+    // poder detenerlo.
+    batchStartBtn.disabled = !state.isBatchActive() && (state.isBusy() || !(state.canDivide() || state.canUnite()));
   }
   state.onChange = refreshUi;
   refreshUi();

@@ -88,6 +88,57 @@ export interface ParticulaConfig {
     intensityMin: number;
     intensityMax: number;
     intensityDefault: number;
+    /** Pedido explícito del usuario: "cada partícula al dividirse
+     * tenga otro color pero muy sutil, otro tono en camino a cambiar
+     * de color". Cada hija de una división recibe el tono del padre
+     * +/- un desplazamiento aleatorio de hasta esto (grados) — NO el
+     * mismo desplazamiento para ambas, cada una tira para su lado, así
+     * que además de heredar color también empiezan a diverger entre
+     * sí. Sólo el TONO muta; saturación/luminosidad de cada hija se
+     * quedan igual que las del padre (ver heroParticle.ts's
+     * `mutateHue`) — así se ve como "la misma familia de color
+     * evolucionando", no un color al azar. */
+    mutationDeg: number;
+  };
+  /** Disparar cientos/miles de divisiones o uniones en una sola
+   * corrida — pedido explícito del usuario ("dividir o unir mil en
+   * una animación... cuánto tiempo debe durar la animación y cuántas
+   * a la vez"). Ver state.ts's startBatch/tick: no es una sola
+   * animación gigante, es una cola que lanza operaciones individuales
+   * en oleadas (máximo `maxConcurrent` a la vez, cada `staggerSeconds`)
+   * hasta llegar a `targetCount` — así el frame rate no se cae de
+   * golpe y se puede ver el crecimiento/reducción como una ola en vez
+   * de un solo instante caótico. */
+  batch: {
+    mode: "dividir" | "unir";
+    targetCount: number;
+    targetMin: number;
+    targetMax: number;
+    /** Duración de CADA operación individual del lote — separada del
+     * slider de duración normal porque para probar 1000 a la vez
+     * conviene una duración mucho más corta que para probar una sola
+     * a la vez con calma. */
+    duration: number;
+    durationMin: number;
+    durationMax: number;
+    /** Cuántas operaciones pueden estar animándose al mismo tiempo —
+     * el límite real de "cuántas a la vez" que pidió el usuario. Más
+     * alto = más caótico/rápido pero más pesado (cada mitosis/fusión
+     * es un shader raymarcheado; muchas a la vez sí se notan en el
+     * framerate, sobre todo en celular). */
+    maxConcurrent: number;
+    maxConcurrentMin: number;
+    maxConcurrentMax: number;
+    /** Pausa entre el lanzamiento de una oleada y la siguiente — 0 es
+     * "tan rápido como se pueda", más alto da un efecto de "cascada"
+     * más lento y legible en vez de una explosión instantánea. */
+    staggerSeconds: number;
+    staggerMin: number;
+    staggerMax: number;
+    /** Si la cámara se va alejando/acercando sola para mantener a
+     * todas en cuadro mientras corre el lote. Se puede apagar si el
+     * usuario prefiere manejar la cámara a mano mientras observa. */
+    autoReframe: boolean;
   };
   /** MeshPhysicalMaterial de la esfera real (heroParticle.ts) Y del
    * blob raymarcheado de mitosis/fusión (metaballBlob.ts) — ambos
@@ -156,6 +207,23 @@ export const DEFAULT_CONFIG: ParticulaConfig = {
     intensityMin: 0,
     intensityMax: 1.4,
     intensityDefault: 0.55,
+    mutationDeg: 12,
+  },
+  batch: {
+    mode: "dividir",
+    targetCount: 1000,
+    targetMin: 2,
+    targetMax: 2000,
+    duration: 0.4,
+    durationMin: 0.1,
+    durationMax: 3,
+    maxConcurrent: 10,
+    maxConcurrentMin: 1,
+    maxConcurrentMax: 40,
+    staggerSeconds: 0.15,
+    staggerMin: 0,
+    staggerMax: 2,
+    autoReframe: true,
   },
   material: {
     // El diagnóstico real (visto en vivo con __debugMat, ya quitado):
@@ -213,6 +281,7 @@ export function loadConfig(): ParticulaConfig {
       styles: { ...DEFAULT_CONFIG.styles, ...saved.styles },
       movement: { ...DEFAULT_CONFIG.movement, ...saved.movement },
       color: { ...DEFAULT_CONFIG.color, ...saved.color },
+      batch: { ...DEFAULT_CONFIG.batch, ...saved.batch },
       material: { ...DEFAULT_CONFIG.material, ...saved.material },
       bloom: { ...DEFAULT_CONFIG.bloom, ...saved.bloom },
     };

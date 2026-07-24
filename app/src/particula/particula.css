@@ -256,6 +256,61 @@ body {
   color: #5fffa0;
 }
 
+.secondary-btn.active {
+  background: rgba(255, 110, 110, 0.18);
+  border-color: #ff6e6e;
+  color: #ff6e6e;
+}
+
+.secondary-btn:disabled {
+  opacity: 0.4;
+}
+
+/* Toggle Dividir/Unir del lote masivo — 2 botones tipo "segmented
+ * control" en vez de un <select>: son mutuamente excluyentes y sólo 2
+ * opciones, más rápido de tocar que abrir un desplegable. */
+.segmented {
+  display: flex;
+  gap: 6px;
+}
+
+.segmented .segment {
+  flex: 1;
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-dim);
+  font-size: 14px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.segmented .segment.selected {
+  background: rgba(95, 201, 255, 0.18);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.number-input {
+  width: 110px;
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  padding: 0 10px;
+  font-size: 15px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.status-text {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Modal de exportación — siempre muestra el JSON seleccionable, sin
  * importar si `navigator.clipboard.writeText` funcionó o no (falla en
  * silencio en varios contextos: sin gesto de usuario "confiable" para

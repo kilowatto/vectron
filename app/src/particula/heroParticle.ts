@@ -119,6 +119,23 @@ export function createHeroParticle(color: number, radius = 0.32): THREE.Mesh {
   return mesh;
 }
 
+/** Pedido explícito del usuario: "cada partícula al dividirse tenga
+ * otro color pero muy sutil, otro tono en camino a cambiar de color".
+ * Sólo se desplaza el TONO (grados en la rueda de color) un poco al
+ * azar en cualquier dirección — saturación/luminosidad del color de
+ * ENTRADA se conservan tal cual, para no aplanar la variedad que ya
+ * trae la paleta o el slider. Llamar esto 2 veces con el mismo padre
+ * (una por hija) hace que ambas hijas empiecen a diverger entre sí,
+ * no sólo del padre — cada rama de la "familia" deriva su propio
+ * tono con el tiempo, como pidió el usuario. */
+export function mutateHue(hex: number, maxDeltaDeg = DEFAULT_CONFIG.color.mutationDeg): number {
+  const hsl = { h: 0, s: 0, l: 0 };
+  new THREE.Color(hex).getHSL(hsl, THREE.SRGBColorSpace);
+  const deltaDeg = (Math.random() * 2 - 1) * maxDeltaDeg;
+  const hueDeg = (((hsl.h * 360 + deltaDeg) % 360) + 360) % 360;
+  return new THREE.Color().setHSL(hueDeg / 360, hsl.s, hsl.l, THREE.SRGBColorSpace).getHex();
+}
+
 /** Paleta de colores rotando para partículas nuevas — nada que ver con
  * DOMAIN_HUES de la app real (este playground no representa
  * conceptos, sólo el comportamiento de nacer/morir/dividir/unir). */

@@ -94,6 +94,49 @@
         <hr class="sheet-divider" />
 
         <div class="field">
+          <label class="title">Animación masiva</label>
+          <div class="segmented" id="batch-mode-toggle">
+            <button type="button" class="segment" data-mode="dividir">Dividir en masa</button>
+            <button type="button" class="segment" data-mode="unir">Unir en masa</button>
+          </div>
+        </div>
+        <div class="field">
+          <div class="field-row">
+            <label class="title" for="batch-target-input">Cantidad objetivo</label>
+            <input type="number" id="batch-target-input" class="number-input" min="2" max="2000" step="1" value="1000" />
+          </div>
+        </div>
+        <div class="field">
+          <div class="field-row">
+            <label class="title" for="batch-duration-slider">Duración por operación</label>
+            <span class="duration-value" id="batch-duration-output">0.4s</span>
+          </div>
+          <input type="range" id="batch-duration-slider" min="0.1" max="3" step="0.05" value="0.4" />
+        </div>
+        <div class="field">
+          <div class="field-row">
+            <label class="title" for="batch-concurrent-slider">Simultáneas por oleada</label>
+            <span class="duration-value" id="batch-concurrent-output">10</span>
+          </div>
+          <input type="range" id="batch-concurrent-slider" min="1" max="40" step="1" value="10" />
+        </div>
+        <div class="field">
+          <div class="field-row">
+            <label class="title" for="batch-stagger-slider">Retraso entre oleadas</label>
+            <span class="duration-value" id="batch-stagger-output">0.15s</span>
+          </div>
+          <input type="range" id="batch-stagger-slider" min="0" max="2" step="0.05" value="0.15" />
+        </div>
+        <label class="checkbox-row">
+          <input type="checkbox" id="batch-reframe-toggle" checked />
+          Reencuadrar cámara automáticamente
+        </label>
+        <button type="button" class="secondary-btn" id="batch-start-btn">Iniciar animación masiva</button>
+        <p id="batch-status" class="status-text" hidden></p>
+
+        <hr class="sheet-divider" />
+
+        <div class="field">
           <label class="title">Configuración</label>
           <button type="button" class="secondary-btn" id="export-config-btn">Exportar configuración (copiar JSON)</button>
         </div>

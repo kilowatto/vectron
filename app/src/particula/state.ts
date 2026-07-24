@@ -1,5 +1,5 @@
 import * as THREE from "three/webgpu";
-import { createHeroParticle, nextColor, bodyColorOf, type DriftParams } from "./heroParticle";
+import { createHeroParticle, nextColor, bodyColorOf, mutateHue, type DriftParams } from "./heroParticle";
 import { BIRTH_VARIANTS } from "./animations/birth";
 import { DIVISION_VARIANTS } from "./animations/division";
 import { UNION_VARIANTS } from "./animations/union";
@@ -34,6 +34,24 @@ function onFinish(anim: Animation, onDone: () => void): Animation {
       return alive;
     },
   };
+}
+
+export interface BatchOptions {
+  mode: "dividir" | "unir";
+  variantKey: string;
+  targetCount: number;
+  duration: number;
+  maxConcurrent: number;
+  staggerSeconds: number;
+  autoReframe: boolean;
+}
+
+export interface BatchStatus {
+  active: boolean;
+  mode: "dividir" | "unir";
+  count: number;
+  target: number;
+  inFlight: number;
 }
 
 export interface ParticleRecord {
@@ -79,6 +97,17 @@ export class ParticulaState {
    * hace falta para unión/muerte: esas partículas ya se desregistran
    * ANTES de arrancar la variante, así que `tick()` nunca las toca. */
   private lockedIds = new Set<number>();
+
+  // Animación masiva ("dividir o unir mil de golpe") — pedido
+  // explícito del usuario. `batchInFlight` cuenta cuántas operaciones
+  // individuales están animándose AHORA (no cuántas se han lanzado en
+  // total); `tick()` sólo lanza una oleada nueva cuando hay cupo
+  // (< maxConcurrent) Y ya pasó `staggerSeconds` desde la última.
+  private batchActive = false;
+  private batchOpts: BatchOptions | null = null;
+  private batchInFlight = 0;
+  private batchWaveTimer = 0;
+  private batchReframeTimer = 0;
 
   onChange: () => void = () => {};
 
@@ -168,20 +197,23 @@ export class ParticulaState {
     return this.busy;
   }
 
+  // Ninguna acción individual puede correr mientras hay un lote activo
+  // ("dividir/unir mil") — mezclar un clic manual con cientos de
+  // operaciones en cola generaría estados a medio registrar.
   canBirth(): boolean {
-    return !this.busy;
+    return !this.busy && !this.batchActive;
   }
 
   canDivide(): boolean {
-    return !this.busy && this.particles.size >= 1;
+    return !this.busy && !this.batchActive && this.particles.size >= 1;
   }
 
   canUnite(): boolean {
-    return !this.busy && this.particles.size >= 2;
+    return !this.busy && !this.batchActive && this.particles.size >= 2;
   }
 
   canDie(): boolean {
-    return !this.busy && this.particles.size >= 2;
+    return !this.busy && !this.batchActive && this.particles.size >= 2;
   }
 
   /** Registra la primera partícula al cargar la página — ya creada y
@@ -290,18 +322,48 @@ export class ParticulaState {
     if (!this.canDivide()) return;
     const id = this.targetId();
     if (id === null) return;
-    const rec = this.particles.get(id)!;
+    this.busy = true;
+    this.onChange();
+    const started = this.startDivide(id, variantKey, duration, (idA, idB) => {
+      void idA;
+      this.mostRecentId = idB;
+      this.busy = false;
+      this.onChange();
+    });
+    if (!started) {
+      this.busy = false;
+      this.onChange();
+    }
+  }
+
+  /** Núcleo real de una división — sin gate de `busy`/`canDivide`, para
+   * que tanto el botón individual (`divide`) como el lote masivo
+   * (`tick`'s batch) compartan exactamente la misma lógica en vez de
+   * dos copias que se puedan desincronizar. `reframe=false` lo usa el
+   * lote: con decenas lanzándose por segundo, reencuadrar la cámara en
+   * CADA una sería un mareo — el lote reencuadra una sola vez, aparte
+   * (ver `tick`). */
+  private startDivide(id: number, variantKey: string, duration: number, onComplete: (idA: number, idB: number) => void, opts: { reframe?: boolean } = {}): boolean {
+    const rec = this.particles.get(id);
+    if (!rec) return false;
     const variant = DIVISION_VARIANTS[variantKey]?.run ?? DIVISION_VARIANTS.espontanea.run;
     const origin = rec.mesh.position.clone();
-    const color = (rec.mesh.userData.baseColor as number) ?? nextColor();
+    const parentColor = (rec.mesh.userData.baseColor as number) ?? nextColor();
 
     const dir = this.randomLateralAxis();
     const separation = 0.55;
     const posA = origin.clone().addScaledVector(dir, separation);
     const posB = origin.clone().addScaledVector(dir, -separation);
 
-    const childA = createHeroParticle(color);
-    const childB = createHeroParticle(color);
+    // Pedido explícito del usuario: "cada partícula al dividirse tenga
+    // otro color pero muy sutil, otro tono en camino a cambiar de
+    // color" — cada hija muta el tono del padre por su cuenta (ver
+    // mutateHue en heroParticle.ts), así A y B también diverGen entre
+    // sí, no sólo del padre.
+    const colorA = mutateHue(parentColor);
+    const colorB = mutateHue(parentColor);
+    const childA = createHeroParticle(colorA);
+    const childB = createHeroParticle(colorB);
     childA.position.copy(origin);
     childB.position.copy(origin);
     childA.scale.setScalar(0.001);
@@ -313,25 +375,24 @@ export class ParticulaState {
     const idB = this.register(childB);
     this.lockedIds.add(idA);
     this.lockedIds.add(idB);
-    this.busy = true;
-    this.onChange();
-    this.reframe([...this.otherPositions([idA, idB]), posA, posB]);
+    if (opts.reframe ?? true) {
+      this.reframe([...this.otherPositions([idA, idB]), posA, posB]);
+    }
 
     let finished = false;
     const anim = variant(this.scene, rec.mesh, childA, childB, posA, posB, duration, () => {
       if (finished) return;
       finished = true;
-      this.mostRecentId = idB;
-      this.busy = false;
       const recA = this.particles.get(idA);
       if (recA) recA.home.copy(posA);
       const recB = this.particles.get(idB);
       if (recB) recB.home.copy(posB);
       this.lockedIds.delete(idA);
       this.lockedIds.delete(idB);
-      this.onChange();
+      onComplete(idA, idB);
     });
     this.activeAnimations.push(anim);
+    return true;
   }
 
   unite(variantKey: string, duration: number) {
@@ -340,8 +401,26 @@ export class ParticulaState {
     if (id === null) return;
     const neighborId = this.nearestTo(id);
     if (neighborId === null) return;
-    const recA = this.particles.get(id)!;
-    const recB = this.particles.get(neighborId)!;
+    this.busy = true;
+    this.onChange();
+    const started = this.startUnite(id, neighborId, variantKey, duration, (resultId) => {
+      this.mostRecentId = resultId;
+      this.busy = false;
+      this.onChange();
+    });
+    if (!started) {
+      this.busy = false;
+      this.onChange();
+    }
+  }
+
+  /** Núcleo real de una unión — ver el comentario de `startDivide`,
+   * misma razón: una sola implementación para el botón individual y
+   * para el lote masivo. */
+  private startUnite(idA: number, idB: number, variantKey: string, duration: number, onComplete: (resultId: number) => void, opts: { reframe?: boolean } = {}): boolean {
+    const recA = this.particles.get(idA);
+    const recB = this.particles.get(idB);
+    if (!recA || !recB) return false;
     const variant = UNION_VARIANTS[variantKey]?.run ?? UNION_VARIANTS.gravitacional.run;
 
     const colorA = (recA.mesh.userData.baseColor as number) ?? 0xffffff;
@@ -354,30 +433,30 @@ export class ParticulaState {
     result.position.copy(resultPos);
     result.scale.setScalar(0.001);
 
-    this.unregister(id);
-    this.unregister(neighborId);
-    this.busy = true;
-    this.onChange();
-    // Bug real visto en vivo ("parpadea" al unir): unregister ya quitó
-    // A y B del mapa, así que otherPositions([]) ya NO los incluye —
-    // reencuadrar sólo con resultPos (un punto) le da al cálculo de
-    // radio un boundingRadius casi nulo, y la cámara SALTA a un zoom
-    // extremo de golpe mientras A y B siguen viéndose separados en su
-    // posición real. Pasando también sus posiciones actuales, el
-    // reencuadre parte de un radio que sí las cubre y se cierra
-    // gradualmente conforme de verdad se acercan, sin brinco.
-    this.reframe([...this.otherPositions([]), posA, posB, resultPos]);
+    this.unregister(idA);
+    this.unregister(idB);
+    if (opts.reframe ?? true) {
+      // Bug real visto en vivo ("parpadea" al unir): unregister ya
+      // quitó A y B del mapa, así que otherPositions([]) ya NO los
+      // incluye — reencuadrar sólo con resultPos (un punto) le da al
+      // cálculo de radio un boundingRadius casi nulo, y la cámara
+      // SALTA a un zoom extremo de golpe mientras A y B siguen
+      // viéndose separados en su posición real. Pasando también sus
+      // posiciones actuales, el reencuadre parte de un radio que sí
+      // las cubre y se cierra gradualmente conforme de verdad se
+      // acercan, sin brinco.
+      this.reframe([...this.otherPositions([]), posA, posB, resultPos]);
+    }
 
     let finished = false;
     const anim = variant(this.scene, recA.mesh, recB.mesh, result, resultPos, duration, () => {
       if (finished) return;
       finished = true;
       const resultId = this.register(result);
-      this.mostRecentId = resultId;
-      this.busy = false;
-      this.onChange();
+      onComplete(resultId);
     });
     this.activeAnimations.push(anim);
+    return true;
   }
 
   die(variantKey: string, duration: number) {
@@ -482,12 +561,144 @@ export class ParticulaState {
     this.movementIntensity = value;
   }
 
+  isBatchActive(): boolean {
+    return this.batchActive;
+  }
+
+  /** Estado del lote para que la UI muestre progreso ("342 / 1000") —
+   * null cuando no hay lote corriendo. */
+  getBatchStatus(): BatchStatus | null {
+    if (!this.batchActive || !this.batchOpts) return null;
+    return {
+      active: true,
+      mode: this.batchOpts.mode,
+      count: this.particles.size,
+      target: this.batchOpts.targetCount,
+      inFlight: this.batchInFlight,
+    };
+  }
+
+  /** Arranca el lote — pedido explícito del usuario ("dividir o unir
+   * mil en una animación"). No dispara nada synchronously: `tick()` va
+   * lanzando oleadas de hasta `maxConcurrent` operaciones cada
+   * `staggerSeconds`, hasta llegar a `targetCount` (o quedarse sin
+   * partículas elegibles). */
+  startBatch(opts: BatchOptions): boolean {
+    if (this.busy || this.batchActive) return false;
+    if (opts.mode === "dividir" && this.particles.size < 1) return false;
+    if (opts.mode === "unir" && this.particles.size < 2) return false;
+    this.batchActive = true;
+    this.batchOpts = opts;
+    this.batchInFlight = 0;
+    this.batchWaveTimer = opts.staggerSeconds; // lanza la primera oleada de inmediato
+    this.batchReframeTimer = 0;
+    this.onChange();
+    return true;
+  }
+
+  /** Pide detener el lote — termina las operaciones YA lanzadas (no
+   * las corta a medias) pero no lanza oleadas nuevas. */
+  stopBatch() {
+    this.batchActive = false;
+    this.batchOpts = null;
+    this.onChange();
+  }
+
+  /** Una oleada de división: toma hasta `slots` partículas SIN
+   * bloquear (ninguna animación propia en curso) y lanza una división
+   * en cada una. Parar exactamente en `targetCount` es posible porque
+   * `startDivide` registra las 2 hijas SÍNCRONAMENTE al lanzar (no al
+   * terminar la animación) — `this.particles.size` ya refleja el
+   * conteo real en cada oleada, nunca hay que adivinar cuántas están
+   * "en camino". */
+  private runDivideWave(opts: BatchOptions) {
+    const needed = opts.targetCount - this.particles.size;
+    if (needed <= 0) return;
+    const slots = Math.max(0, opts.maxConcurrent - this.batchInFlight);
+    const eligible: number[] = [];
+    for (const id of this.particles.keys()) {
+      if (!this.lockedIds.has(id)) eligible.push(id);
+      if (eligible.length >= slots) break;
+    }
+    const toLaunch = Math.min(slots, needed, eligible.length);
+    for (let i = 0; i < toLaunch; i++) {
+      this.batchInFlight++;
+      this.startDivide(eligible[i], opts.variantKey, opts.duration, () => {
+        this.batchInFlight--;
+      }, { reframe: false });
+    }
+    if (toLaunch > 0) this.onChange();
+  }
+
+  /** Una oleada de unión: empareja partículas SIN bloquear con su
+   * vecina más cercana TAMBIÉN sin bloquear (nunca la misma partícula
+   * en 2 pares de la misma oleada) y lanza una unión por par. */
+  private runUniteWave(opts: BatchOptions) {
+    if (this.particles.size <= opts.targetCount || this.particles.size < 2) return;
+    const slots = Math.max(0, opts.maxConcurrent - this.batchInFlight);
+    if (slots <= 0) return;
+    const eligible = new Set<number>();
+    for (const id of this.particles.keys()) {
+      if (!this.lockedIds.has(id)) eligible.add(id);
+    }
+    let launched = 0;
+    while (launched < slots && eligible.size >= 2 && this.particles.size - launched > opts.targetCount) {
+      const idA = eligible.values().next().value as number;
+      eligible.delete(idA);
+      const posA = this.particles.get(idA)!.mesh.position;
+      let bestId: number | null = null;
+      let bestDist = Infinity;
+      for (const otherId of eligible) {
+        const d = posA.distanceTo(this.particles.get(otherId)!.mesh.position);
+        if (d < bestDist) {
+          bestDist = d;
+          bestId = otherId;
+        }
+      }
+      if (bestId === null) break;
+      eligible.delete(bestId);
+      this.batchInFlight++;
+      launched++;
+      this.startUnite(idA, bestId, opts.variantKey, opts.duration, () => {
+        this.batchInFlight--;
+      }, { reframe: false });
+    }
+    if (launched > 0) this.onChange();
+  }
+
   tick(dt: number) {
     this.time += dt;
     this.activeAnimations = this.activeAnimations.filter((a) => a.update(dt));
 
     if (this.cameraTween && !this.cameraTween.update(dt)) {
       this.cameraTween = null;
+    }
+
+    // Animación masiva — pedido explícito del usuario ("dividir o
+    // unir mil"). Lanza oleadas de a lo más `maxConcurrent` cada
+    // `staggerSeconds`; se detiene sola al llegar a `targetCount` (o
+    // al quedarse sin partículas elegibles: `runDivideWave`/
+    // `runUniteWave` simplemente no lanzan nada si no hay cupo).
+    if (this.batchActive && this.batchOpts) {
+      const opts = this.batchOpts;
+      this.batchWaveTimer += dt;
+      if (this.batchWaveTimer >= opts.staggerSeconds) {
+        this.batchWaveTimer = 0;
+        if (opts.mode === "dividir") this.runDivideWave(opts);
+        else this.runUniteWave(opts);
+      }
+      const reached = opts.mode === "dividir" ? this.particles.size >= opts.targetCount : this.particles.size <= opts.targetCount || this.particles.size < 2;
+      if (reached && this.batchInFlight === 0) {
+        this.batchActive = false;
+        this.batchOpts = null;
+        this.onChange();
+      } else if (opts.autoReframe) {
+        this.batchReframeTimer += dt;
+        if (this.batchReframeTimer >= 0.6) {
+          this.batchReframeTimer = 0;
+          this.reframe(this.otherPositions([]));
+        }
+      }
     }
 
     // Movimiento tipo browniano — pedido explícito del usuario ("cada
