@@ -275,24 +275,53 @@ export const DEFAULT_CONFIG: ParticulaConfig = {
 
 const STORAGE_KEY = "particula-config-v1";
 
-/** Merge superficial por sección — así una versión vieja guardada en
- * localStorage que le falte un campo nuevo (ej. si se agrega un
- * parámetro después) no rompe con `undefined`, hereda el default. */
+/** Bug real reportado en vivo ("no me deja poner 25000... cantidad
+ * objetivo"): el merge superficial de antes (`{...DEFAULT_CONFIG.batch,
+ * ...saved.batch}`) traía de vuelta TODO lo que hubiera en el guardado
+ * anterior, incluyendo los TOPES (`targetMax`, etc.) — no sólo los
+ * valores que el usuario de verdad eligió. Cuando subí `targetMax` de
+ * 2000 a 25000 en este mismo archivo, cualquiera con una sesión previa
+ * guardada (de cuando el tope real SÍ era 2000) seguía cargando ese
+ * 2000 viejo desde localStorage para siempre — el nuevo default nunca
+ * llegaba a aplicarse. El mismo riesgo existe para CUALQUIER campo que
+ * no tenga un control en la UI (topes de sliders, `movement.freqMin/
+ * Max`, `color.mutationDeg`, todo `material`/`bloom`...): con un merge
+ * superficial, un cambio futuro a esos valores en código quedaría
+ * tapado por lo que sea que ya estuviera guardado la primera vez que
+ * alguien abrió la página. Sólo los campos con un control real en
+ * particula.html/main.ts deberían sobrevivir entre recargas — todo lo
+ * demás (topes, afinación interna) sale siempre de `DEFAULT_CONFIG`,
+ * nunca del guardado. */
 export function loadConfig(): ParticulaConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return structuredClone(DEFAULT_CONFIG);
     const saved = JSON.parse(raw) as Partial<ParticulaConfig>;
-    return {
-      ...DEFAULT_CONFIG,
-      ...saved,
-      styles: { ...DEFAULT_CONFIG.styles, ...saved.styles },
-      movement: { ...DEFAULT_CONFIG.movement, ...saved.movement },
-      color: { ...DEFAULT_CONFIG.color, ...saved.color },
-      batch: { ...DEFAULT_CONFIG.batch, ...saved.batch },
-      material: { ...DEFAULT_CONFIG.material, ...saved.material },
-      bloom: { ...DEFAULT_CONFIG.bloom, ...saved.bloom },
-    };
+    const config = structuredClone(DEFAULT_CONFIG);
+    if (typeof saved.duration === "number") config.duration = saved.duration;
+    if (typeof saved.connectorEnabled === "boolean") config.connectorEnabled = saved.connectorEnabled;
+    if (saved.styles) Object.assign(config.styles, saved.styles);
+    if (saved.movement) {
+      if (typeof saved.movement.speedDefault === "number") config.movement.speedDefault = saved.movement.speedDefault;
+      if (typeof saved.movement.intensityDefault === "number") config.movement.intensityDefault = saved.movement.intensityDefault;
+    }
+    if (saved.color && typeof saved.color.intensityDefault === "number") {
+      config.color.intensityDefault = saved.color.intensityDefault;
+    }
+    if (saved.batch) {
+      const b = saved.batch;
+      if (b.mode === "dividir" || b.mode === "unir") config.batch.mode = b.mode;
+      if (typeof b.targetCount === "number") config.batch.targetCount = b.targetCount;
+      if (typeof b.duration === "number") config.batch.duration = b.duration;
+      if (typeof b.maxConcurrent === "number") config.batch.maxConcurrent = b.maxConcurrent;
+      if (typeof b.staggerSeconds === "number") config.batch.staggerSeconds = b.staggerSeconds;
+      if (typeof b.autoReframe === "boolean") config.batch.autoReframe = b.autoReframe;
+      // Recorte por si el valor guardado quedó fuera del rango real
+      // ACTUAL (ej. bajado a mano en código más adelante) — el tope
+      // siempre es el de HOY, nunca uno guardado.
+      config.batch.targetCount = Math.min(Math.max(config.batch.targetCount, config.batch.targetMin), config.batch.targetMax);
+    }
+    return config;
   } catch {
     return structuredClone(DEFAULT_CONFIG);
   }

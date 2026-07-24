@@ -42,10 +42,20 @@ export interface InstancedField {
 
 export function createInstancedField(scene: THREE.Scene, capacity: number): InstancedField {
   const geometry = new THREE.IcosahedronGeometry(INSTANCE_RADIUS, 1);
-  const material = new THREE.MeshBasicNodeMaterial({
-    transparent: true,
-    depthWrite: false,
-  });
+  // Bug real reportado en vivo ("mucho parpadeo"): copié
+  // `transparent:true, depthWrite:false` de particleField.ts SIN
+  // copiar el `blending: AdditiveBlending` que hace esa combinación
+  // correcta ahí — additivo no depende del orden de dibujo (a+b=b+a),
+  // así que le da igual no escribir profundidad. Con blending NORMAL
+  // (el default) y sin escribir profundidad, miles de instancias
+  // semitransparentes se mezclan en el orden en que EL DRIVER las
+  // dibuja (fijo por índice de instancia), no por profundidad real —
+  // cuál esfera se ve "encima" cambia de cuadro a cuadro con el ángulo
+  // de cámara, leyéndose como parpadeo. Estas esferas no necesitan
+  // transparencia real (el colorNode nunca varía alfa) — opacas, con
+  // escritura de profundidad normal, se ocluyen entre sí como
+  // cualquier esfera sólida (igual que el nivel individual).
+  const material = new THREE.MeshBasicNodeMaterial();
 
   const colorAttrArray = new Float32Array(capacity * 3);
   const colorAttribute = new THREE.InstancedBufferAttribute(colorAttrArray, 3);

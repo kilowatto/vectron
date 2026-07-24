@@ -42,12 +42,21 @@ const BRAIN_RAMP_RANGE = 700;
  * instanciado (ver instancedField.ts) — pedido explícito del usuario
  * ("quiero ver qué pasa si tenemos 25000"): cada malla PBR individual
  * (SphereGeometry 64×64 + MeshPhysicalMaterial propio) es carísima de
- * verdad — a 2000+ ya se medía en vivo cerca de colgar la pestaña.
- * Coincide con `BRAIN_RAMP_START` a propósito: pasado ese punto ya
- * estamos en "modo nube grande", performance y forma cambian juntas.
- * Por debajo, todo sigue exactamente igual que antes (animación de
- * mitosis/fusión, PBR "hiperrealista", selección por clic). */
-const INSTANCE_THRESHOLD = 500;
+ * verdad, así que a partir de aquí no hay animación de mitosis/fusión.
+ * Subido de 500 a 2000 — bug real reportado en vivo ("se perdió el
+ * efecto de división de célula"): 500 coincidía con
+ * `BRAIN_RAMP_START` por "simetría", pero en la práctica cualquier
+ * lote normal (el rango que ya se sabía seguro con mallas
+ * individuales desde ANTES de que existiera este nivel instanciado)
+ * terminaba saltándose la animación que el usuario específicamente
+ * pidió y quería seguir viendo. 2000 es el mismo límite que ya se
+ * había probado seguro con mallas individuales — el nivel instanciado
+ * ahora sólo entra en juego para la escala de verdad extrema (miles,
+ * hasta 25,000) que motivó pedirlo, no para el uso normal. Deliberadamente
+ * DESACOPLADO de `BRAIN_RAMP_START` (que se queda en 500, ya validado
+ * y confirmado que gustó) — son 2 efectos independientes, no hay
+ * razón para que compartan el mismo número. */
+const INSTANCE_THRESHOLD = 2000;
 /** Tope real del pool de instancias — debe alcanzar
  * `DEFAULT_CONFIG.batch.targetMax` (ver particulaConfig.ts). Un
  * InstancedMesh necesita su capacidad fija desde que se crea. */
@@ -379,8 +388,46 @@ export class ParticulaState {
     return result;
   }
 
-  private isInstancedTier(): boolean {
-    return this.particles.size >= INSTANCE_THRESHOLD;
+  /** `pendingNet` es el cambio neto en `this.particles.size` que la
+   * llamada está a punto de causar cuando se evalúa (ver cada sitio de
+   * llamada) — bug real medido en vivo con un lote de exactamente 2000
+   * (el mismo número que `INSTANCE_THRESHOLD`): los 3 llamadores
+   * comparaban el conteo ANTES de terminar su propia operación contra
+   * el umbral, nunca el conteo FINAL resultante. En una división neta
+   * (quita 1, agrega 2 = +1) el conteo leído en el momento del chequeo
+   * es el de ANTES de quitar al padre — para la división que lleva de
+   * 1999 a 2000, ese chequeo ve 1999 (< 2000) y crea las 2 hijas como
+   * individuales, así que un lote apuntado exactamente a 2000 terminaba
+   * con las 2000 partículas en el nivel INDIVIDUAL (mallas PBR
+   * completas) — exactamente el escenario que esta función existe para
+   * evitar (ver el comentario de `INSTANCE_THRESHOLD`: "a 2000+ ya se
+   * medía en vivo cerca de colgar la pestaña"). Pasando el neto (+1 en
+   * los 3 sitios: nacer, dividir, y unir — este último ya resta A/B
+   * ANTES de chequear, así que el conteo leído ahí ya es el de después
+   * de quitarlas, y sólo falta sumar la resultante) el chequeo compara
+   * contra el conteo REAL que va a quedar, no uno transitorio a medio
+   * aplicar. */
+  private isInstancedTier(pendingNet: number = 0): boolean {
+    // Bug real medido en vivo (ver también `convertAllToInstanced` /
+    // `startBatch`): arreglar sólo el conteo transitorio (`pendingNet`,
+    // arriba) no bastaba. Un lote de "dividir en masa" apuntado a 2000
+    // arranca de 1 partícula y CRECE de a 1 por división — para
+    // CUALQUIER división mientras el conteo total siga muy por debajo
+    // del umbral (que es la inmensa mayoría de las ~1999 divisiones
+    // necesarias), este chequeo sigue dando individual, sin importar
+    // que el LOTE ENTERO ya sepa de antemano que va a terminar muy por
+    // encima. Verificado en vivo: incluso convirtiendo la población YA
+    // existente al arrancar el lote, la PRIMERISIMA división de ahí en
+    // adelante volvía a crear hijas individuales (conteo aún bajo),
+    // deshaciendo la conversión al toque. Si hay un lote "dividir"
+    // activo apuntado a `targetCount >= INSTANCE_THRESHOLD`, TODA
+    // división nueva durante ese lote es instanciada sin importar el
+    // conteo transitorio — es la única forma de que la población nunca
+    // pase, ni de refilón, por el nivel individual caro a esta escala.
+    if (this.batchActive && this.batchOpts?.mode === "dividir" && this.batchOpts.targetCount >= INSTANCE_THRESHOLD) {
+      return true;
+    }
+    return this.particles.size + pendingNet >= INSTANCE_THRESHOLD;
   }
 
   private ensureInstancedField(): InstancedField {
@@ -502,6 +549,25 @@ export class ParticulaState {
     rec.instanceSlot = this.allocateInstanceSlot(rec, position);
     this.particles.set(id, rec);
     return id;
+  }
+
+  /** Convierte de una sola vez TODA la población individual actual al
+   * nivel instanciado — ver el comentario largo en `startBatch` sobre
+   * por qué un lote que crece gradualmente de a 1 (dividir en masa)
+   * nunca llega a esto por su cuenta. Conserva el mismo `id` (nunca
+   * borra/recrea el registro) para que selección, `mostRecentId` y el
+   * `brainDir` ya asignado sigan intactos — sólo cambia CÓMO se
+   * renderiza la partícula, no cuál es. */
+  private convertAllToInstanced() {
+    for (const rec of this.particles.values()) {
+      if (!rec.mesh || this.lockedIds.has(rec.id)) continue;
+      this.scene.remove(rec.mesh);
+      rec.mesh.geometry.dispose();
+      (rec.mesh.material as THREE.Material).dispose();
+      rec.mesh = null;
+      rec.baseRadius = INSTANCE_RADIUS;
+      rec.instanceSlot = this.allocateInstanceSlot(rec, rec.renderPos);
+    }
   }
 
   private unregister(id: number) {
@@ -753,17 +819,24 @@ export class ParticulaState {
     // de 500 partículas".
     const brainStrength = THREE.MathUtils.clamp((this.particles.size - BRAIN_RAMP_START) / BRAIN_RAMP_RANGE, 0, 1);
     if (brainStrength > 0) {
-      let cxSum = 0;
-      let cySum = 0;
-      let czSum = 0;
-      for (let k = 0; k < n; k++) {
-        cxSum += s.px[k];
-        cySum += s.py[k];
-        czSum += s.pz[k];
-      }
-      const centroidX = cxSum / n;
-      const centroidY = cySum / n;
-      const centroidZ = czSum / n;
+      // Bug real medido en vivo con un lote de 2000 ("ya no se ve el
+      // cerebro", la nube entera terminaba lejísimos del origen — un
+      // centroide de hasta y≈+85 tras ~160s de simulación): esto SÍ
+      // recalculaba un centroide de las posiciones ACTUALES cada
+      // cuadro y jalaba hacia `centroid + brainDir*dist` — el
+      // comentario original asumía que fijar `brainDir` por partícula
+      // (ver abajo) bastaba para eliminar toda realimentación, pero
+      // `computeBrainDir` NO tiene media cero a propósito (shapeY se
+      // encoge menos para dy>=0 que para dy<0, así el cerebro queda
+      // más lleno arriba que abajo) — medido con 2M muestras, el
+      // sesgo es ~+0.02 en Y. Como el centroide se recalculaba de las
+      // posiciones que el propio jalón acababa de mover, ese sesgo se
+      // realimentaba sobre el centroide mismo, cuadro a cuadro, sin
+      // ningún punto fijo que lo frenara — un random walk CON deriva,
+      // no sólo difusión. Anclar en el origen del mundo (0,0,0) — que
+      // es donde nace la semilla (`main.ts`) y cualquier partícula
+      // aislada (`randomSpawnPosition`) — da exactamente la misma
+      // forma relativa sin nada que pueda arrastrar la nube entera.
       const pullMag = brainStrength * 1.1 * dt;
       for (let k = 0; k < n; k++) {
         // `brainDirX/Y/Z` es FIJO por partícula (asignado una sola vez
@@ -779,20 +852,20 @@ export class ParticulaState {
         // transformación (el eje Z puro), no a un elipsoide estable
         // (medido en vivo: tras ~3500 cuadros, stdZ creciendo sin freno
         // y stdX/stdY colapsando hacia 0). Con una dirección ASIGNADA
-        // una vez y jalando sólo hacia `centroid + brainDir*dist`
-        // (dist = distancia ACTUAL, no escalada), cada partícula sólo
-        // rota angularmente hacia su propio destino fijo — estable,
-        // sin realimentación.
+        // una vez y jalando sólo hacia `brainDir*dist` desde el ORIGEN
+        // (dist = distancia actual al origen, no escalada), cada
+        // partícula sólo rota angularmente hacia su propio destino
+        // fijo — sin realimentación, ni por partícula ni agregada.
         const dx = s.brainDirX[k];
         const dy = s.brainDirY[k];
         const dz = s.brainDirZ[k];
-        const ox = s.px[k] - centroidX;
-        const oy = s.py[k] - centroidY;
-        const oz = s.pz[k] - centroidZ;
+        const ox = s.px[k];
+        const oy = s.py[k];
+        const oz = s.pz[k];
         const dist = Math.sqrt(ox * ox + oy * oy + oz * oz);
-        const targetX = centroidX + dx * dist;
-        const targetY = centroidY + dy * dist;
-        const targetZ = centroidZ + dz * dist;
+        const targetX = dx * dist;
+        const targetY = dy * dist;
+        const targetZ = dz * dist;
         s.pushX[k] += (targetX - s.px[k]) * pullMag;
         s.pushY[k] += (targetY - s.py[k]) * pullMag;
         s.pushZ[k] += (targetZ - s.pz[k]) * pullMag;
@@ -813,8 +886,10 @@ export class ParticulaState {
 
     // Nivel instanciado (ver INSTANCE_THRESHOLD) — mismo motivo que
     // `startDivide`/`startUnite`: sin malla PBR individual no hay nada
-    // que animar con `BIRTH_VARIANTS`, aparece directo.
-    if (this.isInstancedTier()) {
+    // que animar con `BIRTH_VARIANTS`, aparece directo. `+1`: esta
+    // partícula nueva aún no está en `this.particles` (ver el
+    // comentario de `isInstancedTier`) — el conteo final va a incluirla.
+    if (this.isInstancedTier(1)) {
       const id = this.registerInstanced(color, INSTANCE_RADIUS, pos);
       this.mostRecentId = id;
       this.onChange();
@@ -937,7 +1012,10 @@ export class ParticulaState {
     // instanciado) y aun así las hijas deben nacer individuales si el
     // conteo ya volvió a estar por debajo del umbral.
     const canAnimate = rec.mesh !== null;
-    const useInstanced = this.isInstancedTier();
+    // `+1`: el padre TODAVÍA está en `this.particles` en este punto
+    // (se quita más abajo); una división neta agrega 1 (quita 1, agrega
+    // 2) — ver el comentario de `isInstancedTier`.
+    const useInstanced = this.isInstancedTier(1);
 
     if (!canAnimate || useInstanced) {
       if (rec.mesh) {
@@ -965,7 +1043,39 @@ export class ParticulaState {
       if (opts.reframe ?? true) {
         this.reframe([...this.otherPositions([idA, idB]), posA, posB]);
       }
-      onComplete(idA, idB);
+      // Bug real reportado en vivo ("se rompe" — pantalla negra/
+      // sobreexpuesta apenas arranca un lote apuntado a 2000): sin
+      // malla que animar, antes se llamaba `onComplete` de inmediato,
+      // en el MISMO tick — eso libera el cupo de `batchInFlight` al
+      // instante, así que con `staggerSeconds` en 0 (valor que el
+      // usuario sí puso) cada oleada relanzaba de inmediato con el
+      // cupo lleno de nuevo, DUPLICANDO la población cada cuadro
+      // (1→2→4→8→...→2000 en ~11 cuadros, un parpadeo de ~0.2s a
+      // 60fps). Ni `reframe` (cada 0.6s) ni `declump`/el jalón de
+      // cerebro (que necesitan varios cuadros para separar/acomodar)
+      // alcanzan a hacer NADA en ese tiempo — la cámara se queda en el
+      // encuadre original de 1 partícula mientras 2000 ya existen
+      // amontonadas ahí mismo, literalmente dentro de ellas (de ahí lo
+      // negro/sobreexpuesto). Retrasar `onComplete` por `duration` — lo
+      // mismo que ya tarda la rama ANIMADA de abajo — bloquea el cupo
+      // el mismo tiempo en los dos casos: instanciado o no, el ritmo
+      // real de crecimiento queda gobernado por
+      // `maxConcurrent/duration`, nunca por cuántas veces se pueda
+      // relanzar una oleada en un solo cuadro.
+      this.lockedIds.add(idA);
+      this.lockedIds.add(idB);
+      this.activeAnimations.push(
+        tween(
+          duration,
+          (t) => t,
+          () => {},
+          () => {
+            this.lockedIds.delete(idA);
+            this.lockedIds.delete(idB);
+            onComplete(idA, idB);
+          },
+        ),
+      );
       return true;
     }
 
@@ -1054,7 +1164,11 @@ export class ParticulaState {
     const canAnimate = meshA !== null && meshB !== null;
     this.unregister(idA);
     this.unregister(idB);
-    const useInstanced = this.isInstancedTier();
+    // `+1`: A y B ya se quitaron arriba, así que `this.particles.size`
+    // ya es el conteo DESPUÉS de la resta — sólo falta sumar la
+    // resultante que se registra más abajo (ver el comentario de
+    // `isInstancedTier`).
+    const useInstanced = this.isInstancedTier(1);
 
     if (opts.reframe ?? true) {
       // Bug real visto en vivo ("parpadea" al unir): unregister ya
@@ -1107,7 +1221,24 @@ export class ParticulaState {
       this.scene.add(result);
       resultId = this.register(result);
     }
-    onComplete(resultId);
+    // Mismo retraso que la rama instantánea de `startDivide` (ver ese
+    // comentario largo) y por la misma razón: sin esto, un lote "unir
+    // en masa" con `staggerSeconds` en 0 podría desplomar la población
+    // varios órdenes de magnitud en un puñado de cuadros, sin que la
+    // cámara (que reencuadra cada 0.6s) tenga ninguna oportunidad de
+    // seguirle el paso.
+    this.lockedIds.add(resultId);
+    this.activeAnimations.push(
+      tween(
+        duration,
+        (t) => t,
+        () => {},
+        () => {
+          this.lockedIds.delete(resultId);
+          onComplete(resultId);
+        },
+      ),
+    );
     return true;
   }
 
@@ -1254,6 +1385,23 @@ export class ParticulaState {
     if (this.busy || this.batchActive) return false;
     if (opts.mode === "dividir" && this.particles.size < 1) return false;
     if (opts.mode === "unir" && this.particles.size < 2) return false;
+    // Bug real medido en vivo con un lote de "dividir en masa" hasta
+    // 2000 (ver el comentario largo de `isInstancedTier`): una
+    // población que CRECE gradualmente de a 1 por división nunca
+    // "alcanza" el nivel instanciado por su cuenta — sólo la partícula
+    // creada justo al cruzar el umbral queda instanciada; las miles de
+    // ANTES (la inmensa mayoría) se quedan para siempre como mallas
+    // PBR completas, exactamente el costo caro que este nivel existe
+    // para evitar (verificado: un lote apuntado a 2000 terminaba con
+    // 1998 individuales y sólo 2 instanciadas). Si ya se sabe de
+    // antemano que el lote va a terminar en o sobre el umbral,
+    // convertir TODA la población actual de una sola vez antes de la
+    // primera oleada — así cada división nueva parte de un padre YA
+    // instanciado, nunca de uno que habría que crear como individual
+    // primero para no volver a tocarlo jamás.
+    if (opts.mode === "dividir" && opts.targetCount >= INSTANCE_THRESHOLD) {
+      this.convertAllToInstanced();
+    }
     this.batchActive = true;
     this.batchOpts = opts;
     this.batchInFlight = 0;
