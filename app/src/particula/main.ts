@@ -151,6 +151,11 @@ function setupUi(state: ParticulaState, camera: THREE.Camera, canvas: HTMLCanvas
 
   batchTargetInput.min = String(config.batch.targetMin);
   batchTargetInput.max = String(config.batch.targetMax);
+  // Recorta también un valor viejo guardado en localStorage de antes
+  // de este fix (ej. un 25000 tecleado a mano en una sesión anterior)
+  // — sin esto, `config.batch.targetCount` seguiría sin tope hasta que
+  // el usuario tocara el campo.
+  config.batch.targetCount = THREE.MathUtils.clamp(config.batch.targetCount, config.batch.targetMin, config.batch.targetMax);
   batchTargetInput.value = String(config.batch.targetCount);
   batchDurationSlider.min = String(config.batch.durationMin);
   batchDurationSlider.max = String(config.batch.durationMax);
@@ -267,7 +272,18 @@ function setupUi(state: ParticulaState, camera: THREE.Camera, canvas: HTMLCanvas
     });
   });
   batchTargetInput.addEventListener("input", () => {
-    config.batch.targetCount = Number(batchTargetInput.value);
+    // `max`/`min` en un <input type="number"> sólo afectan las flechas
+    // del spinner — un valor tecleado a mano (o pegado) por encima del
+    // máximo pasa derecho sin que nada lo detenga. Bug real reportado
+    // en vivo: escribir 25000 (muy por encima del máximo real de 2000)
+    // lo mandó tal cual a `startBatch`, y cada partícula es una malla
+    // COMPLETA aparte (SphereGeometry 64×64 + MeshPhysicalMaterial
+    // propio, sin instancing) — a esa escala cuelga o tira la pestaña.
+    // Recortar aquí, no sólo en el atributo, es lo que de verdad limita
+    // cuánto se le puede pedir al lote.
+    const clamped = THREE.MathUtils.clamp(Math.round(Number(batchTargetInput.value) || config.batch.targetMin), config.batch.targetMin, config.batch.targetMax);
+    batchTargetInput.value = String(clamped);
+    config.batch.targetCount = clamped;
     saveConfig(config);
   });
   batchDurationSlider.addEventListener("input", () => {
@@ -298,10 +314,14 @@ function setupUi(state: ParticulaState, camera: THREE.Camera, canvas: HTMLCanvas
       return;
     }
     const variantKey = config.batch.mode === "dividir" ? styleDividir.value : styleUnir.value;
+    // Segunda barrera aparte del listener del input — cualquier otro
+    // camino que llegue a fijar `config.batch.targetCount` (ej. un
+    // valor viejo restaurado de localStorage) tampoco puede pasar de
+    // largo sin recorte justo antes de arrancar el lote real.
     state.startBatch({
       mode: config.batch.mode,
       variantKey,
-      targetCount: config.batch.targetCount,
+      targetCount: THREE.MathUtils.clamp(config.batch.targetCount, config.batch.targetMin, config.batch.targetMax),
       duration: config.batch.duration,
       maxConcurrent: config.batch.maxConcurrent,
       staggerSeconds: config.batch.staggerSeconds,

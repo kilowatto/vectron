@@ -26,6 +26,46 @@ interface CameraRig {
  * las haga rozarse visiblemente. */
 const MIN_SEPARATION_FACTOR = 1.15;
 
+/** Deformación sutil hacia una silueta tipo "cerebro" — pedido
+ * explícito del usuario ("que esta nube se vaya formando un cerebro,
+ * que sea sutil... que se vaya llenando en lugar de la esfera").
+ * `BRAIN_RAMP_START` es dónde la fuerza empieza en 0 (la nube sigue
+ * viéndose como la esfera/nube de siempre hasta ahí); crece hasta el
+ * máximo pasadas `BRAIN_RAMP_RANGE` partículas más, así el cambio es
+ * gradual con el crecimiento del lote, no un salto. Ver `declump`. */
+const BRAIN_RAMP_START = 500;
+const BRAIN_RAMP_RANGE = 700;
+
+/** Aplica UNA VEZ (al crear la partícula, nunca cuadro a cuadro — ver
+ * el comentario largo en `declump`) la anisotropía que le da su
+ * silueta a la nube: aplana un poco verticalmente (más abajo que
+ * arriba, como la base/tallo del cerebro), elonga en Z (lóbulos
+ * frontal/occipital) y, en la mitad de arriba, hunde una hendidura
+ * angosta centrada en x=0 (la fisura entre "hemisferios"). Recibe y
+ * devuelve una dirección UNITARIA — la escala real de cada partícula
+ * la sigue gobernando sólo la física de anti-encimado. */
+function computeBrainDir(dir: THREE.Vector3): THREE.Vector3 {
+  let shapeY = dir.y * (dir.y >= 0 ? 0.92 : 0.7);
+  const shapeZ = dir.z * 1.18;
+  const shapeX = dir.x;
+  // Hendidura sagital: una fisura real es un HUNDIMIENTO EN ALTURA a
+  // lo largo de la línea media (x≈0), no una falta de partículas en
+  // x. Bug real encontrado antes de deployar (verificado contando
+  // partículas por bin de x): reducir `shapeX` cerca del centro no
+  // aparta nada — para una partícula ya casi centrada, `dirX` es
+  // pequeño, así que encogerlo más apenas cambia su objetivo, y el
+  // resultado medido fue un PICO de densidad en x=0, lo opuesto a una
+  // hendidura. Reducir `shapeY` (la altura) cerca de x≈0 sí hunde esa
+  // franja central hacia abajo, dejando dos lomas más altas a los
+  // lados — el perfil real de una fisura entre hemisferios.
+  if (dir.y > 0) {
+    const groove = 1 - 0.35 * Math.exp(-(dir.x * dir.x) / (2 * 0.22 * 0.22));
+    shapeY *= groove;
+  }
+  const shaped = new THREE.Vector3(shapeX, shapeY, shapeZ);
+  return shaped.lengthSq() > 1e-12 ? shaped.normalize() : dir.clone();
+}
+
 /** `BirthVariant` no recibe un `onDone` explícito en su firma (a
  * diferencia de división/unión/muerte) porque no necesita decidir
  * CUÁNDO remover nada de la escena — sólo revela una malla que ya
@@ -115,6 +155,9 @@ export class ParticulaState {
     py: Float64Array;
     pz: Float64Array;
     r: Float64Array;
+    brainDirX: Float64Array;
+    brainDirY: Float64Array;
+    brainDirZ: Float64Array;
     pushX: Float64Array;
     pushY: Float64Array;
     pushZ: Float64Array;
@@ -387,6 +430,9 @@ export class ParticulaState {
         py: new Float64Array(capacity),
         pz: new Float64Array(capacity),
         r: new Float64Array(capacity),
+        brainDirX: new Float64Array(capacity),
+        brainDirY: new Float64Array(capacity),
+        brainDirZ: new Float64Array(capacity),
         pushX: new Float64Array(capacity),
         pushY: new Float64Array(capacity),
         pushZ: new Float64Array(capacity),
@@ -404,6 +450,20 @@ export class ParticulaState {
       const radius = (rec.mesh.userData.baseRadius as number) ?? 0.32;
       s.r[i] = radius;
       if (radius > maxRadius) maxRadius = radius;
+      // Partículas creadas antes de que existiera esta forma (ej. la
+      // semilla inicial, sembrada directo en main.ts) no tienen
+      // `brainDir` asignado — se calcula una vez aquí, a partir de su
+      // dirección actual desde el origen, y se cachea en userData para
+      // no repetir el cálculo cada cuadro.
+      let brainDir = rec.mesh.userData.brainDir as THREE.Vector3 | undefined;
+      if (!brainDir) {
+        const fallbackDir = rec.home.lengthSq() > 1e-6 ? rec.home.clone().normalize() : this.randomIsotropicAxis();
+        brainDir = computeBrainDir(fallbackDir);
+        rec.mesh.userData.brainDir = brainDir;
+      }
+      s.brainDirX[i] = brainDir.x;
+      s.brainDirY[i] = brainDir.y;
+      s.brainDirZ[i] = brainDir.z;
       s.pushX[i] = 0;
       s.pushY[i] = 0;
       s.pushZ[i] = 0;
@@ -466,6 +526,62 @@ export class ParticulaState {
         }
       }
     }
+    // Empuje ADICIONAL hacia la silueta de cerebro — se SUMA al empuje
+    // de anti-encimado de arriba en los mismos `pushX/Y/Z`, nunca lo
+    // reemplaza: el anti-encimado sigue garantizando que no se toquen,
+    // esto sólo influye hacia dónde tira el "centro de gravedad" de
+    // cada partícula. `this.particles.size` (el conteo REAL, no sólo
+    // `n` que excluye a las bloqueadas por una animación) es lo que ve
+    // el usuario en el HUD — es la referencia correcta para "después
+    // de 500 partículas".
+    const brainStrength = THREE.MathUtils.clamp((this.particles.size - BRAIN_RAMP_START) / BRAIN_RAMP_RANGE, 0, 1);
+    if (brainStrength > 0) {
+      let cxSum = 0;
+      let cySum = 0;
+      let czSum = 0;
+      for (let k = 0; k < n; k++) {
+        cxSum += s.px[k];
+        cySum += s.py[k];
+        czSum += s.pz[k];
+      }
+      const centroidX = cxSum / n;
+      const centroidY = cySum / n;
+      const centroidZ = czSum / n;
+      const pullMag = brainStrength * 1.1 * dt;
+      for (let k = 0; k < n; k++) {
+        // `brainDirX/Y/Z` es FIJO por partícula (asignado una sola vez
+        // al crearla, ver `assignBrainDir` en birth/startDivide/
+        // startUnite) — nunca se re-deriva de la posición actual cada
+        // cuadro. Bug real encontrado antes de deployar: la primera
+        // versión SÍ recalculaba la dirección de cada partícula a
+        // partir de su offset actual y jalaba hacia una versión
+        // re-escalada de ESA MISMA dirección — como el resultado de un
+        // cuadro es la entrada del siguiente, cada cuadro volvía a
+        // amplificar el eje Z sobre lo YA amplificado, sin ningún punto
+        // de referencia fijo — converge al autovector dominante de la
+        // transformación (el eje Z puro), no a un elipsoide estable
+        // (medido en vivo: tras ~3500 cuadros, stdZ creciendo sin freno
+        // y stdX/stdY colapsando hacia 0). Con una dirección ASIGNADA
+        // una vez y jalando sólo hacia `centroid + brainDir*dist`
+        // (dist = distancia ACTUAL, no escalada), cada partícula sólo
+        // rota angularmente hacia su propio destino fijo — estable,
+        // sin realimentación.
+        const dx = s.brainDirX[k];
+        const dy = s.brainDirY[k];
+        const dz = s.brainDirZ[k];
+        const ox = s.px[k] - centroidX;
+        const oy = s.py[k] - centroidY;
+        const oz = s.pz[k] - centroidZ;
+        const dist = Math.sqrt(ox * ox + oy * oy + oz * oz);
+        const targetX = centroidX + dx * dist;
+        const targetY = centroidY + dy * dist;
+        const targetZ = centroidZ + dz * dist;
+        s.pushX[k] += (targetX - s.px[k]) * pullMag;
+        s.pushY[k] += (targetY - s.py[k]) * pullMag;
+        s.pushZ[k] += (targetZ - s.pz[k]) * pullMag;
+      }
+    }
+
     for (let k = 0; k < n; k++) {
       if (s.pushX[k] !== 0 || s.pushY[k] !== 0 || s.pushZ[k] !== 0) {
         (s.homeRefs[k] as THREE.Vector3).set(s.px[k] + s.pushX[k], s.py[k] + s.pushY[k], s.pz[k] + s.pushZ[k]);
