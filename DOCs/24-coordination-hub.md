@@ -51,7 +51,8 @@
 | 2026-07-25 | Kimi (k3) | **F1.4b DESPLEGADO:** renderer líquido 2D del loader (ventana de agua, rim fresnel, núcleo bioluminiscente, iridiscencia; sprites cacheados), commit `51e00ab`, live | `app/src/ui/components/cellularLoader.ts` | — |
 | 2026-07-25 | Kimi (k3) | **F1.4a DESPLEGADO — F1 COMPLETA:** el cubo principal usa el look líquido (fresnel, transmisión falsa PMREM, núcleo HDR, iridiscencia; PCA y hues intactos; adiós sopa aditiva), commit `162a7aa`, live | `app/src/scene/particleField.ts`, `app/src/main.ts` | F2 |
 | 2026-07-25 | Kimi (k3) | **F2-física DESPLEGADO:** curl noise en vertex shader + resortes semánticos con jelly al fijar concepto + CPU ≈0, commit `2cb6502`, live | `app/src/scene/particleField.ts`, `conceptInteraction.ts`, `main.ts` | F2 transiciones celulares |
-| 2026-07-25 | Kimi (k3) | **F2-transiciones EN CURSO:** conteo celular por nivel 15k/20k/25k (división al subir, fusión al bajar, cero pop-in) (`app/src/scene/` + `main.ts` — NO EDITAR) | `app/src/scene/particleField.ts`, `app/src/main.ts` | Cablear QualityGovernor + GUI drawers → cierre F2 |
+| 2026-07-26 | Kimi (k3) | **F2-transiciones DESPLEGADO:** población celular por nivel 15k/20k/25k (mitosis al subir, fusión al bajar, cero pop-in) + caption "el modelo no cambió, tu filtro sí", commit `20d9f88`, live | `particleField.ts`, `main.ts`, `i18n.ts`, `index.html`, `conceptInteraction.ts` | Governor wiring |
+| 2026-07-26 | Kimi (k3) | **F2-governor-wiring EN CURSO:** cablear QualityGovernor al engine (frametime crudo, palancas reversibles, indicador i18n) (`app/src/scene/` + `main.ts` + `i18n.ts` — NO EDITAR) | `app/src/scene/`, `app/src/main.ts` | GUI drawers → cierre F2 |
 
 ### 4. Open questions / Preguntas abiertas
 
