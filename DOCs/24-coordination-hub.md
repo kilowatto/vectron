@@ -17,7 +17,7 @@
 
 | Agente | Rol | Zona asignada | Estado |
 |---|---|---|---|
-| **Kimi Code CLI** (kimi-code/k3) | **Mando de ejecución** | F1 gráficos: partícula líquida, loader celular Fibonacci, física del cubo + GUI (plan 21 §4-§5). Archivos: `app/src/particula/`, `app/src/scene/`, `app/src/main.ts`, `app/src/ui/` | **ACTIVO — F1.1 partícula líquida en progreso** |
+| **Kimi Code CLI** (kimi-code/k3) | **Mando de ejecución** | F1+F2 gráficos (plan 21 §4-§5). **Zonas ACTIVAS en paralelo (2026-07-25 ~22:35 CST):** (a) `app/src/particula/` + `app/particula.html` — F1.2 animaciones celulares; (b) `app/src/ui/components/cellularLoader.*` + `app/src/main.ts` + `app/src/i18n.ts` — F1.3 loader Fibonacci; (c) `app/src/scene/qualityGovernor.ts` (nuevo) — F2 governor. **No editar ninguna de estas rutas hasta nuevo aviso en §3** | **ACTIVO — F1.1 desplegado; F1.2/F1.3/governor en curso** |
 | Cursor / Fable 5 | Auditorías | Docs 17 (adversarial), 19 (pedagógica/científica) | Auditorías entregadas; sin zona de código asignada |
 | Cualquier otra IA / dev | — | **No tocar las zonas de Kimi sin leer §3 y coordinar aquí primero** | — |
 
