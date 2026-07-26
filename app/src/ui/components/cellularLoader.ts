@@ -27,9 +27,12 @@ import css from "./cellularLoader.css?inline";
  * interfaz `CellularRenderer` de abajo (probablemente con el shader
  * instanciado de §4.2) y pasándola al constructor vía `setRenderer()` —
  * la máquina de estados Fibonacci, el layout y la integración con
- * main.ts NO cambian. Hoy: `Canvas2DCellRenderer` (glow radial + wobble
- * senoidal + mitosis elipse→separación), deliberadamente simple y sin
- * dependencias de `app/src/particula/`.
+ * main.ts NO cambian. Renderer por defecto: `Liquid2DCellRenderer`
+ * (aproximación Canvas 2D del look líquido del lab: gota + rim fresnel +
+ * núcleo bioluminiscente + iridiscencia de burbuja — F1.4). Queda
+ * `Canvas2DCellRenderer` (glow radial + wobble senoidal + mitosis
+ * elipse→separación) como fallback simple, sin dependencias de
+ * `app/src/particula/`.
  *
  * ### Métodos públicos (mismo contrato que el splash viejo + error)
  * - `setProgress(pct, phaseLabel)` — `pct` 0-100 monótono, label real de
@@ -60,9 +63,10 @@ export interface CellularRenderer {
 }
 
 /** Renderer 2D provisional: glow radial + wobble senoidal + mitosis
- * elipse→pellizco→separación. La división/look definitivos vendrán del
- * lab (/particula) en F1.4 — ver el contrato de arriba. */
-class Canvas2DCellRenderer implements CellularRenderer {
+ * elipse→pellizco→separación. Queda como FALLBACK exportado (el look
+ * líquido por defecto es `Liquid2DCellRenderer`) — ver el contrato F1.4
+ * de arriba. */
+export class Canvas2DCellRenderer implements CellularRenderer {
   #ctx: CanvasRenderingContext2D;
   #w = 0;
   #h = 0;
@@ -161,6 +165,296 @@ class Canvas2DCellRenderer implements CellularRenderer {
   }
 }
 
+/* --- Renderer líquido 2D (F1.4) ----------------------------------------
+ * Aproximación Canvas 2D del shader TSL del lab (particula/liquidParticle.ts
+ * §4.1): gota de agua con ventana transparente, rim fresnel sesgado hacia
+ * la luz, núcleo bioluminiscente desplazado que respira, e iridiscencia
+ * cian→magenta→dorado confinada al rim. Sin WebGL: el loader corre ANTES
+ * de que exista el engine 3D y no debe robar main thread al boot real.
+ *
+ * RENDIMIENTO — sprites cacheados, no gradientes por frame: con hasta 233
+ * células, crear 3-4 gradientes por célula y frame (~50k alloc/s) churnea
+ * el GC; en cambio se pre-renderizan 3 sprites offscreen UNA vez (cuerpo+
+ * rim+especular, núcleo, anillo iridiscente) a radio base 64 px (las
+ * células llegan a ~28 px → drawImage siempre DOWNSCALA, nítido a cualquier
+ * dpr) y cada frame solo hace 3 drawImage transformados por célula (blit
+ * GPU barato). La variación por célula (dirección del núcleo, fase de
+ * respiración, velocidad/sentido de la iridiscencia) se logra con
+ * transforms, no re-renderizando sprites. Todo deriva de `seedHash` —
+ * cero Math.random en runtime. */
+const SPRITE_R = 64; // radio base de los sprites cacheados
+const SPRITE_SIZE = SPRITE_R * 3; // margen para el glow del rim
+const LIGHT_ANGLE = -Math.PI / 4; // luz fija arriba-derecha (convención del lab)
+const IRID_SPEED = 0.0002; // rad/ms pico → vuelta del arco en ~31-63 s (MUY lento)
+const BREATH_SPEED = 0.0016; // rad/ms → respiración del núcleo ~4 s
+
+/** Hash determinista de la semilla de la célula (índice × ángulo dorado)
+ * — la fuente de TODA la variación por célula; Math.random prohibido. */
+function seedHash(seed: number, salt: number): number {
+  const x = Math.sin(seed * 12.9898 + salt * 78.233) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+/** Gradiente de 3 paradas en bucle cian→magenta→dorado→cian (mismas
+ * paradas que el shader del lab; smoothstep entre paradas). */
+function iridColor(t: number): [number, number, number] {
+  const STOPS: readonly (readonly [number, number, number])[] = [
+    [38, 217, 242], // cian
+    [230, 64, 217], // magenta
+    [255, 199, 71], // dorado
+    [38, 217, 242], // cierra el bucle
+  ];
+  const x = (t - Math.floor(t)) * 3;
+  const i = Math.min(Math.floor(x), 2);
+  const f = x - i;
+  const s = f * f * (3 - 2 * f); // smoothstep
+  const a = STOPS[i];
+  const b = STOPS[i + 1];
+  return [a[0] + (b[0] - a[0]) * s, a[1] + (b[1] - a[1]) * s, a[2] + (b[2] - a[2]) * s];
+}
+
+export class Liquid2DCellRenderer implements CellularRenderer {
+  #ctx: CanvasRenderingContext2D;
+  #w = 0;
+  #h = 0;
+  #color: readonly [number, number, number];
+  #body: HTMLCanvasElement;
+  #core: HTMLCanvasElement;
+  #irid: HTMLCanvasElement;
+
+  /** `bodyColor` = masa de color del dominio (dorado Vectron por defecto,
+   * el mismo del renderer provisional). */
+  constructor(canvas: HTMLCanvasElement, bodyColor: readonly [number, number, number] = [217, 138, 52]) {
+    this.#ctx = canvas.getContext("2d")!;
+    this.#color = bodyColor;
+    this.#body = this.#buildBodySprite();
+    this.#core = this.#buildCoreSprite();
+    this.#irid = this.#buildIridSprite();
+  }
+
+  resize(width: number, height: number, dpr: number): void {
+    this.#w = width;
+    this.#h = height;
+    const canvas = this.#ctx.canvas;
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+    this.#ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  render(cells: readonly RenderCell[], timeMs: number): void {
+    const ctx = this.#ctx;
+    ctx.clearRect(0, 0, this.#w, this.#h);
+    // prefers-reduced-motion: tiempo congelado → look estático (sin pulso
+    // ni rotación), las células se siguen pintando por si el renderer se
+    // usa fuera del loader (allí el CSS ya oculta el canvas).
+    const t = reducedMotion ? 0 : timeMs;
+    ctx.globalCompositeOperation = "lighter";
+    for (const cell of cells) {
+      this.#drawCell(cell, t);
+    }
+    ctx.globalCompositeOperation = "source-over";
+  }
+
+  #drawCell(cell: RenderCell, t: number): void {
+    // Wobble senoidal + deriva orgánica (misma base que el renderer
+    // viejo); la amplitud se amplifica durante la mitosis.
+    const wobble = 1 + (0.07 + 0.08 * cell.division) * Math.sin(t * 0.003 + cell.seed);
+    const driftX = 3 * Math.sin(t * 0.0006 + cell.seed * 1.7);
+    const driftY = 3 * Math.cos(t * 0.0005 + cell.seed * 2.3);
+    const cx = cell.x + driftX;
+    const cy = cell.y + driftY;
+    const r = cell.r * wobble;
+
+    // Variación por célula, todo por semilla (determinista).
+    const coreAngle = seedHash(cell.seed, 1) * Math.PI * 2; // dirección del núcleo
+    const breathPhase = seedHash(cell.seed, 2) * Math.PI * 2;
+    const iridSpeed = (seedHash(cell.seed, 3) - 0.5) * 2 * IRID_SPEED; // ±
+    const iridPhase = seedHash(cell.seed, 4) * Math.PI * 2;
+
+    if (cell.division > 0) {
+      // Mitosis: el sprite circular se estira por escala NO uniforme hacia
+      // la hija (elipse), luego puente citoplasmático que se adelgaza.
+      const dt = cell.division;
+      const angle = cell.divisionAngle;
+      const stretch = Math.sin(Math.min(dt * 2, 1) * Math.PI * 0.5);
+      const rx = r * (1 + 0.7 * stretch);
+      const ry = r * (1 - 0.25 * stretch);
+      const half = SPRITE_SIZE / 2;
+      const ctx = this.#ctx;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(angle);
+      ctx.scale(rx / SPRITE_R, ry / SPRITE_R);
+      ctx.globalAlpha = 0.95;
+      ctx.drawImage(this.#body, -half, -half);
+      ctx.restore();
+      // La madre sigue viva: núcleo respirando dentro del cuerpo estirado.
+      this.#drawCore(cx, cy, r, coreAngle, breathPhase, t);
+      if (dt >= 0.5) {
+        const sepT = (dt - 0.5) * 2;
+        const sep = cell.divisionSep * sepT;
+        const dx = Math.cos(angle);
+        const dy = Math.sin(angle);
+        const childR = r * (0.55 + 0.45 * sepT);
+        if (sepT < 0.85) {
+          // Puente: gradiente radial estirado en el eje de la división
+          // (pocas mitosis concurrentes → alloc de gradiente aceptable).
+          const bridgeW = r * 0.5 * (1 - sepT / 0.85);
+          this.#bridge(cx, cy, angle, sep, r, bridgeW);
+        }
+        // La hija nace como gota completa (cuerpo, sin núcleo propio aún).
+        this.#drawSprite(this.#body, cx + dx * sep, cy + dy * sep, childR, 0, 0.3 + 0.6 * sepT);
+      }
+      return;
+    }
+
+    this.#drawSprite(this.#body, cx, cy, r, 0, 0.95);
+    // Iridiscencia de burbuja: el anillo rota MUY lento (velocidad y
+    // sentido por semilla); ya viene confinado al rim en el sprite.
+    this.#drawSprite(this.#irid, cx, cy, r, iridPhase + t * iridSpeed, 0.8);
+    this.#drawCore(cx, cy, r, coreAngle, breathPhase, t);
+  }
+
+  /** Núcleo bioluminiscente: hotspot desplazado ~30% del radio en la
+   * dirección de la semilla, con respiración ±6%. */
+  #drawCore(cx: number, cy: number, r: number, coreAngle: number, breathPhase: number, t: number): void {
+    const breath = 1 + 0.06 * Math.sin(t * BREATH_SPEED + breathPhase);
+    const nx = cx + Math.cos(coreAngle) * r * 0.3;
+    const ny = cy + Math.sin(coreAngle) * r * 0.3;
+    this.#drawSprite(this.#core, nx, ny, r * 0.55 * breath, 0, 0.9);
+  }
+
+  #drawSprite(sprite: HTMLCanvasElement, x: number, y: number, radius: number, rotation: number, alpha: number): void {
+    const ctx = this.#ctx;
+    const half = SPRITE_SIZE / 2;
+    const scale = radius / SPRITE_R;
+    ctx.save();
+    ctx.translate(x, y);
+    if (rotation !== 0) ctx.rotate(rotation);
+    ctx.scale(scale, scale);
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(sprite, -half, -half);
+    ctx.restore();
+  }
+
+  /** Puente citoplasmático de la mitosis (gradiente en el eje madre→hija). */
+  #bridge(cx: number, cy: number, angle: number, sep: number, r: number, w: number): void {
+    const ctx = this.#ctx;
+    const [cr, cg, cb] = this.#color;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(angle);
+    const g = ctx.createRadialGradient(sep * 0.5, 0, 0, sep * 0.5, 0, sep * 0.5 + r * 0.4);
+    g.addColorStop(0, `rgba(${cr}, ${cg}, ${cb}, 0.3)`);
+    g.addColorStop(1, `rgba(${cr}, ${cg}, ${cb}, 0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(sep * 0.5, 0, sep * 0.5 + r * 0.4, w * 1.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /** Sprite de cuerpo: ventana de agua + rim fresnel + especular. */
+  #buildBodySprite(): HTMLCanvasElement {
+    const sprite = document.createElement("canvas");
+    sprite.width = sprite.height = SPRITE_SIZE;
+    const g = sprite.getContext("2d")!;
+    const mid = SPRITE_SIZE / 2;
+    const [cr, cg, cb] = this.#color;
+    const col = (a: number) => `rgba(${cr}, ${cg}, ${cb}, ${a})`;
+
+    // Cuerpo: centro casi transparente (ventana de agua), la masa de
+    // color se concentra hacia el borde (absorción tipo Beer-Lambert,
+    // falsa como en el shader del lab).
+    const body = g.createRadialGradient(mid, mid, 0, mid, mid, SPRITE_R);
+    body.addColorStop(0, col(0.08));
+    body.addColorStop(0.55, col(0.22));
+    body.addColorStop(0.82, col(0.5));
+    body.addColorStop(0.96, col(0.3));
+    body.addColorStop(1, col(0));
+    g.fillStyle = body;
+    g.fillRect(0, 0, SPRITE_SIZE, SPRITE_SIZE);
+
+    // Rim fresnel base: anillo luminoso uniforme en el borde.
+    const rim = g.createRadialGradient(mid, mid, SPRITE_R * 0.7, mid, mid, SPRITE_R);
+    rim.addColorStop(0, "rgba(255, 252, 240, 0)");
+    rim.addColorStop(0.8, "rgba(255, 252, 240, 0.28)");
+    rim.addColorStop(0.95, "rgba(255, 252, 240, 0.55)");
+    rim.addColorStop(1, "rgba(255, 252, 240, 0)");
+    g.fillStyle = rim;
+    g.fillRect(0, 0, SPRITE_SIZE, SPRITE_SIZE);
+
+    // Rim más brillante del lado de la luz: el mismo anillo con el centro
+    // del gradiente desplazado hacia la luz → banda asimétrica (fresnel
+    // angular falso, sin trigonometría por píxel).
+    const lx = mid + Math.cos(LIGHT_ANGLE) * SPRITE_R * 0.38;
+    const ly = mid + Math.sin(LIGHT_ANGLE) * SPRITE_R * 0.38;
+    const hi = g.createRadialGradient(lx, ly, 0, lx, ly, SPRITE_R * 1.05);
+    hi.addColorStop(0, "rgba(255, 255, 255, 0)");
+    hi.addColorStop(0.4, "rgba(255, 255, 255, 0)");
+    hi.addColorStop(0.52, "rgba(255, 255, 255, 0.5)");
+    hi.addColorStop(0.68, "rgba(255, 255, 255, 0.08)");
+    hi.addColorStop(0.85, "rgba(255, 255, 255, 0)");
+    g.fillStyle = hi;
+    g.fillRect(0, 0, SPRITE_SIZE, SPRITE_SIZE);
+
+    // Especular: punto de luz duro y chico del lado de la luz (superficie
+    // húmeda — el "punto de luz" de la gota).
+    const sx = mid + Math.cos(LIGHT_ANGLE) * SPRITE_R * 0.52;
+    const sy = mid + Math.sin(LIGHT_ANGLE) * SPRITE_R * 0.52;
+    const spec = g.createRadialGradient(sx, sy, 0, sx, sy, SPRITE_R * 0.22);
+    spec.addColorStop(0, "rgba(255, 255, 255, 0.85)");
+    spec.addColorStop(0.4, "rgba(255, 255, 255, 0.22)");
+    spec.addColorStop(1, "rgba(255, 255, 255, 0)");
+    g.fillStyle = spec;
+    g.fillRect(0, 0, SPRITE_SIZE, SPRITE_SIZE);
+    return sprite;
+  }
+
+  /** Sprite del núcleo: hotspot radial cálido (blanco-dorado → dominio). */
+  #buildCoreSprite(): HTMLCanvasElement {
+    const sprite = document.createElement("canvas");
+    sprite.width = sprite.height = SPRITE_SIZE;
+    const g = sprite.getContext("2d")!;
+    const mid = SPRITE_SIZE / 2;
+    const [cr, cg, cb] = this.#color;
+    const grad = g.createRadialGradient(mid, mid, 0, mid, mid, SPRITE_R);
+    grad.addColorStop(0, "rgba(255, 244, 214, 0.95)");
+    grad.addColorStop(0.3, "rgba(255, 214, 140, 0.5)");
+    grad.addColorStop(0.65, `rgba(${cr}, ${cg}, ${cb}, 0.18)`);
+    grad.addColorStop(1, `rgba(${cr}, ${cg}, ${cb}, 0)`);
+    g.fillStyle = grad;
+    g.fillRect(0, 0, SPRITE_SIZE, SPRITE_SIZE);
+    return sprite;
+  }
+
+  /** Sprite de iridiscencia: anillo cian→magenta→dorado construido por
+   * segmentos de arco (createConicGradient no existe en Firefox). El alpha
+   * de cada segmento se modula por su orientación a la luz — solo se ve
+   * donde el rim fresnel es fuerte. */
+  #buildIridSprite(): HTMLCanvasElement {
+    const sprite = document.createElement("canvas");
+    sprite.width = sprite.height = SPRITE_SIZE;
+    const g = sprite.getContext("2d")!;
+    const mid = SPRITE_SIZE / 2;
+    const SEGS = 96;
+    g.lineCap = "round";
+    g.lineWidth = SPRITE_R * 0.13;
+    for (let i = 0; i < SEGS; i++) {
+      const a0 = (i / SEGS) * Math.PI * 2;
+      const a1 = ((i + 1) / SEGS) * Math.PI * 2 + 0.01; // solape mínimo
+      const [r, gg, b] = iridColor(i / SEGS);
+      const midA = (a0 + a1) / 2;
+      const facing = 0.35 + 0.65 * Math.max(0, Math.cos(midA - LIGHT_ANGLE));
+      g.strokeStyle = `rgba(${r | 0}, ${gg | 0}, ${b | 0}, ${0.5 * facing})`;
+      g.beginPath();
+      g.arc(mid, mid, SPRITE_R * 0.92, a0, a1);
+      g.stroke();
+    }
+    return sprite;
+  }
+}
+
 /* --- Máquina de estados Fibonacci -------------------------------------
  * Poblaciones Fibonacci y su umbral de progreso real (0-100). Los
  * umbrales siguen los pesos reales del boot de main.ts (Shell 5 ·
@@ -250,7 +544,7 @@ export class VxCellularLoader extends HTMLElement {
       return;
     }
 
-    this.#renderer = new Canvas2DCellRenderer(this.#canvas);
+    this.#renderer = new Liquid2DCellRenderer(this.#canvas);
     this.#resize();
     window.addEventListener("resize", this.#onResize);
     // Arranca con UNA célula viva en el centro — toda la población nace
@@ -276,7 +570,7 @@ export class VxCellularLoader extends HTMLElement {
   }
 
   /** Inyección del renderer definitivo del lab (F1.4) — ver el contrato
-   * en la doc de la clase. Reemplaza al Canvas2D provisional. */
+   * en la doc de la clase. Reemplaza al Liquid2D por defecto. */
   setRenderer(renderer: CellularRenderer): void {
     this.#renderer = renderer;
     this.#resize();
