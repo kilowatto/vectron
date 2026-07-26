@@ -1,7 +1,7 @@
 import * as THREE from "three/webgpu";
 import { createHeroParticle, createDrift, nextColor, bodyColorOf, mutateHue, type DriftParams } from "./heroParticle";
 import { createInstancedField, INSTANCE_RADIUS, type InstancedField } from "./instancedField";
-import { createLiquidField, type LiquidField } from "./liquidParticle";
+import { createLiquidField, LIQUID_ANIM, type LiquidField } from "./liquidParticle";
 import { BIRTH_VARIANTS } from "./animations/birth";
 import { DIVISION_VARIANTS } from "./animations/division";
 import { UNION_VARIANTS } from "./animations/union";
@@ -593,6 +593,52 @@ export class ParticulaState {
     this.liquidField.setActiveCount(this.liquidActiveCount);
   }
 
+  /** Driver de las animaciones celulares líquidas (F1.2): fija
+   * tipo/parámetros/eje de cada instancia una sola vez y luego sólo
+   * escribe el PROGRESO (aAnim.y) por cuadro — la deformación la hace
+   * la GPU en el vertex shader (ver liquidParticle.ts). La CPU por
+   * cuadro sigue siendo ~0 salvo durante las animaciones activas, y
+   * ahí sólo para las instancias animadas. Los targets se referencian
+   * por ParticleRecord (no por slot) porque el swap-with-last de
+   * `freeLiquidSlot` puede mover el slot de una instancia animada a
+   * media animación (muertes/fusiones concurrentes de un lote).
+   * Con `prefers-reduced-motion` la animación se salta: misma
+   * transición, instantánea. */
+  private animateLiquid(
+    duration: number,
+    targets: { rec: ParticleRecord; type: number; p1: number; p2: number; axis: THREE.Vector3 }[],
+    onDone: () => void,
+  ) {
+    const field = this.ensureLiquidField();
+    for (const t of targets) {
+      if (t.rec.instanceSlot !== null) field.setAnim(t.rec.instanceSlot, t.type, t.p1, t.p2, t.axis);
+      this.lockedIds.add(t.rec.id);
+    }
+    const finish = () => {
+      for (const t of targets) {
+        if (t.rec.instanceSlot !== null) field.clearAnim(t.rec.instanceSlot);
+        this.lockedIds.delete(t.rec.id);
+      }
+      onDone();
+    };
+    if (duration <= 0 || field.reducedMotion) {
+      finish();
+      return;
+    }
+    this.activeAnimations.push(
+      tween(
+        duration,
+        (t) => t,
+        (_eased, linear) => {
+          for (const t of targets) {
+            if (t.rec.instanceSlot !== null) field.setAnimProgress(t.rec.instanceSlot, linear);
+          }
+        },
+        finish,
+      ),
+    );
+  }
+
   /** Asigna el siguiente slot libre del pool instanciado — siempre al
    * final del rango activo (`instanceActiveCount`), nunca reutiliza un
    * hueco a medias: los huecos se evitan del todo con el patrón
@@ -1084,6 +1130,23 @@ export class ParticulaState {
     const color = nextColor();
     const pos = this.randomSpawnPosition();
 
+    // Modo líquido (F1.2): la célula emerge con escala easeOutBack +
+    // wobble amplificado que se calma — todo en el vertex shader (ver
+    // animateLiquid/LIQUID_ANIM.BIRTH).
+    if (this.particleStyle === "liquid") {
+      const id = this.registerLiquid(color, pos);
+      this.mostRecentId = id;
+      const rec = this.particles.get(id)!;
+      this.busy = true;
+      this.onChange();
+      this.reframe([...this.otherPositions([id]), pos]);
+      this.animateLiquid(duration, [{ rec, type: LIQUID_ANIM.BIRTH, p1: DEFAULT_CONFIG.liquidAnim.birthWobbleBoost, p2: 0, axis: new THREE.Vector3() }], () => {
+        this.busy = false;
+        this.onChange();
+      });
+      return;
+    }
+
     // Nivel instanciado (ver INSTANCE_THRESHOLD) — mismo motivo que
     // `startDivide`/`startUnite`: sin malla PBR individual no hay nada
     // que animar con `BIRTH_VARIANTS`, aparece directo. `+1`: esta
@@ -1216,6 +1279,34 @@ export class ParticulaState {
     // (se quita más abajo); una división neta agrega 1 (quita 1, agrega
     // 2) — ver el comentario de `isInstancedTier`.
     const useInstanced = this.isInstancedTier(1);
+
+    // Modo líquido (F1.2): mitosis animada — el padre se retira y las 2
+    // hijas nacen ya registradas en su posición final, pero el vertex
+    // shader las arranca EN la posición del padre (aAnimAxis = origen −
+    // hogar final), las estira tipo peanut a lo largo del eje de
+    // división y las separa con wobble que decae (LIQUID_ANIM.DIVIDE).
+    // Mismo ritmo que la rama hero (el tween dura `duration`), así el
+    // lote masivo queda paceado igual que con la rama instantánea.
+    if (this.particleStyle === "liquid") {
+      this.unregister(id);
+      const idA = this.registerLiquid(colorA, posA);
+      const idB = this.registerLiquid(colorB, posB);
+      if (opts.reframe ?? true) {
+        this.reframe([...this.otherPositions([idA, idB]), posA, posB]);
+      }
+      const recA = this.particles.get(idA)!;
+      const recB = this.particles.get(idB)!;
+      const animCfg = DEFAULT_CONFIG.liquidAnim;
+      this.animateLiquid(
+        duration,
+        [
+          { rec: recA, type: LIQUID_ANIM.DIVIDE, p1: animCfg.divideStretch, p2: animCfg.divideWobbleBoost, axis: origin.clone().sub(posA) },
+          { rec: recB, type: LIQUID_ANIM.DIVIDE, p1: animCfg.divideStretch, p2: animCfg.divideWobbleBoost, axis: origin.clone().sub(posB) },
+        ],
+        () => onComplete(idA, idB),
+      );
+      return true;
+    }
 
     if (!canAnimate || useInstanced) {
       if (rec.mesh) {
@@ -1362,6 +1453,41 @@ export class ParticulaState {
     // unión ACHICA la población, así que puede cruzar el umbral hacia
     // abajo).
     const canAnimate = meshA !== null && meshB !== null;
+
+    // Modo líquido (F1.2): fusión animada — A y B NO se desregistran
+    // todavía: el vertex shader las desplaza de su hogar hacia la
+    // resultante (aAnimAxis = resultPos − hogar) estirándolas mientras
+    // las "absorbe" y encogiéndolas a 0 (LIQUID_ANIM.UNION_ABSORBED);
+    // la resultante nace ya registrada y hace overshoot de escala que
+    // se calma (LIQUID_ANIM.UNION_RESULT). Al terminar el tween se
+    // desregistran A y B — hasta entonces quedan locked, así que el
+    // lote masivo no las puede emparejar con otra unión a media
+    // animación.
+    if (this.particleStyle === "liquid") {
+      if (opts.reframe ?? true) {
+        // A y B siguen registradas aquí — otherPositions([]) ya las
+        // incluye; sólo falta sumar el punto de la resultante.
+        this.reframe([...this.otherPositions([]), resultPos]);
+      }
+      const resultId = this.registerLiquid(blended, resultPos);
+      const resultRec = this.particles.get(resultId)!;
+      const animCfg = DEFAULT_CONFIG.liquidAnim;
+      this.animateLiquid(
+        duration,
+        [
+          { rec: recA, type: LIQUID_ANIM.UNION_ABSORBED, p1: animCfg.unionStretch, p2: animCfg.unionWobbleBoost, axis: resultPos.clone().sub(recA.home) },
+          { rec: recB, type: LIQUID_ANIM.UNION_ABSORBED, p1: animCfg.unionStretch, p2: animCfg.unionWobbleBoost, axis: resultPos.clone().sub(recB.home) },
+          { rec: resultRec, type: LIQUID_ANIM.UNION_RESULT, p1: animCfg.unionOvershoot, p2: animCfg.unionResultWobbleBoost, axis: new THREE.Vector3() },
+        ],
+        () => {
+          this.unregister(idA);
+          this.unregister(idB);
+          onComplete(resultId);
+        },
+      );
+      return true;
+    }
+
     this.unregister(idA);
     this.unregister(idB);
     // `+1`: A y B ya se quitaron arriba, así que `this.particles.size`
@@ -1448,6 +1574,23 @@ export class ParticulaState {
     if (id === null) return;
     const rec = this.particles.get(id)!;
     const mesh = rec.mesh;
+
+    // Modo líquido (F1.2): muerte animada — la célula se desinfla con
+    // encogimiento asimétrico (el eje al azar encoge al cuadrado),
+    // wobble amplificado y el núcleo emisivo apagándose con el
+    // progreso (LIQUID_ANIM.DEATH); NO se desregistra hasta que
+    // termina el tween, para que se vea el desinflado completo.
+    if (this.particleStyle === "liquid") {
+      this.busy = true;
+      this.onChange();
+      this.reframe(this.otherPositions([id]));
+      this.animateLiquid(duration, [{ rec, type: LIQUID_ANIM.DEATH, p1: DEFAULT_CONFIG.liquidAnim.deathWobbleBoost, p2: 0, axis: this.randomIsotropicAxis() }], () => {
+        this.unregister(id);
+        this.busy = false;
+        this.onChange();
+      });
+      return;
+    }
 
     this.unregister(id);
     this.busy = true;

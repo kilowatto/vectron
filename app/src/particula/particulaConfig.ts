@@ -80,6 +80,31 @@ export interface LiquidConfig {
   ambient: number;
 }
 
+/** Parámetros de las animaciones celulares de la partícula líquida
+ * (F1.2 — ver LIQUID_ANIM en liquidParticle.ts y las ramas líquidas de
+ * state.ts). Sin controles en la UI: se afinan aquí y salen en el
+ * "exportar configuración" como el resto del look. */
+export interface LiquidAnimConfig {
+  /** Boost de wobble al nacer (membrana recién formada) — decae
+   * linealmente con el progreso. Multiplicador sobre wobbleAmp. */
+  birthWobbleBoost: number;
+  /** Estiramiento tipo peanut a lo largo del eje de división, pico a
+   * mitad de la animación (fracción del radio por unidad de posición
+   * local proyectada). */
+  divideStretch: number;
+  divideWobbleBoost: number;
+  /** Estiramiento de la célula absorbida mientras viaja hacia la que se
+   * la come (fusión). */
+  unionStretch: number;
+  unionWobbleBoost: number;
+  /** Overshoot de escala de la resultante de una fusión (fracción,
+   * pico a mitad de la animación). */
+  unionOvershoot: number;
+  unionResultWobbleBoost: number;
+  /** Boost de wobble durante el desinflado de la muerte. */
+  deathWobbleBoost: number;
+}
+
 export interface ParticulaConfig {
   version: 1;
   duration: number;
@@ -251,6 +276,7 @@ export interface ParticulaConfig {
     threshold: number;
   };
   liquid: LiquidConfig;
+  liquidAnim: LiquidAnimConfig;
 }
 
 export const DEFAULT_CONFIG: ParticulaConfig = {
@@ -369,6 +395,16 @@ export const DEFAULT_CONFIG: ParticulaConfig = {
     specularStrength: 1.1,
     sssStrength: 0.55,
     ambient: 0.22,
+  },
+  liquidAnim: {
+    birthWobbleBoost: 6,
+    divideStretch: 0.55,
+    divideWobbleBoost: 5,
+    unionStretch: 0.7,
+    unionWobbleBoost: 6,
+    unionOvershoot: 0.3,
+    unionResultWobbleBoost: 5,
+    deathWobbleBoost: 7,
   },
 };
 
