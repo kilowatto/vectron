@@ -127,11 +127,18 @@ const DEFAULT_LEVERS: Record<QualityTier, QualityLevers> = {
   ultra: { dpr: 2, bloomStrength: 0.27, bloomEnabled: true, populationScale: 1, postFxEnabled: true, renderOnDemand: false },
   // Look idéntico, ~44% menos fragmentos (DPR 1.5).
   high: { dpr: 1.5, bloomStrength: 0.27, bloomEnabled: true, populationScale: 1, postFxEnabled: false, renderOnDemand: false },
-  // Bloom sutil, color completo; lab maxConcurrent ÷2.
-  medium: { dpr: 1.25, bloomStrength: 0.18, bloomEnabled: true, populationScale: 0.5, postFxEnabled: false, renderOnDemand: false },
-  // Bloom off; geometría, colores y movimiento se conservan.
-  low: { dpr: 1, bloomStrength: 0, bloomEnabled: false, populationScale: 0.25, postFxEnabled: false, renderOnDemand: false },
-  // Render-on-demand: loop detenido, renderNow() en interacción.
+  // El bloom ES la textura líquida (resplandor + rim): nunca se apaga
+  // fuera de lite. Se degrada DPR y población primero (la población
+  // baja por fusión celular visible, no por pop-out), y el glow sólo
+  // se atenúa — el look se mantiene reconocible en todos los tiers
+  // activos (corrección 2026-07-26: la tabla original de 18 §5 mataba
+  // el bloom en low y lo recortaba a 0.18 en medium — el usuario lo
+  // reportó como "se pierde la textura al cruzar un umbral").
+  medium: { dpr: 1.25, bloomStrength: 0.24, bloomEnabled: true, populationScale: 0.75, postFxEnabled: false, renderOnDemand: false },
+  low: { dpr: 1, bloomStrength: 0.18, bloomEnabled: true, populationScale: 0.5, postFxEnabled: false, renderOnDemand: false },
+  // Render-on-demand: loop detenido, renderNow() en interacción. Único
+  // tier sin bloom: la escena ya es estática, el costo del glow es
+  // cero perceptible pero el ahorro de batería es real.
   lite: { dpr: 1, bloomStrength: 0, bloomEnabled: false, populationScale: 0.25, postFxEnabled: false, renderOnDemand: true },
 };
 
