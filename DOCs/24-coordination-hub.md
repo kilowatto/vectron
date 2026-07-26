@@ -48,7 +48,8 @@
 | 2026-07-25 | Kimi (k3) | **F1.3 DESPLEGADO:** loader celular Fibonacci reemplaza al boot splash (mitosis visible, progreso real, error bilingüe con reintento, reduced-motion), commit `40369d0`, live y verificado en prod | `app/src/ui/components/cellularLoader.*`, `app/src/main.ts`, `app/src/i18n.ts` | F1.4 portar look líquido (interfaz `CellularRenderer` ya lista) |
 | 2026-07-25 | Kimi (k3) | **QualityGovernor (F2) commiteado:** módulo autónomo de 5 tiers con histéresis, commit `fd5e0fc` — sin deploy (aún no cableado) | `app/src/scene/qualityGovernor.ts` | Cableado al engine en integración F2 |
 | 2026-07-25 | Kimi (k3) | **F1.2 DESPLEGADO:** animaciones celulares GPU para la partícula líquida (nacimiento, mitosis peanut, fusión, muerte orgánica), commit `30b46d8`, live | `app/src/particula/` | F1.4 |
-| 2026-07-25 | Kimi (k3) | **F1.4 EN CURSO:** (a) port del look líquido al cubo principal (`app/src/scene/` — NO EDITAR); (b) renderer líquido 2D del loader (`app/src/ui/components/cellularLoader.ts` — NO EDITAR) | `app/src/scene/`, `cellularLoader.ts` | Integrar → build → deploy → F2 física |
+| 2026-07-25 | Kimi (k3) | **F1.4b DESPLEGADO:** renderer líquido 2D del loader (ventana de agua, rim fresnel, núcleo bioluminiscente, iridiscencia; sprites cacheados), commit `51e00ab`, live | `app/src/ui/components/cellularLoader.ts` | — |
+| 2026-07-25 | Kimi (k3) | **F1.4a EN CURSO:** port del look líquido al cubo principal (`app/src/scene/` — NO EDITAR) | `app/src/scene/particleField.ts` | Integrar → build → deploy → F2 física |
 
 ### 4. Open questions / Preguntas abiertas
 
