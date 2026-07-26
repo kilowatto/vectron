@@ -170,6 +170,19 @@ const STRINGS = {
   bootWarm: { es: "calentando motor…", en: "warming up engine…" },
   bootReady: { es: "listo", en: "ready" },
 
+  // --- F1.3: vx-cellular-loader (DOCs/21 §4.3) ---
+  // Línea de orientación (advance organizer): estática, bajo la marca.
+  bootTagline: {
+    es: "Cada luz es una palabra. Las que significan parecido viven cerca.",
+    en: "Each light is a word. Words that mean similar things live close together.",
+  },
+  bootErrorTitle: { es: "No pudimos arrancar", en: "We couldn't start" },
+  bootErrorBody: {
+    es: "Falló la red, el dataset o la GPU durante la carga. Revisa tu conexión y reintenta.",
+    en: "The network, dataset, or GPU failed during loading. Check your connection and retry.",
+  },
+  bootRetry: { es: "Reintentar", en: "Retry" },
+
   // --- P6: vx-math-arena + vx-surface-toggle ---
   mathArenaComingSoon: { es: "Math Arena — próximamente", en: "Math Arena — coming soon" },
   mathArenaNote: {

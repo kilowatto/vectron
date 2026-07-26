@@ -1,0 +1,146 @@
+:host {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* Arriba, no centrado — igual que el splash que reemplaza: el cubo se
+     va poblando de partículas detrás mientras carga y la marca+porcentaje
+     no deben tapar esa vista. Las células viven en el canvas a pantalla
+     completa (detrás del texto, ver .cells). */
+  justify-content: flex-start;
+  padding-top: max(64px, calc(env(safe-area-inset-top) + 40px));
+  gap: 10px;
+  background: linear-gradient(to bottom, rgba(5, 7, 10, 0.55) 0%, rgba(5, 7, 10, 0) 22%);
+  pointer-events: none;
+}
+
+/* Canvas de las células: pantalla completa, DETRÁS del texto (va primero
+   en el DOM del shadow root). El cluster se dibuja en el centro de la
+   pantalla, lejos de la franja de texto superior. */
+.cells {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.brand {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: var(--accent);
+}
+
+/* Línea de orientación (advance organizer, DOCs/21 §4.3): estática, una
+   sola línea bajo la marca — qué está viendo el usuario antes de que
+   exista la escena. */
+.tagline {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--dim);
+  max-width: 34ch;
+  text-align: center;
+}
+
+.pct {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
+.phase {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--dim);
+}
+
+/* Indicador estático para prefers-reduced-motion (DOCs/21 §4.3: sin
+   divisiones animadas, sin temblor — barra + mismo porcentaje y labels).
+   Oculto por defecto; lo muestra el componente sólo en ese modo. */
+.bar {
+  display: none;
+  width: min(280px, 60vw);
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(124, 136, 144, 0.25);
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+}
+
+:host(.reduced-motion) .bar {
+  display: block;
+}
+
+:host(.reduced-motion) .cells {
+  display: none;
+}
+
+/* Overlay de error de boot (DOCs/21 §4.3 + hallazgo UX-C2 de DOCs/18:
+   NUNCA splash infinito — mensaje visible bilingüe + botón de reintento).
+   El host tiene pointer-events:none; el overlay los reactiva para que el
+   botón sea clicable. */
+.error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: rgba(5, 7, 10, 0.82);
+  pointer-events: auto;
+  text-align: center;
+  padding: 24px;
+}
+
+.error[hidden] {
+  display: none;
+}
+
+.error-title {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+}
+
+.error-body {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dim);
+  max-width: 42ch;
+}
+
+.retry {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 10px 26px;
+  min-height: 44px; /* hit target accesible (DOCs/21 §5.4) */
+  cursor: pointer;
+}
+
+.retry:hover,
+.retry:focus-visible {
+  background: rgba(217, 138, 52, 0.15);
+  outline: none;
+}

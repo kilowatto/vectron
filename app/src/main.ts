@@ -45,8 +45,8 @@ import type {
   IntermediateSurfaceChangeDetail,
 } from "./ui/components/intermediateSurfaceNav";
 import "./ui/components/intermediateSurfaceNav";
-import type { VxBootSplash } from "./ui/components/bootSplash";
-import "./ui/components/bootSplash";
+import type { VxCellularLoader } from "./ui/components/cellularLoader";
+import "./ui/components/cellularLoader";
 import type { VxMathArena } from "./ui/components/mathArena";
 import "./ui/components/mathArena";
 import type { VxSurfaceToggle, SurfaceChangeDetail, Surface } from "./ui/components/surfaceToggle";
@@ -98,11 +98,18 @@ function pickMode(): Promise<Mode> {
   });
 }
 
+// Referencia al loader de boot mientras está vivo — si main() revienta
+// a mitad del arranque (red/GPU/dataset), el catch de abajo lo usa para
+// mostrar el overlay de error bilingüe con reintento en vez del tag de
+// 9 px (DOCs/18 UX-C2: jamás splash infinito). null una vez que el
+// loader terminó y se quitó del DOM.
+let activeBootLoader: VxCellularLoader | null = null;
+
 async function main() {
   let lang = getStoredLang();
   let appReady = false;
   // Declaradas arriba (no en su punto de uso original) porque el loop de
-  // render arranca DURANTE el boot splash ahora — el callback de
+  // render arranca DURANTE el loader de boot ahora — el callback de
   // engine.start necesita leer estas dos ya en los primeros frames,
   // mucho antes de que card/tokenMode existan de verdad más abajo.
   let card: VxConceptCard | null = null;
@@ -129,14 +136,17 @@ async function main() {
     void applyMode(currentMode);
   });
 
-  // P5 — splash con progreso ponderado (ver DOCs/03 §6): el costo real
-  // de dataset+GPU+tokenizers se paga UNA vez, al frente, antes incluso
-  // de mostrar mode-select — así nadie ve "cargando…" plano ni el
-  // "funciona-después-de-romperse" de un tokenizer que llega tarde en
-  // Avanzado. Pesos: Shell 5 · Dataset 35 · GPU 25 · Tokenizers 20 ·
-  // Warm 10 · Ready 5 = 100.
-  const splash = document.createElement("vx-boot-splash") as VxBootSplash;
+  // F1.3 — loader celular Fibonacci (DOCs/21 §4.3, reemplaza al boot
+  // splash, que queda en disco sin usarse para rollback): las células se
+  // dividen 1→2→3→5→8… ligadas al progreso REAL ponderado de abajo. El
+  // costo real de dataset+GPU+tokenizers se paga UNA vez, al frente,
+  // antes incluso de mostrar mode-select — así nadie ve "cargando…"
+  // plano ni el "funciona-después-de-romperse" de un tokenizer que llega
+  // tarde en Avanzado. Pesos: Shell 5 · Dataset 35 · GPU 25 ·
+  // Tokenizers 20 · Warm 10 · Ready 5 = 100.
+  const splash = document.createElement("vx-cellular-loader") as VxCellularLoader;
   document.body.appendChild(splash);
+  activeBootLoader = splash;
 
   splash.setProgress(5, t("bootShell", lang));
 
@@ -485,11 +495,11 @@ async function main() {
   renderRecoverList();
 
   // El render arranca AQUÍ, no al final: así el cubo ya gira y se va
-  // poblando de partículas detrás del splash mientras cargan
+  // poblando de partículas detrás del loader celular mientras cargan
   // tokenizadores (idea pedida por el usuario). `card` y `liveTokenCount`
   // todavía no tienen su valor final — se declaran arriba y esta closure
   // los lee por referencia, ya resueltos cuando el usuario llegue a
-  // interactuar (mucho después de que termine el splash).
+  // interactuar (mucho después de que termine el loader).
   // Phase 6 (DOCs/13 §17 presupuestos de rendimiento): downgrade de
   // calidad en tiempo de ejecución — sólo hacia abajo (nunca de vuelta
   // a "high" sola, para no parpadear), y sólo importa mientras la
@@ -634,7 +644,8 @@ async function main() {
   await Promise.all([tokenizeBPE(" "), tokenizeBGE(" "), revealDone]);
 
   splash.setProgress(100, t("bootReady", lang));
-  await splash.finish(); // fade out ANTES de mode-select — nunca se superponen
+  await splash.finish(); // crossfade-out ANTES de mode-select — nunca se superponen
+  activeBootLoader = null;
 
   const initialMode = getStoredMode() ?? (await pickMode());
 
@@ -1589,7 +1600,15 @@ async function main() {
 }
 
 main().catch((err) => {
-  backendTag.textContent = t("hudError", getStoredLang());
-  countLabel.textContent = "—";
   console.error(err);
+  // Boot fallido a mitad de carga (red/GPU/dataset): el loader celular
+  // pausa su animación y muestra el overlay bilingüe visible con botón
+  // de reintento (recarga completa — el boot no es reentrante). Si el
+  // loader ya había terminado, queda el fallback del tag del HUD.
+  if (activeBootLoader) {
+    activeBootLoader.showError(() => location.reload());
+  } else {
+    backendTag.textContent = t("hudError", getStoredLang());
+  }
+  countLabel.textContent = "—";
 });
