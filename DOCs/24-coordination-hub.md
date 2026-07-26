@@ -45,7 +45,9 @@
 | 2026-07-25 | Kimi (k3) | Spec de Larry AI para Vectron (canon Aluna/IOS integrado) | `DOCs/23` | F4 |
 | 2026-07-25 | Kimi (k3) | Decisiones del usuario registradas: WebLLM **nunca** (todo remoto); nube-cerebro **rechazada** (nube orgánica dirigida por datos; cerebro solo como actividad etiquetada) | `DOCs/02`, `DOCs/21` §5.3, `README.md` | — |
 | 2026-07-25 | Kimi (k3) | **F1.1 DESPLEGADO:** partícula líquida fotorrealista (gota+bioluminiscente+burbuja) en lab `/particula` — shader instanciado 1 draw call, commit `f8d0da6`, live | `app/src/particula/liquidParticle.ts` (+ integración lab) | **CHECKPOINT USUARIO:** validar look → F1.2 animaciones celulares |
-| 2026-07-25 | Kimi (k3) | **F1.2 EN CURSO:** animaciones celulares para la partícula líquida (nacimiento, mitosis dumbbell, fusión, muerte orgánica) | `app/src/particula/` | F1.3 loader Fibonacci |
+| 2026-07-25 | Kimi (k3) | **F1.3 DESPLEGADO:** loader celular Fibonacci reemplaza al boot splash (mitosis visible, progreso real, error bilingüe con reintento, reduced-motion), commit `40369d0`, live y verificado en prod | `app/src/ui/components/cellularLoader.*`, `app/src/main.ts`, `app/src/i18n.ts` | F1.4 portar look líquido (interfaz `CellularRenderer` ya lista) |
+| 2026-07-25 | Kimi (k3) | **QualityGovernor (F2) commiteado:** módulo autónomo de 5 tiers con histéresis, commit `fd5e0fc` — sin deploy (aún no cableado) | `app/src/scene/qualityGovernor.ts` | Cableado al engine en integración F2 |
+| 2026-07-25 | Kimi (k3) | **F1.2 EN CURSO:** animaciones celulares para la partícula líquida (nacimiento, mitosis dumbbell, fusión, muerte orgánica) | `app/src/particula/` | Integrar → build → deploy → F1.4 |
 
 ### 4. Open questions / Preguntas abiertas
 
