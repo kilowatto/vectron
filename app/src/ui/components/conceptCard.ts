@@ -255,6 +255,7 @@ export class VxConceptCard extends HTMLElement {
         </div>
         <input type="range" min="1" max="20" step="1" value="${topK}" />
         ${rows || `<div class="neighbor-empty">${t("cardNeighborsCalculating", lang)}</div>`}
+        <div class="metaphor">${t("cardMetaphorLabel", lang)}</div>
       </div>`;
   }
 }

@@ -238,6 +238,16 @@
   font-size: 11px;
 }
 
+/* F2 §5.3/§5.5: etiqueta de metáfora declarada (solo Int/Avanzado) —
+   discreta pero presente, mismo registro que el hint de cierre. */
+.metaphor {
+  margin-top: 8px;
+  color: var(--dim);
+  font-size: 10px;
+  font-style: italic;
+  letter-spacing: 0.02em;
+}
+
 .neighbor-plain {
   font-size: 13px;
   line-height: 1.6;

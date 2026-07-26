@@ -108,6 +108,10 @@ const STRINGS = {
   cardNeighborsHeadSimple: { es: "palabras parecidas", en: "similar words" },
   cardNeighborsSearching: { es: "buscando…", en: "searching…" },
   cardNeighborsCalculating: { es: "calculando…", en: "calculating…" },
+  // F2 §5.3/§5.5 (P-22): la onda/resortes entre vecinas al fijar un
+  // concepto es espectáculo con metáfora DECLARADA — un LLM no propaga
+  // activación entre embeddings almacenados. Visible en Int/Avanzado.
+  cardMetaphorLabel: { es: "metáfora, no mecanismo", en: "metaphor, not mechanism" },
   cardHint: { es: "clic fuera o Esc para cerrar", en: "click outside or Esc to close" },
   domainMatematicas: { es: "Matemáticas", en: "Mathematics" },
   domainFisica: { es: "Física", en: "Physics" },
