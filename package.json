@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "pnpm --filter vectron-app dev",
     "dev:worker": "pnpm --filter vectron-worker dev",
-    "build": "pnpm --filter vectron-app build"
+    "build": "pnpm --filter vectron-app build",
+    "deploy": "pnpm build && pnpm --filter vectron-worker deploy && pnpm --filter vectron-app deploy"
   }
 }
