@@ -38,7 +38,7 @@ pnpm dev:worker
 
 - **Frontend:** TypeScript sin framework de aplicación, Three.js (`three/webgpu` + TSL) para el render, bloom vía nodos de post-procesado.
 - **Backend:** Cloudflare Workers, D1 (taxonomía/cuotas), R2 (dataset precargado), Vectorize (búsqueda de vecinos por coseno), Workers AI (embeddings).
-- **RAG:** WebLLM en el navegador como modo por defecto sin costo; Claude como modo "premium" opcional y limitado por cuota.
+- **RAG:** remoto vía Workers AI (`llama-3.3-70b-instruct-fp8-fast`) dentro del free tier, sin costo (WebLLM local descartado definitivamente 2026-07-25 — nunca inferencia local); Claude como modo "premium" opcional y limitado por cuota.
 
 ## Licencia
 

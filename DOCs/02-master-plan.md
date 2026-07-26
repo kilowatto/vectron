@@ -46,7 +46,7 @@ Vectron is a public 3D meaning-map: real embeddings become particles in a cube; 
 | RAG | Full pipeline planned: upload → chunk → retrieve → generate |
 | 3D | Three.js WebGPU → WebGL fallback; no app framework |
 | Infra | Cloudflare: Workers, Vectorize, D1, R2, Workers AI |
-| Cost | ~$0 default (precompute + WebLLM); Claude premium optional + quota |
+| Cost | ~$0 default (precompute + Workers AI free tier; WebLLM discarded 2026-07-25 — never local); Claude premium optional + quota |
 | License | MIT · `github.com/kilowatto/vectron` · live `vectron.kilowatto.com` |
 
 **Honest tension (from original plan, still true):** full dream (15k concepts + RAG + transformer math + low-end mobile parity) is multi-month. Ship in DONE → NOW → LATER slices.
@@ -129,7 +129,7 @@ Cards always expose attributes in text (accessibility).
 Browser (Vite + TS + Three.js webgpu/webgl)
   ├─ Principiante | Intermedio | Avanzado shells
   ├─ Particle engine + electric lines + token mode
-  └─ (LATER) WebLLM local RAG
+  └─ (LATER) Remote Workers AI RAG (no local inference ever — decision 2026-07-25)
          │
 Cloudflare Worker (vectron-api)
   ├─ /api/concepts · /api/similar · /api/cosine
@@ -166,7 +166,7 @@ Vanilla TS + Custom Elements (Shadow DOM). No React/Vue.
 | Pin particle → Vectorize neighbors + electric star | DONE |
 | Live token mode (Avanzado): embed + PCA + similar-by-vector | DONE |
 | Fly-to camera / pause spin while focused | DONE |
-| Document upload RAG + WebLLM answer | NOW / LATER slice |
+| Document upload RAG + remote LLM answer (no local) | NOW / LATER slice |
 | Attention math + next-token sampling | LATER (Avanzado) |
 | Dynamic new-word embed beyond panel | Partial (API exists; productize carefully) |
 
@@ -178,7 +178,7 @@ Vanilla TS + Custom Elements (Shadow DOM). No React/Vue.
 |------|----------|
 | Preloaded dataset | Embed once at seed |
 | Live embeds | Workers AI + per-IP daily quota (`quota_counters`) |
-| RAG default | WebLLM in browser |
+| RAG default | Remote Workers AI (`llama-3.3-70b-instruct-fp8-fast`) — **WebLLM descartado definitivamente 2026-07-25 (decisión usuario: nunca local, ver `23-larry-vectron.md` §4a)** |
 | RAG premium | Claude, off by default, hard daily quota |
 
 ---
@@ -280,7 +280,7 @@ Fusiona: (1) el plan original Vectron (PDF + 28 decisiones, 17 jul 2026), (2) lo
 
 Vectron es un mapa 3D público del significado: embeddings reales → partículas; luces cercanas ≈ ideas relacionadas; después RAG muestra cómo la recuperación alimenta respuestas.
 
-Decisiones cerradas: OSS educativo, bilingüe ES/EN, embeddings reales + PCA, RAG planeado, Three.js WebGPU/WebGL, Cloudflare de punta a punta, costo ~$0 con WebLLM, Claude premium opcional, MIT, live en `vectron.kilowatto.com`.
+Decisiones cerradas: OSS educativo, bilingüe ES/EN, embeddings reales + PCA, RAG planeado, Three.js WebGPU/WebGL, Cloudflare de punta a punta, costo ~$0 con Workers AI free tier (WebLLM descartado definitivamente 2026-07-25 — nunca inferencia local), Claude premium opcional, MIT, live en `vectron.kilowatto.com`.
 
 **Tensión honesta:** el sueño completo es de varios meses. Entregar en DONE → NOW → LATER.
 
