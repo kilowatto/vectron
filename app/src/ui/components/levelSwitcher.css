@@ -57,7 +57,7 @@ button.active {
 
 /* Pastilla resaltada que se DESLIZA entre pestañas en vez de aparecer
    de golpe en la nueva posición (bug real reportado en vivo, ver
-   modeSwitcher.ts #positionPill) — vive detrás de los botones (z-index
+   levelSwitcher.ts #positionPill) — vive detrás de los botones (z-index
    0 vs 1), su posición/ancho la calcula JS con la técnica FLIP. */
 .pill {
   position: absolute;
@@ -125,5 +125,17 @@ button.active {
 
   .options button {
     text-align: left;
+  }
+}
+
+/* Hit targets ≥44px en táctil (18 P0.5). */
+@media (pointer: coarse) {
+  button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .drawer-toggle {
+    min-height: 44px;
   }
 }

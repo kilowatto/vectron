@@ -1,16 +1,16 @@
 import { MODE_IDS, describeMode, type Mode } from "./modeStorage";
 import { getStoredLang } from "../../i18n";
 import { attachShadow } from "./shadow";
-import css from "./modeSwitcher.css?inline";
+import css from "./levelSwitcher.css?inline";
 
-export interface ModeChangeDetail {
+export interface LevelChangeDetail {
   mode: Mode;
 }
 
 /**
- * `<vx-mode-switcher current="avanzado">` — control persistente para
+ * `<vx-level-switcher current="avanzado">` — control persistente para
  * cambiar de modo sin volver a la portada: cambiar de modo es cambiar
- * de app, no "salir" de la app. Elegir una pestaña dispara `vx-mode-change`
+ * de app, no "salir" de la app. Elegir una pestaña dispara `vx-level-change`
  * y espera a que quien la escucha actualice el atributo `current` — no
  * recarga la página ni guarda nada por sí mismo, así el cambio de modo
  * puede animarse en vivo en lugar de recargar de golpe.
@@ -21,14 +21,14 @@ export interface ModeChangeDetail {
  * | `current` | string | —       | modo activo (`principiante`\|`intermedio`\|`avanzado`), resalta su pestaña |
  *
  * ### Eventos
- * - `vx-mode-change` — `CustomEvent<{ mode: Mode }>`, disparado al elegir
+ * - `vx-level-change` — `CustomEvent<{ mode: Mode }>`, disparado al elegir
  *   una pestaña distinta a `current`.
  *
  * ### Ejemplo
  * ```html
- * <vx-mode-switcher current="avanzado"></vx-mode-switcher>
+ * <vx-level-switcher current="avanzado"></vx-level-switcher>
  * <script>
- *   switcher.addEventListener("vx-mode-change", (e) => switchTo(e.detail.mode));
+ *   switcher.addEventListener("vx-level-change", (e) => switchTo(e.detail.mode));
  * </script>
  * ```
  */
@@ -39,7 +39,7 @@ interface PillRect {
   height: number;
 }
 
-export class VxModeSwitcher extends HTMLElement {
+export class VxLevelSwitcher extends HTMLElement {
   static readonly observedAttributes = ["current"];
 
   // El corte de golpe reportado en vivo ("la animación de dividirse o
@@ -85,7 +85,7 @@ export class VxModeSwitcher extends HTMLElement {
     const root = this.shadowRoot ?? attachShadow(this, css);
     const modes = MODE_IDS.map((id) => describeMode(id, lang));
     const activeTitle = modes.find((m) => m.id === current)?.title ?? "";
-    // Cajón sólo en móvil (ver modeSwitcher.css): en escritorio
+    // Cajón sólo en móvil (ver levelSwitcher.css): en escritorio
     // .drawer-toggle nunca se muestra, así que esto no cambia nada ahí
     // — colapsado por defecto, la flechita lo abre/cierra.
     root.innerHTML = `
@@ -124,7 +124,7 @@ export class VxModeSwitcher extends HTMLElement {
         const mode = btn.dataset.mode as Mode;
         if (mode === current) return;
         this.dispatchEvent(
-          new CustomEvent<ModeChangeDetail>("vx-mode-change", { detail: { mode }, bubbles: true }),
+          new CustomEvent<LevelChangeDetail>("vx-level-change", { detail: { mode }, bubbles: true }),
         );
       });
     });
@@ -184,4 +184,4 @@ export class VxModeSwitcher extends HTMLElement {
   }
 }
 
-customElements.define("vx-mode-switcher", VxModeSwitcher);
+customElements.define("vx-level-switcher", VxLevelSwitcher);

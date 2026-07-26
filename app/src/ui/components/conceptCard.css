@@ -22,7 +22,7 @@
    queda libre para seguir navegando con la tarjeta abierta. */
 :host(.pinned) {
   pointer-events: auto;
-  /* Debajo de <vx-lang-switcher> + <vx-mode-switcher>, que ya viven en
+  /* Debajo de <vx-lang-switcher> + <vx-level-switcher>, que ya viven en
      esta misma esquina (top ~16px y ~56-72px respectivamente) — si no,
      la tarjeta les cae encima. */
   top: max(clamp(100px, 15vw, 128px), calc(env(safe-area-inset-top) + 90px));
@@ -46,7 +46,7 @@
    dentro de #cube-pane (position:relative + overflow:hidden, ver
    main.ts) en vez de #stage/viewport — `right` de arriba queda
    anclado al borde derecho REAL del cubo en cualquier shell, así que
-   nunca puede terminar sobre el dock de Intermedio ni el Math Arena
+   nunca puede terminar sobre el dock de Intermedio ni el Math Lab
    de Avanzado sin necesidad de un caso especial por modo. */
 
 /* Móvil: la esquina superior derecha por sí sola ya deja libre el

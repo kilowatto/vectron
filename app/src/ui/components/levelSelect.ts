@@ -3,33 +3,33 @@ import { MODE_IDS, describeMode, type Mode } from "./modeStorage";
 import { attachShadow } from "./shadow";
 import { getStoredLang, t } from "../../i18n";
 import "./langSwitcher";
-import css from "./modeSelect.css?inline";
+import css from "./levelSelect.css?inline";
 
-export interface ModePickDetail {
+export interface LevelPickDetail {
   mode: Mode;
 }
 
 /**
- * `<vx-mode-select>` — pantalla de entrada: elegir modo es elegir qué
+ * `<vx-level-select>` — pantalla de entrada: elegir modo es elegir qué
  * app abrir, no un ajuste. Se autodestruye (se quita del DOM) después
  * de disparar su evento, con un fade-out primero.
  *
  * Sin atributos — el contenido (las 3 tarjetas) es fijo.
  *
  * ### Eventos
- * - `vx-mode-pick` — `CustomEvent<{ mode: Mode }>`, disparado después del
+ * - `vx-level-pick` — `CustomEvent<{ mode: Mode }>`, disparado después del
  *   fade-out, justo antes de que el elemento se remueva del DOM.
  *
  * ### Ejemplo
  * ```html
- * <vx-mode-select></vx-mode-select>
+ * <vx-level-select></vx-level-select>
  * <script>
- *   document.querySelector("vx-mode-select")
- *     .addEventListener("vx-mode-pick", (e) => boot(e.detail.mode));
+ *   document.querySelector("vx-level-select")
+ *     .addEventListener("vx-level-pick", (e) => boot(e.detail.mode));
  * </script>
  * ```
  */
-export class VxModeSelect extends HTMLElement {
+export class VxLevelSelect extends HTMLElement {
   connectedCallback() {
     const lang = getStoredLang();
     const modes = MODE_IDS.map((id) => describeMode(id, lang));
@@ -39,7 +39,7 @@ export class VxModeSelect extends HTMLElement {
       <vx-lang-switcher></vx-lang-switcher>
       <div class="inner">
         <div class="brand">VECTRON</div>
-        <p class="sub">${t("modeSelectSub", lang)}</p>
+        <p class="sub">${t("levelSelectSub", lang)}</p>
         <div class="cards">
           ${modes.map(
             (m) => `
@@ -65,7 +65,7 @@ export class VxModeSelect extends HTMLElement {
         const mode = btn.dataset.mode as Mode;
         await fadeOut(this, { duration: 380 });
         this.dispatchEvent(
-          new CustomEvent<ModePickDetail>("vx-mode-pick", { detail: { mode }, bubbles: true }),
+          new CustomEvent<LevelPickDetail>("vx-level-pick", { detail: { mode }, bubbles: true }),
         );
         this.remove();
       });
@@ -73,4 +73,4 @@ export class VxModeSelect extends HTMLElement {
   }
 }
 
-customElements.define("vx-mode-select", VxModeSelect);
+customElements.define("vx-level-select", VxLevelSelect);

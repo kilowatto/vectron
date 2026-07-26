@@ -10,7 +10,7 @@
   left: 0;
   right: 0;
   margin-inline: auto !important;
-  /* Debajo de <vx-lang-switcher> (top ~16-28px) + <vx-mode-switcher>
+  /* Debajo de <vx-lang-switcher> (top ~16-28px) + <vx-level-switcher>
      (top ~56-72px) — mismo cálculo ya probado en vx-concept-card para
      esta misma esquina. */
   top: max(clamp(100px, 15vw, 128px), calc(env(safe-area-inset-top) + 90px));
@@ -207,5 +207,14 @@
 
   .token {
     flex-shrink: 0;
+  }
+}
+
+/* Hit target ≥44px en táctil (18 P0.5) — el chevron de la comparativa
+   BGE se queda FUERA de cualquier cajón (excepción declarada, DOCs/21
+   §5.4), así que su target tiene que ser tocable de verdad. */
+@media (pointer: coarse) {
+  .bge-toggle {
+    min-height: 44px;
   }
 }

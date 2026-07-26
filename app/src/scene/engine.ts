@@ -186,7 +186,9 @@ export async function createEngine(canvas: HTMLCanvasElement, overrides?: SceneO
       const dt = Math.min(rawMs / 1000, 0.1);
       last = now;
 
-      controls.update();
+      // Con damping, update(dt) hace la amortiguación independiente del
+      // framerate (18 P0.5) — antes iba sin argumento (asume 60fps).
+      controls.update(dt);
       const activity = onFrame(dt) === true;
       // Lite (render-on-demand): el rAF sigue vivo (OrbitControls con
       // damping lo necesita para terminar los gestos) pero el render se

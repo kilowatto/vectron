@@ -56,6 +56,22 @@ export class VxChromeLegend extends HTMLElement {
   #domains: DomainCount[] = [];
   #expanded = false;
   #isolated: string | null = null;
+  /** true mientras la entrada de historial de la hoja expandida sigue
+   * sin consumirse (ver el listener de popstate en connectedCallback). */
+  #pushed = false;
+
+  #setExpanded(expanded: boolean, fromHistory = false) {
+    if (expanded === this.#expanded) return;
+    this.#expanded = expanded;
+    if (expanded && !fromHistory) {
+      history.pushState({ vxLegend: true }, "");
+      this.#pushed = true;
+    } else if (!expanded && !fromHistory && this.#pushed) {
+      this.#pushed = false;
+      history.back(); // el popstate resultante no encuentra #pushed: no-op
+    }
+    this.#render();
+  }
 
   connectedCallback() {
     if (this.shadowRoot) return;
@@ -78,15 +94,18 @@ export class VxChromeLegend extends HTMLElement {
     this.#kindsEl = root.querySelector(".kinds")!;
     this.#listEl = root.querySelector(".list")!;
 
-    this.#peekEl.addEventListener("click", () => {
-      this.#expanded = !this.#expanded;
-      this.#render();
-    });
+    // Botón Atrás = cerrar la hoja de la leyenda, no salir de la app
+    // (18 P0.5) — mismo patrón pushState/history.back() que <vx-drawer>
+    // y la tarjeta fijada: expandir empuja una entrada; colapsar por UI
+    // la consume para no dejar entradas fantasma.
+    this.#peekEl.addEventListener("click", () => this.#setExpanded(!this.#expanded));
     window.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && this.#expanded) {
-        this.#expanded = false;
-        this.#render();
-      }
+      if (e.key === "Escape" && this.#expanded) this.#setExpanded(false);
+    });
+    window.addEventListener("popstate", () => {
+      if (!this.#pushed) return;
+      this.#pushed = false;
+      this.#setExpanded(false, true);
     });
 
     this.#render();

@@ -28,8 +28,8 @@ export function setStoredLang(lang: Lang): void {
  * cuando se le pide reconstruirse, no hay que recargar la página.
  */
 const STRINGS = {
-  // --- vx-mode-select ---
-  modeSelectSub: {
+  // --- vx-level-select ---
+  levelSelectSub: {
     es: "¿Con qué profundidad quieres explorar cómo piensa un LLM?",
     en: "How deep do you want to go into how an LLM thinks?",
   },
@@ -190,9 +190,15 @@ const STRINGS = {
   },
   bootRetry: { es: "Reintentar", en: "Retry" },
 
-  // --- P6: vx-math-arena + vx-surface-toggle ---
-  mathArenaComingSoon: { es: "Math Arena — próximamente", en: "Math Arena — coming soon" },
-  mathArenaNote: {
+  // --- F2 §5.4: vx-drawer (cajones del rediseño GUI) ---
+  drawerClose: { es: "Cerrar", en: "Close" },
+  drawerSurfacesLabel: { es: "Superficies", en: "Surfaces" },
+  drawerMathLabel: { es: "Laboratorio de matemáticas", en: "Math Lab" },
+  drawerZoomLabel: { es: "Zoom", en: "Zoom" },
+
+  // --- P6: vx-math-lab + vx-surface-toggle ---
+  mathLabComingSoon: { es: "Math Lab — próximamente", en: "Math Lab — coming soon" },
+  mathLabNote: {
     es: "Atención, softmax, coseno, PCA y muestreo con números y fórmulas reales, en vivo con tu frase — P7.",
     en: "Attention, softmax, cosine, PCA and sampling with live real numbers and formulas from your sentence — P7.",
   },
@@ -276,29 +282,29 @@ const STRINGS = {
     es: "Recuperar antes de generar: una pregunta trae trozos reales de un archivo externo a la mesa de trabajo, en vez de que el modelo invente.",
     en: "Retrieve before generating: a question brings real chunks from an external file to the working desk, instead of the model making things up.",
   },
-  // --- P7: vx-math-arena, pestaña Cosine (primera rebanada real) ---
-  mathArenaTabCosine: { es: "Coseno", en: "Cosine" },
-  mathArenaCosineEmpty: {
+  // --- P7: vx-math-lab, pestaña Cosine (primera rebanada real) ---
+  mathLabTabCosine: { es: "Coseno", en: "Cosine" },
+  mathLabCosineEmpty: {
     es: "Escribe una frase (Avanzado) para tener al menos dos embeddings vivos que comparar.",
     en: "Type a phrase (Avanzado) to have at least two live embeddings to compare.",
   },
-  mathArenaCosineIntro: {
+  mathLabCosineIntro: {
     es: "Los mismos embeddings bge-m3 reales de tu frase (ℝ¹⁰²⁴) — elige dos y compara su similitud de coseno real, con la fórmula y los números de verdad.",
     en: "The same real bge-m3 embeddings from your phrase (ℝ¹⁰²⁴) — pick two and compare their real cosine similarity, with the actual formula and numbers.",
   },
-  mathArenaCosineFootnote: {
+  mathLabCosineFootnote: {
     es: "A y B se muestran truncados a 6 de 1024 dimensiones para que quepan en pantalla — el cálculo usa el vector completo.",
     en: "A and B are shown truncated to 6 of 1024 dimensions to fit on screen — the calculation uses the full vector.",
   },
-  mathArenaTabPca: { es: "PCA", en: "PCA" },
-  mathArenaPcaLoading: { es: "cargando la base PCA real…", en: "loading the real PCA basis…" },
-  mathArenaPcaIntro: {
+  mathLabTabPca: { es: "PCA", en: "PCA" },
+  mathLabPcaLoading: { es: "cargando la base PCA real…", en: "loading the real PCA basis…" },
+  mathLabPcaIntro: {
     es: "De ℝ¹⁰²⁴ a ℝ³: la misma base PCA real que ya coloca esta partícula en el cubo — restar la media, proyectar sobre cada eje, escalar al tamaño del cubo. El resultado de abajo es EXACTAMENTE dónde vive ahora mismo.",
     en: "From ℝ¹⁰²⁴ to ℝ³: the same real PCA basis that already places this particle in the cube — subtract the mean, project onto each axis, scale to the cube. The result below is EXACTLY where it lives right now.",
   },
-  mathArenaPcaComputed: { es: "recalculado aquí", en: "recomputed here" },
-  mathArenaPcaReal: { es: "posición real de la partícula", en: "particle's real position" },
-  mathArenaPcaFootnote: {
+  mathLabPcaComputed: { es: "recalculado aquí", en: "recomputed here" },
+  mathLabPcaReal: { es: "posición real de la partícula", en: "particle's real position" },
+  mathLabPcaFootnote: {
     es: "Si los dos renglones no coinciden, es un bug — deberían ser el mismo número siempre (misma base, mismo vector).",
     en: "If the two rows don't match, that's a bug — they should always be the same number (same basis, same vector).",
   },

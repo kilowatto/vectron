@@ -47,7 +47,7 @@ button.active {
   gap: 2px;
 }
 
-/* Móvil — mismo cajón colapsable que <vx-mode-switcher>, ver ese CSS
+/* Móvil — mismo cajón colapsable que <vx-level-switcher>, ver ese CSS
    para el razonamiento completo. */
 @media (max-width: 640px) {
   :host {

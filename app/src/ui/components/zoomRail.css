@@ -4,7 +4,7 @@
    el componente se pone a sí mismo. */
 /* DOCs/11-screen-specs.md §1: absolute dentro de #cube-pane (montado
    ahí en main.ts), no fixed al viewport — así el rail nunca queda
-   sobre la columna de Math Arena en el split de Avanzado. */
+   sobre la columna de Math Lab en el split de Avanzado. */
 :host {
   position: absolute;
   /* Ledger de z-index (DOCs/11 §4): rail 12, debajo de la leyenda
@@ -70,6 +70,21 @@
   padding: 2px 6px;
   white-space: nowrap;
   pointer-events: none;
+}
+
+/* F2 §5.4: dentro de <vx-drawer> el rail deja de flotar sobre el cubo —
+   bloque en flujo con alto propio y ancho de hit target táctil (≥44px,
+   18 P0.5), siempre "despierto" (el cajón ya es la acción del usuario). */
+:host([drawer]) {
+  position: relative;
+  left: auto;
+  top: auto;
+  bottom: auto;
+  display: block;
+  width: 44px;
+  height: min(340px, 55vh);
+  margin: 8px auto;
+  opacity: 0.9;
 }
 
 /* Móvil: el pinch de dos dedos ya hace esto nativamente (OrbitControls);

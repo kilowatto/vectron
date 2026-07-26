@@ -57,3 +57,10 @@ button.active {
   font-weight: 600;
   cursor: default;
 }
+
+/* Hit targets ≥44px en táctil (18 P0.5). */
+@media (pointer: coarse) {
+  button {
+    min-height: 44px;
+  }
+}

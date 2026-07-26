@@ -6,7 +6,7 @@ import css from "./attentionArcs.css?inline";
  * `<vx-attention-arcs>` — Módulo D del currículo de Intermedio (ver
  * DOCs/10-intermedio-licenciatura.md §3-4): "los tokens se miran entre
  * sí" como conducta, NO el heatmap PhD con \(QK^\top/\sqrt{d_k}\) (eso
- * es Avanzado → Math Arena). Tokens reales (los mismos que ya tokeniza
+ * es Avanzado → Math Lab). Tokens reales (los mismos que ya tokeniza
  * el composer) en una tira 2D; los arcos entre ellos son GROSOR
  * ILUSTRATIVO, declarado como tal — pedido explícito 2026-07-19: no
  * hay un forward pass real corriendo aquí, sería necesario correr un

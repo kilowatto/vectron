@@ -5,7 +5,7 @@ import type { VxConceptCard, NeighborView, TopKChangeDetail } from "../ui/compon
 import { LineHoverTooltip } from "./lineHover";
 import { getStoredLang } from "../i18n";
 
-export interface ConceptInteractionOptions {
+export interface SceneInteractionOptions {
   canvas: HTMLCanvasElement;
   camera: THREE.Camera;
   field: ParticleField;
@@ -16,7 +16,7 @@ export interface ConceptInteractionOptions {
   onFocusPoint?: (worldPos: THREE.Vector3 | null) => void;
 }
 
-export interface ConceptInteraction {
+export interface SceneInteraction {
   /** Cambia el top-K default para futuros pines (no afecta el actualmente fijado). */
   setDefaultTopK(topK: number): void;
   /** Suelta el pin activo (si hay) y limpia resaltados — usado al cambiar de modo. */
@@ -30,7 +30,7 @@ export interface ConceptInteraction {
  * mutable vía el objeto devuelto porque cada modo pide un valor distinto
  * y el 3D/la interacción se reutilizan entre modos (no se recrean).
  */
-export function setupConceptInteraction(options: ConceptInteractionOptions): ConceptInteraction {
+export function setupSceneInteraction(options: SceneInteractionOptions): SceneInteraction {
   const { canvas, camera, field, card } = options;
   let defaultTopK = options.defaultTopK;
 
@@ -38,7 +38,6 @@ export function setupConceptInteraction(options: ConceptInteractionOptions): Con
   const pointerNdc = new THREE.Vector2();
   const lineHover = new LineHoverTooltip(canvas.parentElement!);
   let hoveredId: number | null = null;
-  let lastPointer = { x: 0, y: 0 };
   let currentPinnedInstanceId: number | null = null;
 
   function setRayFrom(clientX: number, clientY: number) {
@@ -110,6 +109,11 @@ export function setupConceptInteraction(options: ConceptInteractionOptions): Con
 
   function pinInstance(instanceId: number) {
     currentPinnedInstanceId = instanceId;
+    // Botón Atrás del navegador = cerrar la tarjeta, no salir de la app
+    // (18 P0.5): una entrada de historial por pin; el cierre por UI la
+    // consume con history.back() (ver unpin) para no dejar fantasmas.
+    history.pushState({ vxPin: true }, "");
+    pinPushed = true;
     field.setPointerHighlight(instanceId);
     field.setPinnedFocus(true);
     // Impulso jelly al fijar (F2 §5.1): la partícula "tiembla" como
@@ -133,7 +137,10 @@ export function setupConceptInteraction(options: ConceptInteractionOptions): Con
     loadNeighbors(currentPinnedInstanceId, topK);
   });
 
-  function unpin() {
+  /** true mientras la entrada de historial del pin sigue sin consumirse. */
+  let pinPushed = false;
+
+  function unpin(fromHistory = false) {
     currentPinnedInstanceId = null;
     card.hidePinned();
     field.setPointerHighlight(null);
@@ -143,10 +150,27 @@ export function setupConceptInteraction(options: ConceptInteractionOptions): Con
     field.setChainLines([]);
     field.clearSprings();
     options.onFocusPoint?.(null);
+    if (!fromHistory && pinPushed) {
+      // Cierre por UI (clic fuera, Esc, cambio de modo): consume la
+      // entrada que pinInstance empujó — el listener de popstate no
+      // encontrará pinPushed y no hará nada más.
+      pinPushed = false;
+      history.back();
+    }
   }
 
+  window.addEventListener("popstate", () => {
+    if (!pinPushed) return;
+    pinPushed = false;
+    unpin(true);
+  });
+
   canvas.addEventListener("pointermove", (event) => {
-    lastPointer = { x: event.clientX, y: event.clientY };
+    // Hover filtrado en touch (18 P0.5): en pantallas táctiles no hay
+    // hover real — el pointermove que acompaña al tap pintaba una
+    // tarjeta fantasma bajo el dedo antes de fijar. El tooltip sólo
+    // existe para punteros con hover de verdad (mouse/trackpad/pluma).
+    if (event.pointerType === "touch") return;
     // El hover de líneas corre incluso con la tarjeta fijada — las
     // líneas naranjas de vecinos SÓLO existen mientras hay pin, así que
     // este es justo el momento en que su coseno interesa.
@@ -194,7 +218,12 @@ export function setupConceptInteraction(options: ConceptInteractionOptions): Con
       const dy = event.clientY - start.y;
       if (Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) return; // fue arrastre, no clic
     }
-    const instanceId = pickInstance(lastPointer.x, lastPointer.y);
+    // Tap con las coordenadas del PROPIO evento (18 P0.5): en touch no
+    // hay pointermove previo del que tomar la posición, así que
+    // raycastear con la última posición conocida apuntaba a (0,0) o a
+    // donde estaba el mouse la última vez — el tap caía en cualquier
+    // parte menos bajo el dedo.
+    const instanceId = pickInstance(event.clientX, event.clientY);
     if (instanceId !== null) {
       pinInstance(instanceId);
     } else if (card.isPinned()) {

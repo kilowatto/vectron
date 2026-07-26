@@ -14,9 +14,10 @@ export interface IntermediateSurfaceChangeDetail {
  * implementation.md §2-4): Cubo · Transformer · RAG. La Cámara de
  * Contexto NO es una cuarta superficie — vive dentro de Transformer.
  *
- * Con `dock`: fila inline al tope del panel lateral (escritorio ≥1024).
- * Sin `dock`: flotante fija sobre el cubo (mismo patrón que
- * <vx-surface-toggle>, para Intermedio angosto donde no hay dock).
+ * F2 §5.4 (cajones): vive siempre con `dock` (fila de flujo) DENTRO de
+ * un <vx-drawer> — es el cajón quien decide dónde flota o se dockea
+ * (ver main.ts placeIntermediateSurfaceNav); la variante flotante
+ * propia de este nav ya no se usa.
  */
 export class VxIntermediateSurface extends HTMLElement {
   static readonly observedAttributes = ["current"];

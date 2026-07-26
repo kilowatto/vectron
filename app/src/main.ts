@@ -4,12 +4,12 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { createParticleField } from "./scene/particleField";
 import { createEngine } from "./scene/engine";
 import { createQualityGovernor, type QualityLevers } from "./scene/qualityGovernor";
-import { setupConceptInteraction } from "./scene/conceptInteraction";
+import { setupSceneInteraction } from "./scene/sceneInteraction";
 import { fetchConcepts, checkAndTriggerSync } from "./data/concepts";
 import { getStoredMode, setStoredMode, type Mode } from "./ui/components/modeStorage";
-import "./ui/components/modeSelect";
-import "./ui/components/modeSwitcher";
-import type { ModeChangeDetail, VxModeSwitcher } from "./ui/components/modeSwitcher";
+import "./ui/components/levelSelect";
+import "./ui/components/levelSwitcher";
+import type { LevelChangeDetail, VxLevelSwitcher } from "./ui/components/levelSwitcher";
 import "./ui/components/langSwitcher";
 import type { LangChangeDetail } from "./ui/components/langSwitcher";
 import type { VxConceptCard } from "./ui/components/conceptCard";
@@ -18,7 +18,7 @@ import type { VxComposer, TokensChangeDetail } from "./ui/components/composer";
 import "./ui/components/composer";
 import type { VxTokenStrip } from "./ui/components/tokenStrip";
 import "./ui/components/tokenStrip";
-import type { ModePickDetail } from "./ui/components/modeSelect";
+import type { LevelPickDetail } from "./ui/components/levelSelect";
 import type { VxZoomRail } from "./ui/components/zoomRail";
 import "./ui/components/zoomRail";
 import type { VxChromeLegend, DomainIsolateDetail } from "./ui/components/chromeLegend";
@@ -49,10 +49,10 @@ import type {
 import "./ui/components/intermediateSurfaceNav";
 import type { VxCellularLoader } from "./ui/components/cellularLoader";
 import "./ui/components/cellularLoader";
-import type { VxMathArena } from "./ui/components/mathArena";
-import "./ui/components/mathArena";
-import type { VxSurfaceToggle, SurfaceChangeDetail, Surface } from "./ui/components/surfaceToggle";
-import "./ui/components/surfaceToggle";
+import type { VxMathLab } from "./ui/components/mathLab";
+import "./ui/components/mathLab";
+import type { VxDrawer } from "./ui/components/drawer";
+import "./ui/components/drawer";
 import { getStoredLang, setStoredLang, t } from "./i18n";
 import { fadeIn, fadeOut, tweenNumber } from "./ui/motion";
 import { tokenizeSimple, tokenizeBPE } from "./tokenizer";
@@ -96,17 +96,16 @@ const fpsLabel = document.querySelector<HTMLSpanElement>("#fps")!;
 const countLabel = document.querySelector<HTMLSpanElement>("#count")!;
 const modeCaption = document.querySelector<HTMLSpanElement>("#mode-caption")!;
 const qualityTag = document.querySelector<HTMLSpanElement>("#quality-tag")!;
-const sashEl = document.querySelector<HTMLDivElement>("#sash")!;
 const sidePaneEl = document.querySelector<HTMLDivElement>("#side-pane")!;
 const consolePaneEl = document.querySelector<HTMLDivElement>("#console-pane")!;
 
-/** Muestra <vx-mode-select> y resuelve cuando el usuario elige un modo. */
+/** Muestra <vx-level-select> y resuelve cuando el usuario elige un modo. */
 function pickMode(): Promise<Mode> {
   return new Promise((resolve) => {
-    const picker = document.createElement("vx-mode-select");
+    const picker = document.createElement("vx-level-select");
     picker.addEventListener(
-      "vx-mode-pick",
-      (event) => resolve((event as CustomEvent<ModePickDetail>).detail.mode),
+      "vx-level-pick",
+      (event) => resolve((event as CustomEvent<LevelPickDetail>).detail.mode),
       { once: true },
     );
     document.body.appendChild(picker);
@@ -131,7 +130,7 @@ async function main() {
   let liveTokenCount = 0;
 
   // El switcher de idioma vive en dos sitios: dentro del shadow DOM de
-  // <vx-mode-select> (antes de elegir modo — ahí no hay nada más
+  // <vx-level-select> (antes de elegir modo — ahí no hay nada más
   // construido, así que un reload no cuesta nada) y, una vez adentro de
   // la app, la instancia de abajo (appReady=true, re-renderiza en vivo).
   // `composed:true` en el evento (ver langSwitcher.ts) es lo que permite
@@ -155,7 +154,7 @@ async function main() {
   // splash, que queda en disco sin usarse para rollback): las células se
   // dividen 1→2→3→5→8… ligadas al progreso REAL ponderado de abajo. El
   // costo real de dataset+GPU+tokenizers se paga UNA vez, al frente,
-  // antes incluso de mostrar mode-select — así nadie ve "cargando…"
+  // antes incluso de mostrar level-select — así nadie ve "cargando…"
   // plano ni el "funciona-después-de-romperse" de un tokenizer que llega
   // tarde en Avanzado. Pesos: Shell 5 · Dataset 35 · GPU 25 ·
   // Tokenizers 20 · Warm 10 · Ready 5 = 100.
@@ -657,6 +656,9 @@ async function main() {
     offset.setFromSpherical(spherical);
     camera.position.copy(controls.target).add(offset);
   }
+  // Reduced-motion (DOCs/21 §5.5): con prefers-reduced-motion no hay
+  // autorrotación NUNCA — la cámara sólo se mueve por gesto del usuario.
+  const reducedMotionMQ = matchMedia("(prefers-reduced-motion: reduce)");
   engine.start(
     (dt) => {
       applyKeyboardNav(dt);
@@ -667,7 +669,8 @@ async function main() {
       // controls.autoRotate (gira la cámara alrededor de
       // controls.target, no el grupo alrededor del origen del mundo) —
       // aquí sólo se prende/apaga con la misma condición de antes.
-      engine.controls.autoRotate = !card?.isPinned() && liveTokenCount === 0 && pressedNav.size === 0;
+      engine.controls.autoRotate =
+        !reducedMotionMQ.matches && !card?.isPinned() && liveTokenCount === 0 && pressedNav.size === 0;
       if (contextChamber.group.visible) contextChamber.update(dt);
       // Actividad para el render-on-demand del tier Lite (F2 §5.4):
       // durante el boot (reveal) o cualquier animación celular/resorte,
@@ -708,12 +711,12 @@ async function main() {
   await Promise.all([tokenizeBPE(" "), tokenizeBGE(" "), revealDone]);
 
   splash.setProgress(100, t("bootReady", lang));
-  await splash.finish(); // crossfade-out ANTES de mode-select — nunca se superponen
+  await splash.finish(); // crossfade-out ANTES de level-select — nunca se superponen
   activeBootLoader = null;
 
   const initialMode = getStoredMode() ?? (await pickMode());
 
-  const switcher = document.createElement("vx-mode-switcher") as VxModeSwitcher;
+  const switcher = document.createElement("vx-level-switcher") as VxLevelSwitcher;
   document.body.appendChild(switcher);
   const langSwitcher = document.createElement("vx-lang-switcher");
   langSwitcher.setAttribute("current", lang);
@@ -725,11 +728,20 @@ async function main() {
   // (dominios+tipos, ver chromeLegend.ts). Se crean UNA vez (como los
   // switchers), no por modo — sólo cambian de copy/contenido/lugar.
   // Montados en #cube-pane (no stageEl/viewport): así nunca quedan
-  // sobre la columna de Math Arena en el split de Avanzado — bug real
+  // sobre la columna de Math Lab en el split de Avanzado — bug real
   // señalado en la auditoría de pantallas (DOCs/11-screen-specs.md §1).
+  // F2 §5.4 (cajones): el rail de zoom es secundario — vive dentro de
+  // un cajón en el borde izquierdo; el cubo ya no muestra el riel sin
+  // que el usuario lo pida (pinch/rueda siguen funcionando siempre).
   const zoomRail = document.createElement("vx-zoom-rail") as VxZoomRail;
   zoomRail.setAttribute("readout", "");
-  cubePaneEl.appendChild(zoomRail);
+  zoomRail.setAttribute("drawer", "");
+  const zoomDrawer = document.createElement("vx-drawer") as VxDrawer;
+  zoomDrawer.id = "zoom-drawer";
+  zoomDrawer.setAttribute("side", "left");
+  zoomDrawer.setAttribute("fit", "");
+  zoomDrawer.appendChild(zoomRail);
+  cubePaneEl.appendChild(zoomDrawer);
   zoomRail.attach(engine.camera, engine.controls);
 
   const chromeLegend = document.createElement("vx-chrome-legend") as VxChromeLegend;
@@ -762,9 +774,8 @@ async function main() {
 
   // DOCs/11 §1: en el dock de Intermedio (≥1024px) la leyenda vive al
   // PIE del panel lateral (flujo normal, tras composer/strip/notas),
-  // nunca flotando sobre el cubo — en cualquier otro shell (incluido
-  // el split de Avanzado, cuyo panel es Math Arena, no esta leyenda)
-  // flota sobre #cube-pane, que es donde ya vive por defecto.
+  // nunca flotando sobre el cubo — en cualquier otro shell flota sobre
+  // #cube-pane, que es donde ya vive por defecto.
   function placeChromeLegend(mode: Mode) {
     const wantsDock = mode === "intermedio" && matchMedia(DESKTOP_INTERMEDIO).matches;
     if (wantsDock) {
@@ -780,11 +791,12 @@ async function main() {
   cubePaneEl.appendChild(card);
 
   // P6 — tres shells reales (ver DOCs/03 §3): Intermedio agrega un dock
-  // fijo en escritorio, Avanzado agrega un Math Arena con separador
-  // arrastrable + consola de ancho completo. `canvas.parentElement` es
-  // ahora #cube-pane (ver index.html) — el ResizeObserver de engine.ts
-  // ya lo escucha, así que angostar la columna del cubo reproyecta la
-  // cámara sola, sin cablear nada más.
+  // fijo en escritorio; Avanzado agrega la consola de ancho completo y
+  // (F2 §5.4) el Math Lab como cajón a demanda — el split con separador
+  // arrastrable quedó eliminado en el rediseño de cajones.
+  // `canvas.parentElement` es ahora #cube-pane (ver index.html) — el
+  // ResizeObserver de engine.ts ya lo escucha, así que angostar la
+  // columna del cubo reproyecta la cámara sola, sin cablear nada más.
   const DESKTOP_INTERMEDIO = "(min-width: 1024px)";
   const DESKTOP_AVANZADO = "(min-width: 1100px)";
   const isDockLayout = (mode: Mode) =>
@@ -793,38 +805,48 @@ async function main() {
 
   // DOCs/13-intermedio-3d-journey-implementation.md §2-4 (Phase 1):
   // Intermedio deja de ser un solo stack plano — tres superficies
-  // hermanas (Cubo · Transformer · RAG) que comparten un composer. En
-  // escritorio el nav vive al tope de #side-pane (dock); en angosto no
-  // hay dock hasta elegir una superficie que no sea "cube" — ahí el
-  // nav se REPARENTA dentro de #side-pane (ver placeIntermediateSurfaceNav)
-  // para quedar SIEMPRE por delante del panel full-bleed, a diferencia
-  // de <vx-surface-toggle> (Avanzado angosto), que flota afuera con un
-  // z-index fijo (16) menor al del panel full-bleed (60) — un bug real
-  // descubierto probando este mismo patrón, no tocado aquí porque
-  // Avanzado está fuera de alcance de esta fase.
+  // hermanas (Cubo · Transformer · RAG) que comparten un composer.
+  // F2 §5.4 (cajones): el nav de superficies es navegación secundaria —
+  // vive dentro de un <vx-drawer>, visible sólo tras abrirlo. En
+  // escritorio el cajón va al tope de #side-pane (dock); en angosto
+  // flota sobre el cubo y se REPARENTA dentro de #side-pane cuando la
+  // superficie no es "cube" (ver placeIntermediateSurfaceNav) para
+  // quedar SIEMPRE por delante del panel full-bleed (z:60) — el bug de
+  // z-index de Avanzado angosto (toggle flotante z:16 tapado por el
+  // panel) queda resuelto de raíz: ya no hay toggle flotante, el cajón
+  // viaja CON el panel.
   let intermediateSurface: IntermediateSurface = "cube";
   let cubePanelEl: HTMLDivElement | null = null;
   let transformerPanelEl: HTMLDivElement | null = null;
   let ragPanelEl: HTMLDivElement | null = null;
   const intermediateSurfaceNav = document.createElement("vx-intermediate-surface") as VxIntermediateSurface;
+  // Siempre con `dock` (fila de flujo): su versión flotante
+  // (position:fixed) chocaría con el panel del cajón que la contiene.
+  intermediateSurfaceNav.setAttribute("dock", "");
   intermediateSurfaceNav.setAttribute("current", intermediateSurface);
+  const surfaceNavDrawer = document.createElement("vx-drawer") as VxDrawer;
+  surfaceNavDrawer.id = "surface-nav-drawer";
+  surfaceNavDrawer.setAttribute("side", "right");
+  surfaceNavDrawer.setAttribute("trigger", "top");
+  surfaceNavDrawer.appendChild(intermediateSurfaceNav);
   intermediateSurfaceNav.addEventListener("vx-intermediate-surface-change", (event) => {
     intermediateSurface = (event as CustomEvent<IntermediateSurfaceChangeDetail>).detail.surface;
     intermediateSurfaceNav.setAttribute("current", intermediateSurface);
     applyIntermediateSurfaceVisibility();
+    surfaceNavDrawer.close(); // la superficie elegida se ve; el cajón se recoge
   });
 
   function placeIntermediateSurfaceNav() {
     const desktopDock = matchMedia(DESKTOP_INTERMEDIO).matches;
     const wantsDockStyle = desktopDock || intermediateSurface !== "cube";
     if (wantsDockStyle) {
-      intermediateSurfaceNav.setAttribute("dock", "");
-      if (sidePaneEl.firstChild !== intermediateSurfaceNav) {
-        sidePaneEl.insertBefore(intermediateSurfaceNav, sidePaneEl.firstChild);
+      surfaceNavDrawer.setAttribute("dock", "");
+      if (sidePaneEl.firstChild !== surfaceNavDrawer) {
+        sidePaneEl.insertBefore(surfaceNavDrawer, sidePaneEl.firstChild);
       }
     } else {
-      intermediateSurfaceNav.removeAttribute("dock");
-      if (intermediateSurfaceNav.parentElement !== stageEl) stageEl.appendChild(intermediateSurfaceNav);
+      surfaceNavDrawer.removeAttribute("dock");
+      if (surfaceNavDrawer.parentElement !== stageEl) stageEl.appendChild(surfaceNavDrawer);
     }
   }
 
@@ -1111,68 +1133,34 @@ async function main() {
     return { cubePanel, transformerPanel, ragPanel };
   }
 
-  const AVANZADO_SASH_KEY = "vectron_avanzado_sash";
-  function applySashWidth(pct: number) {
-    stageEl.style.setProperty("--avanzado-cube", `${pct}%`);
-  }
-  {
-    const stored = Number(localStorage.getItem(AVANZADO_SASH_KEY));
-    applySashWidth(Number.isFinite(stored) && stored >= 30 && stored <= 75 ? stored : 58);
-  }
-  let sashDragging = false;
-  sashEl.addEventListener("pointerdown", (e) => {
-    sashDragging = true;
-    sashEl.classList.add("dragging");
-    sashEl.setPointerCapture(e.pointerId);
-  });
-  sashEl.addEventListener("pointermove", (e) => {
-    if (!sashDragging) return;
-    const pct = Math.min(75, Math.max(30, (e.clientX / window.innerWidth) * 100));
-    applySashWidth(pct);
-  });
-  function endSashDrag() {
-    if (!sashDragging) return;
-    sashDragging = false;
-    sashEl.classList.remove("dragging");
-    const pct = parseFloat(stageEl.style.getPropertyValue("--avanzado-cube"));
-    if (Number.isFinite(pct)) localStorage.setItem(AVANZADO_SASH_KEY, String(pct));
-  }
-  sashEl.addEventListener("pointerup", endSashDrag);
-  sashEl.addEventListener("pointercancel", endSashDrag);
-
-  // Avanzado angosto: Cubo|Matemáticas son superficies hermanas, no un
-  // toggle débil (ver DOCs/03 §3.3) — el cubo sigue montado y girando
-  // detrás, el Math Arena sólo se le pone encima a pantalla completa.
-  let mobileSurface: Surface = "cube";
-  const surfaceToggle = document.createElement("vx-surface-toggle") as VxSurfaceToggle;
-  surfaceToggle.setAttribute("current", mobileSurface);
-  surfaceToggle.addEventListener("vx-surface-change", (event) => {
-    mobileSurface = (event as CustomEvent<SurfaceChangeDetail>).detail.surface;
-    surfaceToggle.setAttribute("current", mobileSurface);
-    stageEl.dataset.surface = mobileSurface;
-  });
+  // F2 §5.4 (cajones): el Math Lab ya no es una columna permanente del
+  // split (sash arrastrable eliminado) ni una superficie full-bleed con
+  // toggle propio — es un cajón que se abre a demanda desde el borde
+  // derecho, igual en escritorio que en angosto. Esto elimina de raíz
+  // el bug de z-index de Avanzado móvil (toggle flotante z:16 tapado
+  // por el panel full-bleed z:60): ya no existen ni el toggle ni el
+  // panel full-bleed.
+  const mathDrawer = document.createElement("vx-drawer") as VxDrawer;
+  mathDrawer.id = "math-drawer";
+  mathDrawer.setAttribute("side", "right");
 
   function applyShellLayout(mode: Mode) {
     stageEl.dataset.mode = mode;
     sidePaneEl.replaceChildren();
     consolePaneEl.replaceChildren();
+    // El cajón de superficies es exclusivo de Intermedio — si quedó
+    // montado (flotando en stageEl o dentro del dock) al salir del
+    // modo, se retira; Intermedio lo vuelve a colocar en su sitio vía
+    // applyIntermediateSurfaceVisibility al remontar sus paneles.
+    if (mode !== "intermedio" && surfaceNavDrawer.isConnected) surfaceNavDrawer.remove();
 
     if (mode === "avanzado") {
-      mathArenaEl = document.createElement("vx-math-arena") as VxMathArena;
-      sidePaneEl.appendChild(mathArenaEl);
-      if (!matchMedia(DESKTOP_AVANZADO).matches) {
-        stageEl.dataset.surface = mobileSurface;
-        if (!surfaceToggle.isConnected) stageEl.appendChild(surfaceToggle);
-      } else if (surfaceToggle.isConnected) {
-        surfaceToggle.remove();
-        delete stageEl.dataset.surface;
-      }
+      mathLabEl = document.createElement("vx-math-lab") as VxMathLab;
+      mathDrawer.replaceChildren(mathLabEl);
+      if (!mathDrawer.isConnected) stageEl.appendChild(mathDrawer);
     } else {
-      mathArenaEl = null; // sidePaneEl.replaceChildren() de arriba ya lo quitó del DOM
-      if (surfaceToggle.isConnected) {
-        surfaceToggle.remove();
-        delete stageEl.dataset.surface;
-      }
+      mathLabEl = null;
+      if (mathDrawer.isConnected) mathDrawer.remove();
     }
   }
 
@@ -1320,7 +1308,7 @@ async function main() {
     focusOnMatches(ids);
   }
 
-  const interaction = setupConceptInteraction({
+  const interaction = setupSceneInteraction({
     canvas,
     camera: engine.camera,
     field,
@@ -1344,11 +1332,11 @@ async function main() {
     onCountChange: (n) => {
       liveTokenCount = n;
       renderCountLabel();
-      // P7 Cosine (DOCs/03 §4.3 "reuse live vectors"): Math Arena usa
+      // P7 Cosine (DOCs/03 §4.3 "reuse live vectors"): Math Lab usa
       // los MISMOS embeddings reales de tokenMode, no pide otro embed
       // nuevo — se refresca cada vez que la lista de tokens vivos
       // cambia (mismo momento en que ya cambia el conteo del HUD).
-      mathArenaEl?.setLiveTokens(tokenMode.getLiveTokens());
+      mathLabEl?.setLiveTokens(tokenMode.getLiveTokens());
     },
     onFocusPoint: flyTo,
   });
@@ -1490,7 +1478,7 @@ async function main() {
   }
 
   let composer: VxComposer | null = null;
-  let mathArenaEl: VxMathArena | null = null;
+  let mathLabEl: VxMathLab | null = null;
   let tokenStrip: VxTokenStrip | null = null;
   let currentMode: Mode = initialMode;
 
@@ -1596,12 +1584,17 @@ async function main() {
     interaction.reset(); // suelta el pin ANTES del morph — mismo orden que "cancela al empezar" (06 §6)
     tokenMode.setEnabled(mode === "avanzado");
     chromeLegend.setMode(mode);
+    // Labels de los cajones en el idioma activo (se re-renderizan aquí
+    // porque runApplyModeChrome también corre al cambiar de idioma).
+    zoomDrawer.setAttribute("label", t("drawerZoomLabel", lang));
+    surfaceNavDrawer.setAttribute("label", t("drawerSurfacesLabel", lang));
+    mathDrawer.setAttribute("label", t("drawerMathLabel", lang));
     field.setSearchHighlights([]); // suelta cualquier dominio aislado del modo anterior
 
     // Todo el "chrome" de la app (shell, composer/strip, HUD, color key)
     // se actualiza YA — bug real reportado en vivo: antes esperaba a que
     // terminara la morph de partículas (hasta varios segundos) para
-    // recién ahí cambiar el dock/Math Arena/toggle Cubo|Matemáticas, así
+    // recién ahí cambiar el dock/Math Lab/toggle Cubo|Matemáticas, así
     // que durante toda la animación el switcher ya mostraba el modo
     // nuevo pero el layout seguía siendo el del modo anterior.
     const isFirstCall = composer === null;
@@ -1658,8 +1651,8 @@ async function main() {
     void field.morphToPartOfSpeechFilter(allowedPos, { reducedMotion, targetTotal: MODE_CELLS[mode] });
   }
 
-  switcher.addEventListener("vx-mode-change", (event) => {
-    const { mode } = (event as CustomEvent<ModeChangeDetail>).detail;
+  switcher.addEventListener("vx-level-change", (event) => {
+    const { mode } = (event as CustomEvent<LevelChangeDetail>).detail;
     setStoredMode(mode);
     void applyMode(mode);
   });

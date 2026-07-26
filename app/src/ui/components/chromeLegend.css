@@ -2,7 +2,7 @@
    componentes apilados (`vx-color-key` + `vx-kind-legend` fusionados
    aquí). Por defecto vive ABSOLUTO dentro de #cube-pane (no fixed al
    viewport, no relativo a stageEl) — así nunca queda sobre la columna
-   de Math Arena en el split de Avanzado, ni sobre el dock de
+   de Math Lab en el split de Avanzado, ni sobre el dock de
    Intermedio; quien lo monta (main.ts) decide en qué contenedor vive
    según el shell. El atributo `dock` cambia a flujo normal cuando
    vive al pie del panel lateral en vez de flotar. */
@@ -160,6 +160,20 @@
 
 .row:hover {
   background: rgba(231, 226, 214, 0.08);
+}
+
+/* Hit targets ≥44px en pantallas táctiles (18 P0.5): el pill y las
+   filas de dominio crecen sólo con puntero grueso — en escritorio con
+   mouse fino el chrome discreto no cambia. */
+@media (pointer: coarse) {
+  .peek {
+    min-height: 44px;
+    padding: 8px 12px;
+  }
+
+  .row {
+    min-height: 44px;
+  }
 }
 
 .row.active {

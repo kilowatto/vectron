@@ -1,6 +1,6 @@
-/* Mismo look que <vx-mode-switcher> a propósito — es el mismo tipo de
+/* Mismo look que <vx-level-switcher> a propósito — es el mismo tipo de
    control (nav de app persistente), sólo con dos opciones en vez de
-   tres, y vive debajo del mode-switcher en la misma esquina. */
+   tres, y vive debajo del level-switcher en la misma esquina. */
 :host {
   position: fixed;
   z-index: 16;

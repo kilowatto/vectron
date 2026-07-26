@@ -11,9 +11,9 @@ export interface SurfaceChangeDetail {
 /**
  * `<vx-surface-toggle current="cube">` — nav de app, no un "ocultar
  * math" débil (ver DOCs/03 §3.3 "Mobile / narrow — dual surface, not a
- * weak toggle"): en Avanzado angosto, el cubo y el Math Arena son dos
+ * weak toggle"): en Avanzado angosto, el cubo y el Math Lab son dos
  * superficies pares, cada una full-bleed por turnos — este control es
- * cómo se navega entre ellas, igual espíritu que <vx-mode-switcher>.
+ * cómo se navega entre ellas, igual espíritu que <vx-level-switcher>.
  */
 export class VxSurfaceToggle extends HTMLElement {
   static readonly observedAttributes = ["current"];

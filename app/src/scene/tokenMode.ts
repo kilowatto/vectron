@@ -61,7 +61,7 @@ export interface TokenMode {
   /** Texto actual del panel — con debounce interno (~600ms). */
   setText(text: string): void;
   clear(): void;
-  /** Snapshot de los embeddings vivos ahora mismo — para Math Arena
+  /** Snapshot de los embeddings vivos ahora mismo — para Math Lab
    * (P7, pestaña Cosine): reusar los MISMOS vectores reales en vez de
    * pedir otros nuevos (DOCs/03 §4.3 "reuse live vectors"). */
   getLiveTokens(): LiveToken[];
@@ -406,7 +406,7 @@ export function setupTokenMode(options: TokenModeOptions): TokenMode {
     return particles.find((p) => p.mesh === hits[0].object) ?? null;
   }
 
-  // Escape suelta la tarjeta (lo maneja conceptInteraction) — la
+  // Escape suelta la tarjeta (lo maneja sceneInteraction) — la
   // estrella de vecinos del token debe irse junto con ella, igual que
   // las líneas naranjas del dataset.
   window.addEventListener("keydown", (event) => {
@@ -425,7 +425,7 @@ export function setupTokenMode(options: TokenModeOptions): TokenMode {
     }
   });
 
-  // Mismo filtro arrastre-vs-clic que conceptInteraction: sin esto,
+  // Mismo filtro arrastre-vs-clic que sceneInteraction: sin esto,
   // soltar la rotación de OrbitControls sobre un token disparaba este
   // click igual (mousedown/mouseup comparten canvas) y te sacaba de la
   // navegación a media órbita.
@@ -445,7 +445,7 @@ export function setupTokenMode(options: TokenModeOptions): TokenMode {
     const p = pickParticle(event.clientX, event.clientY);
     if (!p) {
       // Clic fuera de un token: la estrella de vecinos se va junto con
-      // la tarjeta (que conceptInteraction ya soltó en su handler).
+      // la tarjeta (que sceneInteraction ya soltó en su handler).
       if (neighborStar) {
         disposeLine(neighborStar);
         neighborStar = null;

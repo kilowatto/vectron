@@ -1,12 +1,12 @@
 import { getStoredLang, t, type Lang } from "../../i18n";
 import { cosineLocal, fetchPcaBasis, type PcaBasis } from "../../data/concepts";
 import { attachShadow } from "./shadow";
-import css from "./mathArena.css?inline";
+import css from "./mathLab.css?inline";
 
 const TABS = ["Attention", "Softmax", "Cosine", "PCA", "Sampling"] as const;
 type Tab = (typeof TABS)[number];
 
-export interface MathArenaToken {
+export interface MathLabToken {
   label: string;
   vector: number[];
   /** Coordenadas reales ya proyectadas de esta partícula (ver
@@ -16,7 +16,7 @@ export interface MathArenaToken {
 }
 
 /**
- * `<vx-math-arena>` — P6 sólo pedía el hueco permanente en el shell de
+ * `<vx-math-lab>` — P6 sólo pedía el hueco permanente en el shell de
  * Avanzado; P7 (ver DOCs/03-gui-responsive-avanzado-loading.md §4)
  * empieza a llenarlo — orden explícito del doc: "Cosine+PCA first
  * (reuse live vectors) → Softmax → Attention heatmap → Sampling". Esta
@@ -30,9 +30,9 @@ function loadPcaBasisOnce(): Promise<PcaBasis | null> {
   return pcaBasisPromise;
 }
 
-export class VxMathArena extends HTMLElement {
+export class VxMathLab extends HTMLElement {
   #activeTab: Tab = "Cosine";
-  #tokens: MathArenaToken[] = [];
+  #tokens: MathLabToken[] = [];
   #selA = 0;
   #selB = 1;
   #selPca = 0;
@@ -60,7 +60,7 @@ export class VxMathArena extends HTMLElement {
   /** main.ts llama esto con los embeddings vivos de tokenMode.ts (P7,
    * DOCs/03 §4.3 "reuse live vectors") — mismos números, sin pedir otro
    * embed nuevo sólo para esta pestaña. */
-  setLiveTokens(tokens: MathArenaToken[]): void {
+  setLiveTokens(tokens: MathLabToken[]): void {
     this.#tokens = tokens;
     if (this.#selA >= tokens.length) this.#selA = 0;
     if (this.#selB >= tokens.length) this.#selB = Math.min(1, tokens.length - 1);
@@ -73,7 +73,7 @@ export class VxMathArena extends HTMLElement {
     this.#tabsEl.innerHTML = TABS.map(
       (tab) =>
         `<button type="button" class="tab${tab === this.#activeTab ? " active" : ""}" data-tab="${tab}">${
-          tab === "Cosine" ? t("mathArenaTabCosine", lang) : tab === "PCA" ? t("mathArenaTabPca", lang) : tab
+          tab === "Cosine" ? t("mathLabTabCosine", lang) : tab === "PCA" ? t("mathLabTabPca", lang) : tab
         }</button>`,
     ).join("");
     this.#tabsEl.querySelectorAll<HTMLButtonElement>(".tab").forEach((btn) => {
@@ -99,8 +99,8 @@ export class VxMathArena extends HTMLElement {
     const lang = getStoredLang();
     this.#panelEl.innerHTML = `
       <div class="placeholder">
-        <p class="headline">${t("mathArenaComingSoon", lang)}</p>
-        <p class="note">${t("mathArenaNote", lang)}</p>
+        <p class="headline">${t("mathLabComingSoon", lang)}</p>
+        <p class="note">${t("mathLabNote", lang)}</p>
       </div>
     `;
   }
@@ -108,7 +108,7 @@ export class VxMathArena extends HTMLElement {
   #renderCosinePanel() {
     const lang: Lang = getStoredLang();
     if (this.#tokens.length < 2) {
-      this.#panelEl.innerHTML = `<div class="empty">${t("mathArenaCosineEmpty", lang)}</div>`;
+      this.#panelEl.innerHTML = `<div class="empty">${t("mathLabCosineEmpty", lang)}</div>`;
       return;
     }
     const options = (selected: number) =>
@@ -124,7 +124,7 @@ export class VxMathArena extends HTMLElement {
     const magB = Math.sqrt(b.vector.reduce((s, v) => s + v * v, 0));
 
     this.#panelEl.innerHTML = `
-      <p class="intro">${t("mathArenaCosineIntro", lang)}</p>
+      <p class="intro">${t("mathLabCosineIntro", lang)}</p>
       <div class="pickers">
         <select class="sel-a">${options(this.#selA)}</select>
         <span class="vs">↔</span>
@@ -141,7 +141,7 @@ export class VxMathArena extends HTMLElement {
         <div class="vec-row"><span class="vec-label">A (${a.label})</span><span class="vec-preview">[${a.vector.slice(0, 6).map((v) => v.toFixed(3)).join(", ")}, …] · ℝ${a.vector.length}</span></div>
         <div class="vec-row"><span class="vec-label">B (${b.label})</span><span class="vec-preview">[${b.vector.slice(0, 6).map((v) => v.toFixed(3)).join(", ")}, …] · ℝ${b.vector.length}</span></div>
       </div>
-      <p class="footnote">${t("mathArenaCosineFootnote", lang)}</p>
+      <p class="footnote">${t("mathLabCosineFootnote", lang)}</p>
     `;
     this.#panelEl.querySelector(".sel-a")!.addEventListener("change", (e) => {
       this.#selA = Number((e.target as HTMLSelectElement).value);
@@ -156,11 +156,11 @@ export class VxMathArena extends HTMLElement {
   #renderPcaPanel() {
     const lang: Lang = getStoredLang();
     if (this.#tokens.length === 0) {
-      this.#panelEl.innerHTML = `<div class="empty">${t("mathArenaCosineEmpty", lang)}</div>`;
+      this.#panelEl.innerHTML = `<div class="empty">${t("mathLabCosineEmpty", lang)}</div>`;
       return;
     }
     if (!this.#pcaBasis) {
-      this.#panelEl.innerHTML = `<div class="empty">${t("mathArenaPcaLoading", lang)}</div>`;
+      this.#panelEl.innerHTML = `<div class="empty">${t("mathLabPcaLoading", lang)}</div>`;
       return;
     }
     const basis = this.#pcaBasis;
@@ -185,7 +185,7 @@ export class VxMathArena extends HTMLElement {
     const axisLabel = ["x", "y", "z"];
 
     this.#panelEl.innerHTML = `
-      <p class="intro">${t("mathArenaPcaIntro", lang)}</p>
+      <p class="intro">${t("mathLabPcaIntro", lang)}</p>
       <div class="pickers">
         <select class="sel-pca">${options}</select>
       </div>
@@ -198,10 +198,10 @@ export class VxMathArena extends HTMLElement {
           .join("<br/>")}
       </div>
       <div class="vectors">
-        <div class="vec-row"><span class="vec-label">${t("mathArenaPcaComputed", lang)}</span><span class="vec-preview">[${scaled.map((v) => v.toFixed(3)).join(", ")}]</span></div>
-        <div class="vec-row"><span class="vec-label">${t("mathArenaPcaReal", lang)}</span><span class="vec-preview">[${tok.coords.map((v) => v.toFixed(3)).join(", ")}]</span></div>
+        <div class="vec-row"><span class="vec-label">${t("mathLabPcaComputed", lang)}</span><span class="vec-preview">[${scaled.map((v) => v.toFixed(3)).join(", ")}]</span></div>
+        <div class="vec-row"><span class="vec-label">${t("mathLabPcaReal", lang)}</span><span class="vec-preview">[${tok.coords.map((v) => v.toFixed(3)).join(", ")}]</span></div>
       </div>
-      <p class="footnote">${t("mathArenaPcaFootnote", lang)}</p>
+      <p class="footnote">${t("mathLabPcaFootnote", lang)}</p>
     `;
     this.#panelEl.querySelector(".sel-pca")!.addEventListener("change", (e) => {
       this.#selPca = Number((e.target as HTMLSelectElement).value);
@@ -210,4 +210,4 @@ export class VxMathArena extends HTMLElement {
   }
 }
 
-customElements.define("vx-math-arena", VxMathArena);
+customElements.define("vx-math-lab", VxMathLab);

@@ -51,7 +51,7 @@ body {
    reconstruir dock/split pese a que una versión anterior lo había
    revertido): Principiante sigue siendo una sola columna full-bleed
    (default de abajo); Intermedio agrega una columna dock fija en
-   escritorio; Avanzado agrega una columna Math Arena con separador
+   escritorio; Avanzado agrega una columna Math Lab con separador
    arrastrable + una fila de consola de tokens de ancho completo. El
    ResizeObserver de engine.ts ya escucha `canvas.parentElement`
    (#cube-pane) — cuando la columna cambia de ancho, el cubo se
@@ -73,14 +73,13 @@ body {
   overflow: hidden;
 }
 
-#sash,
 #side-pane,
 #console-pane {
   display: none;
 }
 
-/* El dock (Intermedio) y el Math Arena (Avanzado) viven en la MISMA
-   esquina superior derecha que <vx-lang-switcher> + <vx-mode-switcher>
+/* El dock (Intermedio) y el Math Lab (Avanzado) viven en la MISMA
+   esquina superior derecha que <vx-lang-switcher> + <vx-level-switcher>
    (ambos position:fixed al viewport, no a esta columna) — sin este
    despeje se les montan encima. Misma fórmula ya probada en
    tokenStrip.css para ese mismo choque en el layout full-bleed. */
@@ -123,35 +122,20 @@ body {
   }
 }
 
-/* Avanzado — split cube|Math Arena con separador arrastrable, más una
-   fila de consola de tokens de ancho completo abajo (ver §3.3: "Token
-   console (full width): dual tokenizer + disclaimer"). Bajo el
-   breakpoint colapsa a "Math como pestaña" — aquí, a las dos
-   superficies pares Cubo|Matemáticas vía <vx-surface-toggle>. */
+/* Avanzado — F2 §5.4 (cajones): el Math Lab ya NO es una columna fija
+   del split (sash arrastrable eliminado) ni una superficie full-bleed —
+   vive en un <vx-drawer> que se abre a demanda desde el borde derecho
+   (ver #math-drawer, montado en main.ts). El shell queda como el de los
+   otros niveles (cubo a pantalla completa) más la fila de consola de
+   tokens de ancho completo abajo (ver §3.3: "Token console (full
+   width): dual tokenizer + disclaimer"). */
 @media (min-width: 1100px) {
   #stage[data-mode="avanzado"] {
     grid-template-areas:
-      "cube sash side"
-      "console console console";
-    grid-template-columns: var(--avanzado-cube, 58%) 6px 1fr;
+      "cube"
+      "console";
+    grid-template-columns: 1fr;
     grid-template-rows: 1fr auto;
-  }
-
-  #stage[data-mode="avanzado"] #sash {
-    display: block;
-    grid-area: sash;
-    cursor: col-resize;
-    background: rgba(231, 226, 214, 0.08);
-  }
-
-  #stage[data-mode="avanzado"] #sash:hover,
-  #stage[data-mode="avanzado"] #sash.dragging {
-    background: var(--accent);
-  }
-
-  #stage[data-mode="avanzado"] #side-pane {
-    display: flex;
-    grid-area: side;
   }
 
   #stage[data-mode="avanzado"] #console-pane {
@@ -164,24 +148,11 @@ body {
   }
 }
 
-/* Avanzado angosto — el Math Arena no vive en una columna, vive como
-   superficie hermana full-bleed que se navega con <vx-surface-toggle>
-   (ver §3.3 "dual surface, not a weak toggle"): nunca superpuesto a
-   medias, o está o no está. */
-@media (max-width: 1099px) {
-  #stage[data-mode="avanzado"][data-surface="math"] #side-pane {
-    display: flex;
-    position: fixed;
-    inset: 0;
-    z-index: 60;
-  }
-}
-
 /* Intermedio angosto — mismo espíritu que el bloque de arriba: Cubo ·
    Transformer · RAG son superficies hermanas full-bleed (DOCs/13 §3-4),
-   navegadas con <vx-intermediate-surface>. A diferencia de
-   <vx-surface-toggle> (Avanzado), ese nav se reparenta DENTRO de
-   #side-pane cuando la superficie no es "cube" (ver main.ts
+   navegadas con <vx-intermediate-surface>, que vive dentro de un
+   <vx-drawer> (F2 §5.4). Ese cajón se reparenta DENTRO de #side-pane
+   cuando la superficie no es "cube" (ver main.ts
    `placeIntermediateSurfaceNav`) — así siempre queda por delante del
    panel full-bleed en el mismo contexto de z-index, sin competir con
    z:60 desde afuera. */
@@ -231,6 +202,8 @@ body {
   z-index: 65;
   right: 16px;
   bottom: max(16px, calc(env(safe-area-inset-bottom) + 8px));
+  /* Hit target ≥44px (18 P0.5) — es un control táctil en angosto. */
+  min-height: 44px;
   background: var(--accent);
   color: #1a0f04;
   border: none;
@@ -440,6 +413,22 @@ body {
   color: #1a0f04;
   border-color: var(--accent);
   font-weight: 600;
+}
+
+/* Hit targets ≥44px en táctil (18 P0.5) para los botones de la demo. */
+@media (pointer: coarse) {
+  .dock-note button {
+    min-height: 44px;
+  }
+}
+
+/* Cajones del shell (F2 §5.4): el rail de zoom vive dentro de
+   #zoom-drawer; en móvil el pinch ya cubre el zoom (el rail está
+   display:none ahí, ver zoomRail.css), así que su cajón también sobra. */
+@media (max-width: 640px) {
+  #zoom-drawer {
+    display: none;
+  }
 }
 
 /* Intermedio — cada superficie (Cubo/Transformer/RAG) agrupa su propio
