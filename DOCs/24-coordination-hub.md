@@ -44,7 +44,8 @@
 | 2026-07-25 | Kimi (k3) | Glosario matemático + convención de citación (69 entradas, 34 refs) | `DOCs/22` | — |
 | 2026-07-25 | Kimi (k3) | Spec de Larry AI para Vectron (canon Aluna/IOS integrado) | `DOCs/23` | F4 |
 | 2026-07-25 | Kimi (k3) | Decisiones del usuario registradas: WebLLM **nunca** (todo remoto); nube-cerebro **rechazada** (nube orgánica dirigida por datos; cerebro solo como actividad etiquetada) | `DOCs/02`, `DOCs/21` §5.3, `README.md` | — |
-| 2026-07-25 | Kimi (k3) | **F1.1 EN CURSO:** partícula líquida fotorrealista (gota+bioluminiscente+burbuja) en lab `/particula` — shader instanciado 1 draw call | `app/src/particula/liquidParticle.ts` (+ integración lab) | Validar look con usuario → F1.2 animaciones celulares |
+| 2026-07-25 | Kimi (k3) | **F1.1 DESPLEGADO:** partícula líquida fotorrealista (gota+bioluminiscente+burbuja) en lab `/particula` — shader instanciado 1 draw call, commit `f8d0da6`, live | `app/src/particula/liquidParticle.ts` (+ integración lab) | **CHECKPOINT USUARIO:** validar look → F1.2 animaciones celulares |
+| 2026-07-25 | Kimi (k3) | **F1.2 EN CURSO:** animaciones celulares para la partícula líquida (nacimiento, mitosis dumbbell, fusión, muerte orgánica) | `app/src/particula/` | F1.3 loader Fibonacci |
 
 ### 4. Open questions / Preguntas abiertas
 
