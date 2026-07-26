@@ -219,18 +219,18 @@ export interface ParticleFieldOptions {
 const CUBE_LIQUID = {
   fresnelPower: 3.0,
   iorFeel: 1.33,
-  transmit: 0.35,
-  envReflect: 0.55,
+  transmit: 0.55,
+  envReflect: 0.6,
   envReflBlur: 0.6,
   envRefrBlur: 2.5,
-  iridescenceStrength: 0.45,
+  iridescenceStrength: 0.65,
   iridescenceSpeed: 0.05,
-  coreEmissive: 0.9,
+  coreEmissive: 1.6,
   coreFalloff: 2.2,
-  baseGlow: 0.1,
-  breathAmp: 0.06,
+  baseGlow: 0.3,
+  breathAmp: 0.09,
   breathSpeed: 1.1,
-  wobbleAmp: 0.02,
+  wobbleAmp: 0.032,
   wobbleFreq: 0.8,
   /** Amplitud OBJETIVO de la deriva de fluido (curl noise, F2 §5.1) —
    * muy por debajo del radio de interacción para que la codificación
@@ -261,7 +261,7 @@ const CUBE_LIQUID = {
   jellyFreq: 10,
   jellyDecay: 4,
   specularPower: 500,
-  specularStrength: 0.7,
+  specularStrength: 1.0,
   sssStrength: 0.5,
   ambient: 0.22,
   lightDir: [2, 3, 2] as [number, number, number],
@@ -290,7 +290,14 @@ export function createParticleField(
   const CAPACITY = 25000;
   const realCount = concepts.length;
   const count = realCount;
-  const geometry = new THREE.IcosahedronGeometry(0.032, 1);
+  // Radio 0.032 → 0.052 (2026-07-26, iteración visual con capturas):
+  // a 0.032 cada célula proyecta ~3-4 px y el shading líquido (fresnel,
+  // núcleo, iridiscencia) no tiene píxeles donde vivir — la nube se
+  // leía como confeti mate, no como gotas ("no se ve acuoso"). Con
+  // 0.052 las células se solapan y la nube se funde en cuerpo
+  // gelatinoso; el detalle 1 del icosaedro se mantiene (a este tamaño
+  // los vértices extra no se aprecian y cuestan).
+  const geometry = new THREE.IcosahedronGeometry(0.052, 1);
   // El shader líquido no usa uv — fuera: cada atributo que el pipeline
   // declara cuenta contra el tope de 8 vertex buffers de WebGPU (ver el
   // bloque de atributos empaquetados más abajo).
@@ -1134,7 +1141,12 @@ export function createParticleField(
     const body = aBody.mul(float(L.ambient).add(wrap.mul(L.sssStrength)));
 
     const transmit = pmremTexture(options.envMap, equirectUV(refract(incident, n, float(1).div(L.iorFeel))), float(L.envRefrBlur))
-      .mul(mix(vec3(1, 1, 1), instanceColor, float(0.45)))
+      // Tinte 0.45 → 0.85 (iteración visual 2026-07-26): con 0.45 el env
+      // blanco del RoomEnvironment dominaba y TODAS las células se
+      // lavaban a gris-perla — se perdía la codificación por color de
+      // dominio (que ES la lectura pedagógica) y el look de joya. A
+      // 0.85 la luz transmitida hereda el tono de la célula.
+      .mul(mix(vec3(1, 1, 1), instanceColor, float(0.85)))
       .mul(L.transmit)
       .mul(pow(ndv, float(1.5)));
 

@@ -143,11 +143,16 @@ export async function createEngine(canvas: HTMLCanvasElement, overrides?: SceneO
   // Palancas del QualityGovernor (F2 §5.4) — el bloom se reconstruye en
   // caliente (reversible en ambas direcciones); la fuerza/umbral base
   // siguen siendo los de siempre salvo override del lab.
-  let bloomStrength = bloomOverride?.strength ?? 0.27;
+  // 0.27/0.58 → 0.42/0.5 (2026-07-26, iteración visual con capturas):
+  // el núcleo HDR de las células (coreEmissive 1.6) cruzaba el umbral
+  // pero con strength 0.27 el halo era casi invisible — la nube se
+  // leía pastel mate en vez de bioluminiscente ("que brille"). El
+  // /particula pasa su propio bloomOverride, no se afecta.
+  let bloomStrength = bloomOverride?.strength ?? 0.42;
   let bloomEnabled = true;
   function applyBloomNode() {
     renderPipeline.outputNode = bloomEnabled
-      ? scenePassColor.add(bloom(scenePassColor, bloomStrength, bloomOverride?.radius ?? 0.18, bloomOverride?.threshold ?? 0.58))
+      ? scenePassColor.add(bloom(scenePassColor, bloomStrength, bloomOverride?.radius ?? 0.18, bloomOverride?.threshold ?? 0.5))
       : scenePassColor;
   }
   applyBloomNode();
