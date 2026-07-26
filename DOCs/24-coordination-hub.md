@@ -50,7 +50,8 @@
 | 2026-07-25 | Kimi (k3) | **F1.2 DESPLEGADO:** animaciones celulares GPU para la partícula líquida (nacimiento, mitosis peanut, fusión, muerte orgánica), commit `30b46d8`, live | `app/src/particula/` | F1.4 |
 | 2026-07-25 | Kimi (k3) | **F1.4b DESPLEGADO:** renderer líquido 2D del loader (ventana de agua, rim fresnel, núcleo bioluminiscente, iridiscencia; sprites cacheados), commit `51e00ab`, live | `app/src/ui/components/cellularLoader.ts` | — |
 | 2026-07-25 | Kimi (k3) | **F1.4a DESPLEGADO — F1 COMPLETA:** el cubo principal usa el look líquido (fresnel, transmisión falsa PMREM, núcleo HDR, iridiscencia; PCA y hues intactos; adiós sopa aditiva), commit `162a7aa`, live | `app/src/scene/particleField.ts`, `app/src/main.ts` | F2 |
-| 2026-07-25 | Kimi (k3) | **F2-física EN CURSO:** curl noise + resortes semánticos + wobble en GPU, CPU ≈0 (`app/src/scene/` — NO EDITAR) | `app/src/scene/particleField.ts` | F2 transiciones celulares + governor + GUI drawers |
+| 2026-07-25 | Kimi (k3) | **F2-física DESPLEGADO:** curl noise en vertex shader + resortes semánticos con jelly al fijar concepto + CPU ≈0, commit `2cb6502`, live | `app/src/scene/particleField.ts`, `conceptInteraction.ts`, `main.ts` | F2 transiciones celulares |
+| 2026-07-25 | Kimi (k3) | **F2-transiciones EN CURSO:** conteo celular por nivel 15k/20k/25k (división al subir, fusión al bajar, cero pop-in) (`app/src/scene/` + `main.ts` — NO EDITAR) | `app/src/scene/particleField.ts`, `app/src/main.ts` | Cablear QualityGovernor + GUI drawers → cierre F2 |
 
 ### 4. Open questions / Preguntas abiertas
 
