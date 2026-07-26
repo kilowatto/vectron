@@ -1,0 +1,11 @@
+# HTML: nunca cachear en el edge — cada deploy debe ser visible de inmediato
+/
+  Cache-Control: no-cache
+/*.html
+  Cache-Control: no-cache
+# Assets con hash en el nombre: inmutables, cache agresivo
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+# Vocabulario del tokenizador BGE: cambia solo con re-entrenamiento
+/bge-vocab.txt
+  Cache-Control: public, max-age=86400, must-revalidate
