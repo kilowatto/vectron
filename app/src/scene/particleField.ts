@@ -109,8 +109,10 @@ export interface ParticleField {
    * — las instancias fuera del filtro se escalan a 0 (sin geometría
    * visible ni alcanzable por raycasting) en vez de reconstruir el
    * InstancedMesh, que sigue teniendo TODOS los conceptos siempre.
-   * Devuelve cuántas quedaron visibles (para el HUD). */
-  setPartOfSpeechFilter: (allowed: Set<PartOfSpeech>) => number;
+   * Devuelve cuántas quedaron visibles (para el HUD). `targetTotal`, si
+   * se da, ajusta además la ventana de portadoras al conteo del nivel
+   * (F2 §5.2: población visible = 15k/20k/25k células). */
+  setPartOfSpeechFilter: (allowed: Set<PartOfSpeech>, targetTotal?: number) => number;
   /** P5 boot splash: revela una fracción (0-1) de las partículas en un
    * orden fijo (mismo shuffle re-usado en cada llamada), el resto a
    * escala 0 — así el cubo se puebla poco a poco mientras carga en vez
@@ -120,8 +122,9 @@ export interface ParticleField {
    * `allowedIds`, si se da, restringe el universo revelado a esos ids
    * — para bootear directo al tamaño del modo guardado, sin el
    * "crece y luego se encoge" de revelar todo el dataset primero (ver
-   * comentario completo junto a la implementación). */
-  revealProgressively: (fraction: number, allowedIds?: number[]) => void;
+   * comentario completo junto a la implementación). `targetTotal` revela
+   * también las portadoras al mismo ritmo (F2 §5.2). */
+  revealProgressively: (fraction: number, allowedIds?: number[], targetTotal?: number) => void;
   /** P2: la versión "viva" del filtro anterior — en vez de un corte
    * instantáneo, las partículas que entran nacen por mitosis desde la
    * más cercana (mismo dominio primero) que ya se veía, y las que salen
@@ -135,14 +138,14 @@ export interface ParticleField {
    * nacer/morir todavía. */
   morphToPartOfSpeechFilter: (
     allowed: Set<PartOfSpeech>,
-    opts?: { reducedMotion?: boolean },
+    opts?: { reducedMotion?: boolean; targetTotal?: number },
   ) => Promise<{ visibleCount: number }>;
   /** Duración (ms) que va a tardar la ola de partículas para este
    * filtro, calculada sin animar nada — para sincronizar el resto del
    * "chrome" (switcher, fade del composer/tokenStrip) a la misma
    * duración ANTES de arrancar la morph real. 0 si es la primera
    * llamada (instantánea, nada que sincronizar). */
-  estimateMorphDuration: (allowed: Set<PartOfSpeech>) => number;
+  estimateMorphDuration: (allowed: Set<PartOfSpeech>, targetTotal?: number) => number;
   /** Devuelve el objeto de línea creado (o null) para que quien llama
    * le cuelgue `userData.segments` (etiquetas de hover con el coseno
    * real por segmento — ver lineHover.ts). */
@@ -258,7 +261,19 @@ export function createParticleField(
   concepts: Concept[],
   options: ParticleFieldOptions,
 ): ParticleField {
-  const count = concepts.length;
+  /** F2 §5.2 — población celular por nivel (15 000 / 20 000 / 25 000).
+   * Los slots [0, realCount) son conceptos REALES en su coordenada PCA
+   * (jamás se mueven de ahí — honestidad central); los slots
+   * [realCount, CAPACITY) son CÉLULAS PORTADORAS sin concepto asignado
+   * (el dataset real hoy tiene ~9 600 conceptos, menos que cualquier
+   * nivel): relleno ambiental que nace/muere SOLO por división/fusión
+   * visible al cambiar de nivel — nada aparece de la nada ni desaparece
+   * sin animación. Heredan el tono de su concepto ancla para que la
+   * nube se lea coherente; no son alcanzables por hover/clic (ver
+   * conceptInteraction.pickInstance). */
+  const CAPACITY = 25000;
+  const realCount = concepts.length;
+  const count = realCount;
   const geometry = new THREE.IcosahedronGeometry(0.032, 1);
   // F1.4 — material líquido (port del lab /particula): OPACO con
   // escritura de profundidad, NUNCA aditivo — la "sopa aditiva"
@@ -268,17 +283,17 @@ export function createParticleField(
   // shader, no el blending.
   const material = new THREE.MeshBasicNodeMaterial();
 
-  const colorAttr = new Float32Array(count * 3);
-  const phaseAttr = new Float32Array(count);
+  const colorAttr = new Float32Array(CAPACITY * 3);
+  const phaseAttr = new Float32Array(CAPACITY);
   // F1.4 — atributos del patrón líquido (ver particula/liquidParticle.ts):
   // la posición de render NO sale de la instanceMatrix sino de aHome
   // (coordenada PCA real, jamás deformada) y la escala visible de
   // aScale; la instanceMatrix se sigue escribiendo igual en
   // writeInstance porque el raycast de hover/clic la usa.
-  const bodyAttr = new Float32Array(count * 3);
-  const homeAttr = new Float32Array(count * 3);
-  const freqAttr = new Float32Array(count * 3);
-  const scaleAttr = new Float32Array(count);
+  const bodyAttr = new Float32Array(CAPACITY * 3);
+  const homeAttr = new Float32Array(CAPACITY * 3);
+  const freqAttr = new Float32Array(CAPACITY * 3);
+  const scaleAttr = new Float32Array(CAPACITY);
   const bodyAttribute = new THREE.InstancedBufferAttribute(bodyAttr, 3);
   const homeAttribute = new THREE.InstancedBufferAttribute(homeAttr, 3);
   const freqAttribute = new THREE.InstancedBufferAttribute(freqAttr, 3);
@@ -288,15 +303,26 @@ export function createParticleField(
   // (vec4: eje xyz + amplitud w; float: tiempo de inicio del impulso,
   // en el reloj del campo — ver tick/uTime). Sólo se escriben por
   // EVENTO (pin/jelly), nunca por cuadro para todo el campo.
-  const springVecAttr = new Float32Array(count * 3);
-  const jellyAxisAmpAttr = new Float32Array(count * 4);
-  const jellyT0Attr = new Float32Array(count).fill(-1e9);
+  const springVecAttr = new Float32Array(CAPACITY * 3);
+  const jellyAxisAmpAttr = new Float32Array(CAPACITY * 4);
+  const jellyT0Attr = new Float32Array(CAPACITY).fill(-1e9);
   const springVecAttribute = new THREE.InstancedBufferAttribute(springVecAttr, 3);
   const jellyAxisAmpAttribute = new THREE.InstancedBufferAttribute(jellyAxisAmpAttr, 4);
   const jellyT0Attribute = new THREE.InstancedBufferAttribute(jellyT0Attr, 1);
+  // F2 §5.2 — animación celular por instancia (mismo patrón que aAnim
+  // del lab): x=tipo (0 idle, 2 división, 3 fusión), y=progreso 0-1,
+  // z/w=intensidades (estiramiento / boost de wobble); aAnimAxis =
+  // vector hogar↔ancla de la transición. La CPU escribe parámetros al
+  // arrancar cada celda animada y el progreso por cuadro SÓLO de las
+  // celdas activas (ver el scheduler del morph celular).
+  const animAttr = new Float32Array(CAPACITY * 4);
+  const animAxisAttr = new Float32Array(CAPACITY * 3);
+  const animAttribute = new THREE.InstancedBufferAttribute(animAttr, 4);
+  const animAxisAttribute = new THREE.InstancedBufferAttribute(animAxisAttr, 3);
   const tmpColor = new THREE.Color();
 
-  const mesh = new THREE.InstancedMesh(geometry, material, count);
+  const mesh = new THREE.InstancedMesh(geometry, material, CAPACITY);
+  mesh.count = CAPACITY; // todos los slots viven siempre; ocultar = aScale 0
   const dummy = new THREE.Object3D();
 
   // Corrección sobre la corrección: bajar tamaño Y brillo A LA VEZ que
@@ -306,6 +332,7 @@ export function createParticleField(
   // (Principiante, con muchas menos partículas visibles que Avanzado —
   // reportado en vivo con captura). Tamaño de vuelta a como estaba.
   const baseScaleOf = (concept: Concept) => (concept.distinctiveTrait ? 1.0 : 0.62);
+  const CARRIER_SCALE = 0.62;
 
   // Fuente de verdad de "dónde está cada partícula AHORA MISMO" — no lo
   // que un Set de filtro dice que debería ser, sino lo último que de
@@ -318,8 +345,8 @@ export function createParticleField(
   // arrays, CUALQUIER función que escriba una instancia pasa por
   // writeInstance() y el estado real queda disponible para la siguiente
   // decisión, sin importar si la anterior terminó o la cortaron a medias.
-  const posArray = new Float32Array(count * 3);
-  const scaleArray = new Float32Array(count);
+  const posArray = new Float32Array(CAPACITY * 3);
+  const scaleArray = new Float32Array(CAPACITY);
 
   function writeInstance(id: number, pos: readonly [number, number, number], scale: number): void {
     dummy.position.set(pos[0], pos[1], pos[2]);
@@ -364,13 +391,72 @@ export function createParticleField(
     writeInstance(i, concept.coords, baseScaleOf(concept));
   });
 
-  function setPartOfSpeechFilter(allowed: Set<PartOfSpeech>): number {
+  /** Concepto ancla de cada portadora (índice de concepto real) — de
+   * aquí heredan tono y "dominio" para la ola de la transición. */
+  const carrierAnchor = new Int32Array(CAPACITY).fill(-1);
+  // Portadoras: hogar fijo junto a un concepto real al azar (vecindad
+  // orgánica). La posición se asigna UNA vez aquí; después sólo cambia
+  // su visibilidad (escala) vía división/fusión celular.
+  for (let i = realCount; i < CAPACITY; i++) {
+    const anchorIdx = Math.floor(Math.random() * realCount);
+    carrierAnchor[i] = anchorIdx;
+    const anchor = concepts[anchorIdx];
+    const hue = DOMAIN_HUES[anchor.domain] ?? FALLBACK_HUE;
+    tmpColor.setHex(hue).toArray(colorAttr, i * 3);
+    bodyColorOf(hue).toArray(bodyAttr, i * 3);
+    phaseAttr[i] = Math.random() * Math.PI * 2;
+    freqAttr[i * 3] = 0.4 + Math.random() * 0.5;
+    freqAttr[i * 3 + 1] = 0.4 + Math.random() * 0.5;
+    freqAttr[i * 3 + 2] = 0.4 + Math.random() * 0.5;
+    const theta = Math.random() * Math.PI * 2;
+    const z = Math.random() * 2 - 1;
+    const r = 0.04 + Math.random() * 0.08;
+    const s = Math.sqrt(1 - z * z);
+    writeInstance(i, [anchor.coords[0] + Math.cos(theta) * s * r, anchor.coords[1] + Math.sin(theta) * s * r, anchor.coords[2] + z * r], 0);
+  }
+  /** Dominio de una celda para agrupar la ola de la transición — la del
+   * concepto real, o la del ancla de la portadora. */
+  function domainOfCell(id: number): string {
+    return id < realCount ? concepts[id].domain : concepts[carrierAnchor[id]].domain;
+  }
+  function baseScaleOfCell(id: number): number {
+    return id < realCount ? baseScaleOf(concepts[id]) : CARRIER_SCALE;
+  }
+
+  /** Cuántas portadoras están visibles ahora — ventana contigua
+   * [realCount, realCount + carrierVisibleCount). Ventana (no conjunto
+   * disperso): hace O(1) saber cuáles entran/salen al cambiar el
+   * objetivo, y como los hogares de las portadoras ya están
+   * distribuidos por toda la nube, una ventana de índices se ve
+   * igual de orgánica que un subconjunto al azar. */
+  let carrierVisibleCount = 0;
+
+  /** Visibilidad instantánea de las portadoras para llegar a
+   * `targetTotal` células totales (nivel) — devuelve cuántas quedaron. */
+  function setCarrierWindow(targetTotal: number): number {
+    const target = Math.max(0, Math.min(CAPACITY - realCount, targetTotal - countRealVisible()));
+    for (let i = realCount; i < CAPACITY; i++) {
+      const show = i - realCount < target;
+      writeInstance(i, [posArray[i * 3], posArray[i * 3 + 1], posArray[i * 3 + 2]], show ? CARRIER_SCALE : 0);
+    }
+    carrierVisibleCount = target;
+    return target;
+  }
+
+  function countRealVisible(): number {
+    let n = 0;
+    for (let i = 0; i < realCount; i++) if (scaleArray[i] > 1e-3) n++;
+    return n;
+  }
+
+  function setPartOfSpeechFilter(allowed: Set<PartOfSpeech>, targetTotal?: number): number {
     let visible = 0;
     concepts.forEach((concept, i) => {
       const show = allowed.has(concept.partOfSpeech);
       if (show) visible++;
       writeInstance(i, concept.coords, show ? baseScaleOf(concept) : 0);
     });
+    if (targetTotal !== undefined) setCarrierWindow(targetTotal);
     markInstancesDirty();
     return visible;
   }
@@ -389,7 +475,7 @@ export function createParticleField(
    * exactamente lo que el modo guardado va a mostrar — el boot crece
    * derecho hacia su tamaño final, sin sobrepasar y encogerse.
    */
-  function revealProgressively(fraction: number, allowedIds?: number[]): void {
+  function revealProgressively(fraction: number, allowedIds?: number[], targetTotal?: number): void {
     const pool = allowedIds ?? concepts.map((_, i) => i);
     if (!revealOrder || revealPool !== allowedIds) {
       revealPool = allowedIds ?? null;
@@ -400,6 +486,17 @@ export function createParticleField(
     concepts.forEach((concept, i) => {
       writeInstance(i, concept.coords, shown.has(i) ? baseScaleOf(concept) : 0);
     });
+    // Portadoras al mismo ritmo: la nube crece hacia el conteo del
+    // nivel durante el boot, no de golpe al terminar (F2 §5.2).
+    if (targetTotal !== undefined) {
+      const carrierTarget = Math.max(0, Math.min(CAPACITY - realCount, targetTotal - pool.length));
+      const showCarriers = Math.round(carrierTarget * Math.min(Math.max(fraction, 0), 1));
+      for (let i = realCount; i < CAPACITY; i++) {
+        const show = i - realCount < showCarriers;
+        writeInstance(i, [posArray[i * 3], posArray[i * 3 + 1], posArray[i * 3 + 2]], show ? CARRIER_SCALE : 0);
+      }
+      carrierVisibleCount = showCarriers;
+    }
     markInstancesDirty();
   }
 
@@ -457,10 +554,48 @@ export function createParticleField(
     anchor: number; // padre (mitosis) o depredador (fusión), sólo para el "nace de..." visual
     start: number; // ms dentro de la duración objetivo (ver computeMorphPlan)
     duration: number;
-    fromPos: readonly [number, number, number];
-    fromScale: number;
-    toPos: readonly [number, number, number];
-    toScale: number;
+    toScale: number; // escala final: baseScale (mitosis) o 0 (fusión)
+  }
+
+  /** Driver de la animación celular por instancia (F2 §5.2 — mismo
+   * patrón que aAnim del lab): parámetros una vez al arrancar la celda,
+   * progreso por cuadro sólo de las activas. La deformación
+   * (estiramiento peanut, separación/encogido, wobble) la hace el
+   * vertex shader — la CPU nunca reescribe posiciones por cuadro. */
+  function setInstanceAnim(id: number, type: number, p1: number, p2: number, axis: THREE.Vector3): void {
+    const o = id * 4;
+    animAttr[o] = type;
+    animAttr[o + 1] = 0;
+    animAttr[o + 2] = p1;
+    animAttr[o + 3] = p2;
+    axis.toArray(animAxisAttr, id * 3);
+  }
+
+  function clearInstanceAnim(id: number): void {
+    animAttr.fill(0, id * 4, id * 4 + 4);
+  }
+
+  function homeOf(id: number): readonly [number, number, number] {
+    return [posArray[id * 3], posArray[id * 3 + 1], posArray[id * 3 + 2]];
+  }
+
+  /** Ancla cercana a `home` muestreando el pool visible (para
+   * portadoras — los conceptos reales usan nearestStable, mismo
+   * dominio). 200 muestras al azar: suficiente para que la
+   * división/fusión se vea local sin un O(N) por celda. */
+  function pickAnchorNear(home: readonly [number, number, number], pool: number[]): number | null {
+    if (pool.length === 0) return null;
+    let best = -1;
+    let bestD = Infinity;
+    for (let s = 0; s < 200; s++) {
+      const j = pool[Math.floor(Math.random() * pool.length)];
+      const d = distSq(homeOf(j), home);
+      if (d < bestD) {
+        bestD = d;
+        best = j;
+      }
+    }
+    return best;
   }
 
   // Modelo de "pipeline" (pedido explícito 2026-07-19, ver DOCs/06): con
@@ -479,9 +614,9 @@ export function createParticleField(
   // "más rápida cuanta menos partículas cambian" para N chico, "~2.5-4s"
   // para N grande, sin techo duro que fuerce un salto) y despejar CUÁNTA
   // concurrencia hace falta para que el pipeline de verdad vacíe la cola
-  // dentro de ese tiempo — sin techo artificial (el costo real es
-  // escribir una matriz de instancia por frame, trivial hasta varios
-  // cientos a la vez, ver writeInstance).
+  // dentro de ese tiempo — sin techo artificial (el costo real ahora es
+  // escribir UN float de progreso por celda activa por frame, aún más
+  // barato que la matriz completa de antes).
   const D_AVG = 330; // ms — punto medio de los rangos de duración individual (280-420 mitosis, 260-380 fusión)
   const T_MIN = 700; // ms — transición chica (pocas partículas cambian), rápida pero visible
   const T_MAX = 3400; // ms — transición grande (miles de partículas), calmada sin sentirse eterna
@@ -503,11 +638,12 @@ export function createParticleField(
   // se sortea en cada llamada, no es siempre el mismo orden) y, DENTRO
   // de cada dominio, las partículas más cercanas a su ancla ya visible
   // van primero — así cada mancha se ve "crecer hacia afuera desde una
-  // semilla" en vez de aparecer salpicada.
+  // semilla" en vez de aparecer salpicada. Funciona igual para
+  // portadoras (dominio de su ancla, hogar de posArray).
   function groupedWaveOrder(ids: number[], anchors: Map<number, number>): number[] {
     const byDomain = new Map<string, number[]>();
     for (const id of ids) {
-      const domain = concepts[id].domain;
+      const domain = domainOfCell(id);
       const group = byDomain.get(domain);
       if (group) group.push(id);
       else byDomain.set(domain, [id]);
@@ -517,8 +653,8 @@ export function createParticleField(
     for (const domain of orderedDomains) {
       const group = byDomain.get(domain)!;
       group.sort((a, b) => {
-        const da = distSq(concepts[a].coords, concepts[anchors.get(a)!].coords);
-        const db = distSq(concepts[b].coords, concepts[anchors.get(b)!].coords);
+        const da = distSq(homeOf(a), homeOf(anchors.get(a)!));
+        const db = distSq(homeOf(b), homeOf(anchors.get(b)!));
         return da - db;
       });
       result.push(...group);
@@ -530,10 +666,8 @@ export function createParticleField(
   // cadena cruda se saldría de la duración objetivo, se comprime
   // proporcionalmente — la aleatoriedad relativa entre gaps se
   // conserva, sólo la escala se achica (ver DOCs/06-mode-morph-cells.md
-  // §4). `fromPos`/`fromScale` se leen de posArray/scaleArray en este
-  // instante — si la partícula viene de una transición anterior
-  // cortada a medias, continúa desde ahí en vez de reiniciar desde 0%
-  // o 100% (bug real corregido junto con esto, ver writeInstance).
+  // §4). La TRAYECTORIA ya no va aquí (la hace la GPU vía aAnim); aquí
+  // sólo se agenda CUÁNDO arranca cada celda.
   function buildSchedule(
     ids: number[],
     kind: "mitosis" | "fusion",
@@ -546,43 +680,14 @@ export function createParticleField(
     let t = 0;
     for (const id of order) {
       const anchor = anchors.get(id)!;
-      const c = concepts[id];
-      const anchorCoords = concepts[anchor].coords;
       const [dMin, dMax] = kind === "mitosis" ? [280, 420] : [260, 380];
-      let fromPos: readonly [number, number, number];
-      let fromScale: number;
-      let toPos: readonly [number, number, number];
-      let toScale: number;
-      if (kind === "mitosis") {
-        // Recién nace (0%): parte visualmente de su ancla, como siempre.
-        // Ya venía creciendo a medias (interrupción previa): continúa
-        // desde donde de verdad está, sin regresar de golpe al ancla.
-        const alreadyGrowing = scaleArray[id] > 1e-3;
-        fromPos = alreadyGrowing
-          ? [posArray[id * 3], posArray[id * 3 + 1], posArray[id * 3 + 2]]
-          : anchorCoords;
-        fromScale = scaleArray[id];
-        toPos = c.coords;
-        toScale = baseScaleOf(c);
-      } else {
-        // Fusión: su posición real actual ya es la correcta como origen
-        // en ambos casos (recién visible = sus propias coords; a medio
-        // encoger = donde de verdad esté) — nunca hace falta ramificar.
-        fromPos = [posArray[id * 3], posArray[id * 3 + 1], posArray[id * 3 + 2]];
-        fromScale = scaleArray[id];
-        toPos = anchorCoords;
-        toScale = 0;
-      }
       items.push({
         id,
         kind,
         anchor,
         start: t,
         duration: dMin + Math.random() * (dMax - dMin),
-        fromPos,
-        fromScale,
-        toPos,
-        toScale,
+        toScale: kind === "mitosis" ? baseScaleOfCell(id) : 0,
       });
       t += 8 + Math.random() * (45 - 8);
     }
@@ -610,7 +715,7 @@ export function createParticleField(
    * partículas real tardaba hasta 3.4s, así que el switcher "terminaba"
    * mucho antes de que el cubo terminara de verdad.
    */
-  function estimateMorphDuration(allowed: Set<PartOfSpeech>): number {
+  function estimateMorphDuration(allowed: Set<PartOfSpeech>, targetTotal?: number): number {
     if (currentAllowed === null) return 0;
     const EPS = 1e-3;
     let changing = 0;
@@ -619,19 +724,24 @@ export function createParticleField(
       const target = shouldShow ? baseScaleOf(c) : 0;
       if (Math.abs(scaleArray[i] - target) >= EPS) changing++;
     });
+    if (targetTotal !== undefined) {
+      const realTarget = concepts.filter((c) => allowed.has(c.partOfSpeech)).length;
+      const carrierTarget = Math.max(0, Math.min(CAPACITY - realCount, targetTotal - realTarget));
+      changing += Math.abs(carrierTarget - carrierVisibleCount);
+    }
     return computeMorphPlan(changing).targetDuration;
   }
 
   async function morphToPartOfSpeechFilter(
     allowed: Set<PartOfSpeech>,
-    opts: { reducedMotion?: boolean } = {},
+    opts: { reducedMotion?: boolean; targetTotal?: number } = {},
   ): Promise<{ visibleCount: number }> {
     const seq = ++morphSeq;
     const isFirstCall = currentAllowed === null;
     currentAllowed = new Set(allowed);
 
     if (isFirstCall || opts.reducedMotion) {
-      return { visibleCount: setPartOfSpeechFilter(allowed) };
+      return { visibleCount: setPartOfSpeechFilter(allowed, opts.targetTotal) };
     }
 
     // Clasificación por ESTADO REAL, no por diferencia entre el Set
@@ -641,9 +751,7 @@ export function createParticleField(
     // a medio vuelo por ésta. Comparar contra scaleArray (la escala real
     // actual) en vez de contra el filtro anterior hace que "seguir
     // animando desde donde se quedó" sea el comportamiento NATURAL, no
-    // un caso especial: si ya está en su escala objetivo no hay nada que
-    // hacer (stable/stableHidden), si no, entra o sale sin importar de
-    // dónde partió.
+    // un caso especial.
     const EPS = 1e-3;
     const entering: number[] = [];
     const leaving: number[] = [];
@@ -662,7 +770,30 @@ export function createParticleField(
       }
     });
     const visibleCount = stableVisible.length + entering.length;
-    if (entering.length === 0 && leaving.length === 0) {
+
+    // Portadoras (F2 §5.2): la ventana [0, targetCarriers) define el
+    // OBJETIVO; la clasificación entrante/saliente se hace por ESTADO
+    // REAL (scaleArray), igual que los conceptos — una ventana
+    // contable se rompe bajo interrupción (un morph nuevo no sabría
+    // cuáles portadoras quedaron a medias), la clasificación por estado
+    // no: las interrumpidas se re-clasifican solas en la siguiente ola.
+    const targetCarriers =
+      opts.targetTotal !== undefined
+        ? Math.max(0, Math.min(CAPACITY - realCount, opts.targetTotal - visibleCount))
+        : carrierVisibleCount;
+    const carrierEntering: number[] = [];
+    const carrierLeaving: number[] = [];
+    const stableCarriers: number[] = [];
+    for (let i = realCount; i < CAPACITY; i++) {
+      const shouldShow = i - realCount < targetCarriers;
+      const current = scaleArray[i];
+      if (shouldShow && current < EPS) carrierEntering.push(i);
+      else if (!shouldShow && current > EPS) carrierLeaving.push(i);
+      else if (shouldShow) stableCarriers.push(i);
+    }
+    const anchorPool = [...stableVisible, ...stableCarriers];
+
+    if (entering.length === 0 && leaving.length === 0 && carrierEntering.length === 0 && carrierLeaving.length === 0) {
       return { visibleCount };
     }
 
@@ -676,9 +807,19 @@ export function createParticleField(
       const p = nearestStable(stableVisible, l);
       if (p !== null) predatorOf.set(l, p);
     }
+    const carrierParentOf = new Map<number, number>();
+    for (const e of carrierEntering) {
+      const p = pickAnchorNear(homeOf(e), anchorPool);
+      if (p !== null) carrierParentOf.set(e, p);
+    }
+    const carrierPredatorOf = new Map<number, number>();
+    for (const l of carrierLeaving) {
+      const p = pickAnchorNear(homeOf(l), anchorPool);
+      if (p !== null) carrierPredatorOf.set(l, p);
+    }
 
-    // Sin pareja (S vacío — caso raro, ej. primer filtro real con casi
-    // nada estable): aparecen/desaparecen sin animar en vez de crashear.
+    // Sin pareja (pool vacío — caso raro): aparecen/desaparecen sin
+    // animar en vez de crashear.
     for (const id of entering) {
       if (parentOf.has(id)) continue;
       writeInstance(id, concepts[id].coords, baseScaleOf(concepts[id]));
@@ -687,13 +828,25 @@ export function createParticleField(
       if (predatorOf.has(id)) continue;
       writeInstance(id, concepts[id].coords, 0);
     }
+    for (const id of carrierEntering) {
+      if (carrierParentOf.has(id)) continue;
+      writeInstance(id, homeOf(id), baseScaleOfCell(id));
+    }
+    for (const id of carrierLeaving) {
+      if (carrierPredatorOf.has(id)) continue;
+      writeInstance(id, homeOf(id), 0);
+    }
 
-    const { targetDuration, concurrency } = computeMorphPlan(entering.length + leaving.length);
+    const itemCount = parentOf.size + predatorOf.size + carrierParentOf.size + carrierPredatorOf.size;
+    const { targetDuration, concurrency } = computeMorphPlan(itemCount);
     const allItems = [
       ...buildSchedule(entering, "mitosis", parentOf, targetDuration),
       ...buildSchedule(leaving, "fusion", predatorOf, targetDuration),
+      ...buildSchedule(carrierEntering, "mitosis", carrierParentOf, targetDuration),
+      ...buildSchedule(carrierLeaving, "fusion", carrierPredatorOf, targetDuration),
     ];
     markInstancesDirty();
+    carrierVisibleCount = targetCarriers;
     if (allItems.length === 0) return { visibleCount };
 
     return new Promise((resolve) => {
@@ -707,14 +860,8 @@ export function createParticleField(
       // por completo en una pestaña en segundo plano/sin foco — a
       // diferencia de setTimeout, que sigue disparando (aunque
       // limitado). Sin esto, cambiar de pestaña a media transición
-      // dejaba el modo colgado para siempre. A diferencia de antes, este
-      // temporizador YA NO es parte del camino normal — con la
-      // concurrencia calculada en computeMorphPlan el pipeline de verdad
-      // vacía la cola dentro de targetDuration, así que esto sólo debe
-      // disparar en el caso patológico real (pestaña oculta, dispositivo
-      // atascado), nunca en una transición normal en primer plano.
-      // resolveOnce() es idempotente: lo que llegue primero (rAF o el
-      // timer) gana, lo demás es no-op.
+      // dejaba el modo colgado para siempre. resolveOnce() es
+      // idempotente: lo que llegue primero (rAF o el timer) gana.
       let settled = false;
       function resolveOnce() {
         if (settled) return;
@@ -725,16 +872,25 @@ export function createParticleField(
       const safetyTimer = setTimeout(() => {
         for (const item of allItems) finalize(item);
         markInstancesDirty();
+        animAttribute.needsUpdate = true;
         resolveOnce();
       }, targetDuration + 6000);
 
       function finalize(item: MorphItem) {
-        writeInstance(item.id, item.toPos, item.toScale);
+        writeInstance(item.id, homeOf(item.id), item.toScale);
+        clearInstanceAnim(item.id);
       }
 
       function tick() {
         if (seq !== morphSeq) {
-          resolveOnce(); // otro morph más nuevo lo reemplazó — se queda donde esté, sin saltar
+          // Otro morph más nuevo lo reemplazó — FLUSH: las celdas
+          // activas se completan de inmediato (a lo más `concurrency`
+          // de miles) y la nueva clasificación parte de estado final
+          // consistente; las no arrancadas nunca recibieron parámetros.
+          for (const idx of active) finalize(allItems[idx]);
+          markInstancesDirty();
+          animAttribute.needsUpdate = true;
+          resolveOnce();
           return;
         }
         const elapsed = performance.now() - t0;
@@ -746,6 +902,18 @@ export function createParticleField(
               started[idx] = true;
               startTimes[idx] = elapsed;
               active.add(idx);
+              const home = homeOf(item.id);
+              const anchorHome = homeOf(item.anchor);
+              if (item.kind === "mitosis") {
+                // La hija nace a tamaño completo JUNTO al padre
+                // (aAnimAxis = ancla − hogar: en t=0 se renderiza en la
+                // ancla) y se separa estirada hacia su hogar real.
+                scaleAttr[item.id] = item.toScale;
+                setInstanceAnim(item.id, 2, 0.55, 5, new THREE.Vector3(anchorHome[0] - home[0], anchorHome[1] - home[1], anchorHome[2] - home[2]));
+              } else {
+                // La comida viaja hacia su depredador encogiendo a 0.
+                setInstanceAnim(item.id, 3, 0.7, 6, new THREE.Vector3(anchorHome[0] - home[0], anchorHome[1] - home[1], anchorHome[2] - home[2]));
+              }
             } else {
               continue;
             }
@@ -754,13 +922,7 @@ export function createParticleField(
 
           const localT = Math.min((elapsed - startTimes[idx]) / item.duration, 1);
           const eased = 1 - Math.pow(1 - localT, 3);
-          const pos: [number, number, number] = [
-            item.fromPos[0] + (item.toPos[0] - item.fromPos[0]) * eased,
-            item.fromPos[1] + (item.toPos[1] - item.fromPos[1]) * eased,
-            item.fromPos[2] + (item.toPos[2] - item.fromPos[2]) * eased,
-          ];
-          const scale = item.fromScale + (item.toScale - item.fromScale) * eased;
-          writeInstance(item.id, pos, scale);
+          animAttr[item.id * 4 + 1] = eased;
 
           if (localT >= 1) {
             active.delete(idx);
@@ -769,6 +931,8 @@ export function createParticleField(
         }
 
         markInstancesDirty();
+        animAttribute.needsUpdate = true;
+        animAxisAttribute.needsUpdate = true;
 
         const pending = active.size > 0 || started.some((s) => !s);
         if (pending) {
@@ -781,12 +945,12 @@ export function createParticleField(
     });
   }
 
-  const highlightAttrArray = new Float32Array(count);
+  const highlightAttrArray = new Float32Array(CAPACITY);
   const highlightAttribute = new THREE.InstancedBufferAttribute(highlightAttrArray, 1);
   // 1 = brillo normal, ~0.05 = casi invisible — apaga todo lo que NO
   // coincide con la búsqueda/partícula fijada para que lo que sí
   // coincide se sienta protagonista absoluto del cubo.
-  const focusAttrArray = new Float32Array(count).fill(1);
+  const focusAttrArray = new Float32Array(CAPACITY).fill(1);
   const focusAttribute = new THREE.InstancedBufferAttribute(focusAttrArray, 1);
 
   geometry.setAttribute(
@@ -806,6 +970,8 @@ export function createParticleField(
   geometry.setAttribute("aSpringVec", springVecAttribute);
   geometry.setAttribute("aJellyAxisAmp", jellyAxisAmpAttribute);
   geometry.setAttribute("aJellyT0", jellyT0Attribute);
+  geometry.setAttribute("aAnim", animAttribute);
+  geometry.setAttribute("aAnimAxis", animAxisAttribute);
 
   // Las posiciones de render vienen de aHome (atributo), no de la
   // instanceMatrix — la esfera envolvente de la geometría (radio 0.032
@@ -823,6 +989,8 @@ export function createParticleField(
   const aSpringVec = attribute<"vec3">("aSpringVec", "vec3");
   const aJellyAxisAmp = attribute<"vec4">("aJellyAxisAmp", "vec4");
   const aJellyT0 = attribute<"float">("aJellyT0", "float");
+  const aAnim = attribute<"vec4">("aAnim", "vec4");
+  const aAnimAxis = attribute<"vec3">("aAnimAxis", "vec3");
   // aFreq queda escrito en el buffer (lo usa la tabla §4.2 para las
   // transiciones celulares F2 posteriores) pero ya no alimenta la
   // deriva — el curl noise la reemplazó (F2 §5.1).
@@ -874,14 +1042,41 @@ export function createParticleField(
     const jellyT = uTime.sub(aJellyT0).max(0.0);
     const jelly = sin(jellyT.mul(L.jellyFreq)).mul(exp(jellyT.mul(-L.jellyDecay))).mul(aJellyAxisAmp.w).mul(uMotionScale);
     const jellyDeform = aJellyAxisAmp.xyz.mul(dot(positionLocal, aJellyAxisAmp.xyz)).mul(jelly);
+    // Animación celular (F2 §5.2 — pesos branch-free como en el lab):
+    //   2 división: hogar = aHome + axis·(1−t) (nace en el padre) +
+    //     estiramiento peanut sin(πt)·z; w = boost de wobble
+    //   3 fusión: hogar = aHome + axis·t (viaja al depredador), escala
+    //     1−t, mismo estiramiento; w = boost de wobble
+    const animT = aAnim.y;
+    const oneAnimT = float(1).sub(animT);
+    const sinPiT = sin(animT.mul(Math.PI));
+    const w2 = float(1).sub(aAnim.x.sub(2).abs().min(1));
+    const w3 = float(1).sub(aAnim.x.sub(3).abs().min(1));
+    const animIdle = float(1).sub(w2.add(w3).min(1));
+    const animScale = w2.add(w3.mul(oneAnimT.max(0))).add(animIdle);
+    const animAxisLen = aAnimAxis.length().max(0.0001);
+    const animAxisN = aAnimAxis.div(animAxisLen);
+    const homeOffset = aAnimAxis.mul(w2.mul(oneAnimT).add(w3.mul(animT)));
+    const animStretch = sinPiT.mul(w2.add(w3)).mul(aAnim.z);
+    const animDeform = animAxisN.mul(dot(positionLocal, animAxisN)).mul(animStretch);
+    const animWobbleBoost = sinPiT.mul(w2.add(w3)).mul(aAnim.w);
     // Wobble de membrana (soft-body fake) — las frecuencias espaciales
     // (×20/×15) están escaladas al radio del cubo (0.032) para el mismo
     // número de ondas por superficie que en el lab (×4/×3 a radio 0.16).
     const wobble = sin(time.mul(L.wobbleFreq).add(instancePhase.mul(3.7)).add(positionLocal.y.mul(20.0)))
       .add(sin(time.mul(L.wobbleFreq * 1.7).add(instancePhase.mul(2.3)).add(positionLocal.x.mul(15.0))).mul(0.5))
       .mul(L.wobbleAmp * 0.032)
-      .mul(uMotionScale);
-    return positionLocal.add(normalGeometry.mul(wobble)).add(jellyDeform).mul(aScale).add(aHome).add(drift).add(springOffset);
+      .mul(uMotionScale)
+      .mul(animWobbleBoost.add(1));
+    return positionLocal
+      .add(normalGeometry.mul(wobble))
+      .add(jellyDeform)
+      .add(animDeform)
+      .mul(aScale.mul(animScale))
+      .add(aHome)
+      .add(homeOffset)
+      .add(drift)
+      .add(springOffset);
   })();
 
   // Fragment: el look líquido ganador del lab (gota + bioluminiscencia
@@ -924,7 +1119,11 @@ export function createParticleField(
     const coreMask = pow(dot(objN, uCoreDir).mul(0.5).add(0.5).clamp(0, 1), float(L.coreFalloff));
     const breath = sin(time.mul(L.breathSpeed).add(instancePhase)).mul(L.breathAmp).add(1.0);
     const pulse = float(0.75).add(float(0.16).mul(sin(time.mul(1.6).add(instancePhase))));
-    const emissive = instanceColor.mul(float(L.baseGlow).add(coreMask.mul(L.coreEmissive))).mul(breath).mul(pulse);
+    // En fusión el núcleo se apaga con el progreso (la célula "muere"
+    // dentro de la que se la come — no un corte de brillo seco).
+    const wFuse = float(1).sub(aAnim.x.sub(3).abs().min(1));
+    const emissiveAnim = float(1).sub(wFuse.mul(aAnim.y));
+    const emissive = instanceColor.mul(float(L.baseGlow).add(coreMask.mul(L.coreEmissive))).mul(breath).mul(pulse).mul(emissiveAnim);
 
     const highlightBoost = float(1).add(instanceHighlight.mul(1.2));
     return vec3(body.add(transmit).add(reflection).add(iridescence).add(vec3(specular)).add(emissive)).mul(instanceFocus).mul(highlightBoost);

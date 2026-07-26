@@ -155,6 +155,10 @@ const STRINGS = {
   },
   hudWebgpu: { es: "WebGPU · compute activo", en: "WebGPU · compute active" },
   hudWebgl: { es: "WebGL · modo compatible", en: "WebGL · compatibility mode" },
+  // F2 §5.2 — caption sobrio del cambio de nivel: el morph de modo queda
+  // absorbido en un cambio de filtro; el presupuesto de motion vive en
+  // las transiciones celulares (15 R-8 / 20 H-02).
+  modeFilterCaption: { es: "el modelo no cambió, tu filtro sí", en: "the model didn't change, your filter did" },
   hudError: { es: "error al iniciar el motor 3D", en: "error starting the 3D engine" },
 
   // --- P4: vx-color-key ---

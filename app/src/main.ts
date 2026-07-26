@@ -76,12 +76,24 @@ const MODE_POS: Record<Mode, Set<PartOfSpeech>> = {
   avanzado: new Set(["sustantivo", "funcion", "adjetivo", "verbo"]),
 };
 
+/** Población celular visible por nivel (F2 §5.2 — decisión de
+ * producto): el dataset real tiene ~9 600 conceptos; el resto hasta el
+ * conteo del nivel son células portadoras que nacen/mueren SÓLO por
+ * división/fusión visible (ver particleField.ts). La escalera POS
+ * decide QUÉ células cambian; la celularidad decide CÓMO se ve. */
+const MODE_CELLS: Record<Mode, number> = {
+  principiante: 15000,
+  intermedio: 20000,
+  avanzado: 25000,
+};
+
 const stageEl = document.querySelector<HTMLDivElement>("#stage")!;
 const cubePaneEl = document.querySelector<HTMLDivElement>("#cube-pane")!;
 const canvas = document.querySelector<HTMLCanvasElement>("#scene")!;
 const backendTag = document.querySelector<HTMLSpanElement>("#backend-tag")!;
 const fpsLabel = document.querySelector<HTMLSpanElement>("#fps")!;
 const countLabel = document.querySelector<HTMLSpanElement>("#count")!;
+const modeCaption = document.querySelector<HTMLSpanElement>("#mode-caption")!;
 const sashEl = document.querySelector<HTMLDivElement>("#sash")!;
 const sidePaneEl = document.querySelector<HTMLDivElement>("#side-pane")!;
 const consolePaneEl = document.querySelector<HTMLDivElement>("#console-pane")!;
@@ -214,7 +226,9 @@ async function main() {
     },
   });
   engine.scene.add(field.group);
-  field.revealProgressively(0, bootAllowedIds); // arranca vacío — se puebla durante el resto del boot
+  // Boot vacío — se puebla durante el resto del boot hacia el conteo
+  // celular del modo guardado (o Avanzado si aún no hay, ver MODE_CELLS).
+  field.revealProgressively(0, bootAllowedIds, MODE_CELLS[bootStoredMode ?? "avanzado"]);
   countLabel.textContent = "0 embeddings";
 
   // Cámara de Contexto 3D (DOCs/13 §2.7/§6, Phase 2) — vive lejos del
@@ -646,7 +660,7 @@ async function main() {
     const revealTotal = bootAllowedIds?.length ?? concepts.length;
     function step() {
       const elapsed = Math.min((performance.now() - start) / durationMs, 1);
-      field.revealProgressively(elapsed, bootAllowedIds);
+      field.revealProgressively(elapsed, bootAllowedIds, MODE_CELLS[bootStoredMode ?? "avanzado"]);
       splash.setProgress(65 + elapsed * 35, t(elapsed < 0.6 ? "bootTokenizers" : "bootWarm", lang));
       const shown = Math.round(elapsed * revealTotal);
       countLabel.textContent = `${shown.toLocaleString(lang === "en" ? "en-US" : "es-MX")} embeddings`;
@@ -1536,7 +1550,7 @@ async function main() {
     // estimateMorphDuration calcula esa misma duración SIN animar nada,
     // así que switcher/composer/tokenStrip pueden sincronizarse a ella
     // antes de que la morph real arranque más abajo.
-    const morphMs = field.estimateMorphDuration(allowedPos);
+    const morphMs = field.estimateMorphDuration(allowedPos, MODE_CELLS[mode]);
     switcher.setTransitionMs(morphMs > 0 ? morphMs : 320);
     switcher.setAttribute("current", mode);
     backendTag.textContent = engine.usingWebGPU ? t("hudWebgpu", lang) : t("hudWebgl", lang);
@@ -1572,6 +1586,9 @@ async function main() {
           ? t("hudUnitIntermedio", lang)
           : t("hudUnitAvanzado", lang);
     baseCountText = `${visibleCount.toLocaleString(lang === "en" ? "en-US" : "es-MX")} ${countUnit}`;
+    // Caption sobrio del cambio de filtro (F2 §5.2): el modelo no
+    // cambió, tu filtro sí — visible siempre junto al conteo del HUD.
+    modeCaption.textContent = t("modeFilterCaption", lang);
     if (isFirstCall) {
       renderCountLabel();
     } else {
@@ -1600,7 +1617,9 @@ async function main() {
     const reducedMotion =
       typeof matchMedia !== "undefined" &&
       matchMedia("(prefers-reduced-motion: reduce)").matches;
-    void field.morphToPartOfSpeechFilter(allowedPos, { reducedMotion });
+    // F2 §5.2 — la transición incluye la ventana de portadoras hasta el
+    // conteo celular del nivel (15k/20k/25k).
+    void field.morphToPartOfSpeechFilter(allowedPos, { reducedMotion, targetTotal: MODE_CELLS[mode] });
   }
 
   switcher.addEventListener("vx-mode-change", (event) => {

@@ -56,15 +56,19 @@ export function setupConceptInteraction(options: ConceptInteractionOptions): Con
   function pickInstance(clientX: number, clientY: number): number | null {
     setRayFrom(clientX, clientY);
     const hits = raycaster.intersectObject(field.mesh);
+    // Las portadoras (slots ≥ field.concepts.length, F2 §5.2) no tienen
+    // concepto: no son hovereables ni fijables — se saltan aunque el
+    // rayo las toque primero.
+    const realHits = hits.filter((h) => h.instanceId !== undefined && h.instanceId < field.concepts.length);
     // Con foco activo (búsqueda o partícula fijada), las atenuadas no
     // deben "atrapar" el cursor — sólo las que siguen a brillo normal
     // son alcanzables, así es fácil aterrizar justo en la que importa.
     const focusedIds = field.getFocusedIds();
     if (focusedIds) {
-      const hit = hits.find((h) => h.instanceId !== undefined && focusedIds.has(h.instanceId));
+      const hit = realHits.find((h) => h.instanceId !== undefined && focusedIds.has(h.instanceId));
       return hit?.instanceId ?? null;
     }
-    return hits.length > 0 ? (hits[0].instanceId ?? null) : null;
+    return realHits.length > 0 ? (realHits[0].instanceId ?? null) : null;
   }
 
   async function loadNeighbors(instanceId: number, topK: number) {
