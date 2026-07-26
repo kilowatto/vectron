@@ -205,7 +205,7 @@ Reemplaza `app/src/ui/components/bootSplash.ts` completo: el jitter `Math.random
 | `ENGINE` | "Iniciando motor 3D…" | `renderer.init()` (`engine.ts:68-69`) |
 | `ENV` | "Horneando reflejos…" | PMREM RoomEnvironment |
 | `RAG` | "Preparando recuperación…" | docs RAG (solo niveles que lo usan) |
-| `AI` | "Preparando modelo local…" | WebLLM **solo si el usuario lo activó** (opt-in, 16 RISK-3) |
+| `AI` | — | **ELIMINADO 2026-07-25** (decisión usuario: nunca inferencia local; ver `23` §4a) — no hay modelo local que preparar; el loader salta este estado |
 | `REVEAL` | — | Crossfade loader→cubo |
 
 - **Porcentaje con muchos decimales, pero HONESTO:** el `0.000000%` se mantiene como estética (R-8) alimentado por el progreso real interpolado, nunca por `Math.random`. Con reduced-motion: porcentaje estático, sin temblor (20 ítem 1).
@@ -790,7 +790,7 @@ Replaces `app/src/ui/components/bootSplash.ts` entirely: the `Math.random` jitte
 | `ENGINE` | "Starting 3D engine…" | `renderer.init()` (`engine.ts:68-69`) |
 | `ENV` | "Baking reflections…" | PMREM RoomEnvironment |
 | `RAG` | "Preparing retrieval…" | RAG docs (only levels using it) |
-| `AI` | "Preparing local model…" | WebLLM **only if the user opted in** (16 RISK-3) |
+| `AI` | — | **REMOVED 2026-07-25** (user decision: never local inference; see `23` §4a) — no local model to prepare; the loader skips this state |
 | `REVEAL` | — | Loader→cube crossfade |
 
 - **Many-decimal percentage, but HONEST:** the `0.000000%` stays as aesthetics (R-8) fed by interpolated real progress, never by `Math.random`. With reduced-motion: static percentage, no trembling (20 item 1).
