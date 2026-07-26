@@ -9,13 +9,29 @@ export interface Engine {
   camera: THREE.PerspectiveCamera;
   controls: OrbitControls;
   usingWebGPU: boolean;
-  /** Arranca el loop de render; onFrame corre antes de cada cuadro, onFps cada ~0.5s. */
-  start(onFrame: (dt: number) => void, onFps: (fps: number) => void): void;
+  /** Arranca el loop de render; onFrame corre antes de cada cuadro, onFps cada ~0.5s.
+   * onFrame puede devolver `true` ("hay actividad/animación") — en modo
+   * render-on-demand (tier Lite, F2) es lo que decide si el cuadro se
+   * renderiza o se salta. */
+  start(onFrame: (dt: number) => void | boolean, onFps: (fps: number) => void): void;
   /** Renderiza un cuadro ya mismo por el pipeline real (con bloom),
    * sin esperar al próximo rAF — pensado para herramientas que avanzan
    * la simulación a mano (ver /particula) donde rAF puede no estar
    * corriendo. `start()` sigue siendo el camino normal para la app. */
   renderNow(): void;
+  /** QualityGovernor (F2 §5.4): se alimenta con el frametime CRUDO por
+   * cuadro (antes del clamp de simulación). Tipo estructural para no
+   * acoplar el engine al módulo. */
+  attachQualityGovernor(g: { update(frameMs: number): void }): void;
+  /** Palanca DPR del governor: pixel ratio = min(devicePixelRatio, cap). */
+  setDprCap(cap: number): void;
+  /** Palanca bloom: reconstruye el outputNode en caliente — REVERSIBLE
+   * (prohibido el downgrade one-way de 18 §5). */
+  setBloom(strength: number, enabled: boolean): void;
+  /** Palanca Lite: con `on`, el loop sigue vivo (controls/damping lo
+   * necesitan) pero el render se salta salvo interacción o actividad
+   * reportada por onFrame — la escena quieta cuesta ~0. */
+  setRenderOnDemand(on: boolean): void;
 }
 
 function stageSizeOf(canvas: HTMLCanvasElement): { w: number; h: number } {
@@ -123,14 +139,18 @@ export async function createEngine(canvas: HTMLCanvasElement, overrides?: SceneO
   // apagar el bloom encima de eso dejaba todo sin vida sobre todo en
   // vistas poco densas como Principiante.
   const bloomOverride = overrides?.bloom;
-  const bloomPass = bloom(
-    scenePassColor,
-    bloomOverride?.strength ?? 0.27,
-    bloomOverride?.radius ?? 0.18,
-    bloomOverride?.threshold ?? 0.58,
-  );
   const renderPipeline = new THREE.RenderPipeline(renderer);
-  renderPipeline.outputNode = scenePassColor.add(bloomPass);
+  // Palancas del QualityGovernor (F2 §5.4) — el bloom se reconstruye en
+  // caliente (reversible en ambas direcciones); la fuerza/umbral base
+  // siguen siendo los de siempre salvo override del lab.
+  let bloomStrength = bloomOverride?.strength ?? 0.27;
+  let bloomEnabled = true;
+  function applyBloomNode() {
+    renderPipeline.outputNode = bloomEnabled
+      ? scenePassColor.add(bloom(scenePassColor, bloomStrength, bloomOverride?.radius ?? 0.18, bloomOverride?.threshold ?? 0.58))
+      : scenePassColor;
+  }
+  applyBloomNode();
 
   function onResize() {
     const { w, h } = stageSizeOf(canvas);
@@ -143,7 +163,14 @@ export async function createEngine(canvas: HTMLCanvasElement, overrides?: SceneO
   // no sólo al final, así el canvas nunca se ve deformado.
   new ResizeObserver(onResize).observe(canvas.parentElement!);
 
-  function start(onFrame: (dt: number) => void, onFps: (fps: number) => void) {
+  let qualityGovernor: { update(frameMs: number): void } | null = null;
+  let renderOnDemand = false;
+  let demandDirty = true; // arranca renderizando siempre
+  controls.addEventListener("change", () => {
+    demandDirty = true;
+  });
+
+  function start(onFrame: (dt: number) => void | boolean, onFps: (fps: number) => void) {
     let last = performance.now();
     let fpsAccum = 0;
     let fpsFrames = 0;
@@ -151,12 +178,23 @@ export async function createEngine(canvas: HTMLCanvasElement, overrides?: SceneO
 
     function tick() {
       const now = performance.now();
-      const dt = Math.min((now - last) / 1000, 0.1);
+      const rawMs = now - last;
+      // El governor mide el frametime CRUDO, antes del clamp — el clamp
+      // queda sólo para la simulación (18 §5: sin esto la EMA nunca vería
+      // un frametime peor que 100ms aunque el dispositivo se arrastre).
+      qualityGovernor?.update(rawMs);
+      const dt = Math.min(rawMs / 1000, 0.1);
       last = now;
 
       controls.update();
-      onFrame(dt);
-      renderPipeline.render();
+      const activity = onFrame(dt) === true;
+      // Lite (render-on-demand): el rAF sigue vivo (OrbitControls con
+      // damping lo necesita para terminar los gestos) pero el render se
+      // salta cuando nada cambió — escena quieta a costo ~0.
+      if (!renderOnDemand || demandDirty || activity) {
+        renderPipeline.render();
+        demandDirty = false;
+      }
 
       fpsAccum += 1 / dt;
       fpsFrames += 1;
@@ -174,5 +212,30 @@ export async function createEngine(canvas: HTMLCanvasElement, overrides?: SceneO
     requestAnimationFrame(tick);
   }
 
-  return { renderer, scene, camera, controls, usingWebGPU, start, renderNow: () => renderPipeline.render() };
+  return {
+    renderer,
+    scene,
+    camera,
+    controls,
+    usingWebGPU,
+    start,
+    renderNow: () => renderPipeline.render(),
+    attachQualityGovernor(g) {
+      qualityGovernor = g;
+    },
+    setDprCap(cap) {
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, cap));
+      onResize();
+    },
+    setBloom(strength, enabled) {
+      bloomStrength = strength;
+      bloomEnabled = enabled;
+      applyBloomNode();
+      demandDirty = true;
+    },
+    setRenderOnDemand(on) {
+      renderOnDemand = on;
+      demandDirty = true;
+    },
+  };
 }

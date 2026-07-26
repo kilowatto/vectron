@@ -3,6 +3,7 @@ import * as THREE from "three/webgpu";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { createParticleField } from "./scene/particleField";
 import { createEngine } from "./scene/engine";
+import { createQualityGovernor, type QualityLevers } from "./scene/qualityGovernor";
 import { setupConceptInteraction } from "./scene/conceptInteraction";
 import { fetchConcepts, checkAndTriggerSync } from "./data/concepts";
 import { getStoredMode, setStoredMode, type Mode } from "./ui/components/modeStorage";
@@ -94,6 +95,7 @@ const backendTag = document.querySelector<HTMLSpanElement>("#backend-tag")!;
 const fpsLabel = document.querySelector<HTMLSpanElement>("#fps")!;
 const countLabel = document.querySelector<HTMLSpanElement>("#count")!;
 const modeCaption = document.querySelector<HTMLSpanElement>("#mode-caption")!;
+const qualityTag = document.querySelector<HTMLSpanElement>("#quality-tag")!;
 const sashEl = document.querySelector<HTMLDivElement>("#sash")!;
 const sidePaneEl = document.querySelector<HTMLDivElement>("#side-pane")!;
 const consolePaneEl = document.querySelector<HTMLDivElement>("#console-pane")!;
@@ -241,6 +243,41 @@ async function main() {
   contextChamber.group.position.set(9, 0, 0);
   contextChamber.group.visible = false;
   engine.scene.add(contextChamber.group);
+
+  // QualityGovernor (F2 §5.4, spec 18 §5): mide el frametime crudo en
+  // el loop del engine y gobierna las palancas de calidad — DPR, bloom,
+  // población celular y render-on-demand en Lite. Tier inicial por
+  // detección (sin UA sniffing, ver qualityGovernor.ts); la escalera
+  // tiene histéresis asimétrica, nunca oscila, y toda degradación es
+  // REVERSIBLE y COMUNICADA (tag "modo rendimiento" al bajar).
+  const governor = createQualityGovernor();
+  engine.attachQualityGovernor(governor);
+  let qualityTagTimer: ReturnType<typeof setTimeout> | null = null;
+  function applyQualityLevers(levers: QualityLevers, tier: string, direction: "down" | "up" | "initial") {
+    engine.setDprCap(levers.dpr);
+    engine.setBloom(levers.bloomStrength, levers.bloomEnabled);
+    field.setPopulationScale(levers.populationScale);
+    engine.setRenderOnDemand(levers.renderOnDemand);
+    // La calidad de la Cámara sigue al tier (reversible) — absorbe el
+    // downgrade one-way por racha de fps que había en el loop (ver
+    // abajo, lowFpsStreak eliminado): ultra/high → alta, el resto → baja.
+    contextChamber.setQuality(tier === "ultra" || tier === "high" ? "high" : "low");
+    if (direction === "down") {
+      qualityTag.textContent = `${t("hudQualityMode", lang)} · ${tier}`;
+      qualityTag.hidden = false;
+      if (qualityTagTimer) clearTimeout(qualityTagTimer);
+      qualityTagTimer = setTimeout(() => {
+        qualityTag.hidden = true;
+      }, 4000);
+    } else {
+      if (qualityTagTimer) clearTimeout(qualityTagTimer);
+      qualityTag.hidden = true;
+    }
+  }
+  governor.onTierChange((change) => {
+    applyQualityLevers(change.levers, change.to, change.direction);
+  });
+  applyQualityLevers(governor.levers(), governor.tier, "initial");
 
   // Único ContextController compartido entre el chamber 3D y cualquier
   // demo de turnos en el dock (DOCs/13 §5.2: "neither calculates
@@ -620,8 +657,6 @@ async function main() {
     offset.setFromSpherical(spherical);
     camera.position.copy(controls.target).add(offset);
   }
-  let lowFpsStreak = 0;
-  let chamberQualityDowngraded = false;
   engine.start(
     (dt) => {
       applyKeyboardNav(dt);
@@ -634,16 +669,17 @@ async function main() {
       // aquí sólo se prende/apaga con la misma condición de antes.
       engine.controls.autoRotate = !card?.isPinned() && liveTokenCount === 0 && pressedNav.size === 0;
       if (contextChamber.group.visible) contextChamber.update(dt);
+      // Actividad para el render-on-demand del tier Lite (F2 §5.4):
+      // durante el boot (reveal) o cualquier animación celular/resorte,
+      // el cuadro se renderiza aunque no haya input.
+      return !appReady || field.isAnimating();
     },
     (fps) => {
       fpsLabel.textContent = `${fps} fps`;
-      if (!chamberQualityDowngraded && contextChamber.group.visible) {
-        lowFpsStreak = fps < 30 ? lowFpsStreak + 1 : 0;
-        if (lowFpsStreak >= 3) {
-          contextChamber.setQuality("low");
-          chamberQualityDowngraded = true;
-        }
-      }
+      // El downgrade one-way de la Cámara que vivía aquí (racha de 3
+      // fps<30 → setQuality("low") para siempre) quedó ABSORBIDO por el
+      // QualityGovernor (F2 §5.4): la calidad de la Cámara sigue al
+      // tier en ambas direcciones — ver applyQualityLevers.
     },
   );
 

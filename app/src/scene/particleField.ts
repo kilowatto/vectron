@@ -177,6 +177,13 @@ export interface ParticleField {
    * desde el loop del engine. CPU: 1-2 floats de uniform por cuadro,
    * nunca buffers. */
   tick: (dt: number) => void;
+  /** Palanca de población del QualityGovernor (F2 §5.4): fracción 0-1
+   * del conteo nominal del nivel; el ajuste se hace con la MISMA lógica
+   * celular (fusión/división masiva animada, nunca un corte seco). */
+  setPopulationScale: (scale: number) => void;
+  /** ¿Hay animación en curso (morph celular o ease de resortes)? — el
+   * render-on-demand del tier Lite la consulta por cuadro. */
+  isAnimating: () => boolean;
 }
 
 export interface ParticleFieldOptions {
@@ -423,6 +430,36 @@ export function createParticleField(
     return id < realCount ? baseScaleOf(concepts[id]) : CARRIER_SCALE;
   }
 
+  /** Escala de población por tier del QualityGovernor (F2 §5.4): 1 =
+   * conteo nominal del nivel; 0.5/0.25 en Medium/Low. Se aplica sobre
+   * `targetTotal` en los 3 puntos de entrada de población y se re-ejecuta
+   * como transición celular (fusión/división masiva animada, 21 §5.2)
+   * cuando cambia el tier. */
+  let populationScale = 1;
+  let lastRawTargetTotal: number | undefined;
+  let morphAnimating = false;
+
+  function scaledTarget(targetTotal: number | undefined): number | undefined {
+    return targetTotal !== undefined ? Math.max(0, Math.round(targetTotal * populationScale)) : undefined;
+  }
+
+  /** Palanca de población del governor — re-ejecuta la transición al
+   * nuevo conteo con la MISMA lógica celular (nunca un corte seco). */
+  function setPopulationScale(scale: number): void {
+    const clamped = Math.max(0.05, Math.min(1, scale));
+    if (clamped === populationScale) return;
+    populationScale = clamped;
+    if (currentAllowed !== null && lastRawTargetTotal !== undefined) {
+      void morphToPartOfSpeechFilter(currentAllowed, { targetTotal: lastRawTargetTotal });
+    }
+  }
+
+  /** ¿Hay animación en curso (morph celular o ease de resortes)? — el
+   * render-on-demand del tier Lite la usa para no saltarse cuadros. */
+  function isAnimating(): boolean {
+    return morphAnimating || springEaseAnim !== null;
+  }
+
   /** Cuántas portadoras están visibles ahora — ventana contigua
    * [realCount, realCount + carrierVisibleCount). Ventana (no conjunto
    * disperso): hace O(1) saber cuáles entran/salen al cambiar el
@@ -430,6 +467,7 @@ export function createParticleField(
    * distribuidos por toda la nube, una ventana de índices se ve
    * igual de orgánica que un subconjunto al azar. */
   let carrierVisibleCount = 0;
+
 
   /** Visibilidad instantánea de las portadoras para llegar a
    * `targetTotal` células totales (nivel) — devuelve cuántas quedaron. */
@@ -456,7 +494,8 @@ export function createParticleField(
       if (show) visible++;
       writeInstance(i, concept.coords, show ? baseScaleOf(concept) : 0);
     });
-    if (targetTotal !== undefined) setCarrierWindow(targetTotal);
+    const scaled = scaledTarget(targetTotal);
+    if (scaled !== undefined) setCarrierWindow(scaled);
     markInstancesDirty();
     return visible;
   }
@@ -488,8 +527,9 @@ export function createParticleField(
     });
     // Portadoras al mismo ritmo: la nube crece hacia el conteo del
     // nivel durante el boot, no de golpe al terminar (F2 §5.2).
-    if (targetTotal !== undefined) {
-      const carrierTarget = Math.max(0, Math.min(CAPACITY - realCount, targetTotal - pool.length));
+    const scaledTotal = scaledTarget(targetTotal);
+    if (scaledTotal !== undefined) {
+      const carrierTarget = Math.max(0, Math.min(CAPACITY - realCount, scaledTotal - pool.length));
       const showCarriers = Math.round(carrierTarget * Math.min(Math.max(fraction, 0), 1));
       for (let i = realCount; i < CAPACITY; i++) {
         const show = i - realCount < showCarriers;
@@ -726,7 +766,8 @@ export function createParticleField(
     });
     if (targetTotal !== undefined) {
       const realTarget = concepts.filter((c) => allowed.has(c.partOfSpeech)).length;
-      const carrierTarget = Math.max(0, Math.min(CAPACITY - realCount, targetTotal - realTarget));
+      const scaled = scaledTarget(targetTotal)!;
+      const carrierTarget = Math.max(0, Math.min(CAPACITY - realCount, scaled - realTarget));
       changing += Math.abs(carrierTarget - carrierVisibleCount);
     }
     return computeMorphPlan(changing).targetDuration;
@@ -739,6 +780,7 @@ export function createParticleField(
     const seq = ++morphSeq;
     const isFirstCall = currentAllowed === null;
     currentAllowed = new Set(allowed);
+    if (opts.targetTotal !== undefined) lastRawTargetTotal = opts.targetTotal;
 
     if (isFirstCall || opts.reducedMotion) {
       return { visibleCount: setPartOfSpeechFilter(allowed, opts.targetTotal) };
@@ -777,9 +819,10 @@ export function createParticleField(
     // contable se rompe bajo interrupción (un morph nuevo no sabría
     // cuáles portadoras quedaron a medias), la clasificación por estado
     // no: las interrumpidas se re-clasifican solas en la siguiente ola.
+    const scaledTotal = scaledTarget(opts.targetTotal);
     const targetCarriers =
-      opts.targetTotal !== undefined
-        ? Math.max(0, Math.min(CAPACITY - realCount, opts.targetTotal - visibleCount))
+      scaledTotal !== undefined
+        ? Math.max(0, Math.min(CAPACITY - realCount, scaledTotal - visibleCount))
         : carrierVisibleCount;
     const carrierEntering: number[] = [];
     const carrierLeaving: number[] = [];
@@ -849,6 +892,7 @@ export function createParticleField(
     carrierVisibleCount = targetCarriers;
     if (allItems.length === 0) return { visibleCount };
 
+    morphAnimating = true;
     return new Promise((resolve) => {
       const active = new Set<number>();
       const started = new Array<boolean>(allItems.length).fill(false);
@@ -866,6 +910,7 @@ export function createParticleField(
       function resolveOnce() {
         if (settled) return;
         settled = true;
+        morphAnimating = false;
         clearTimeout(safetyTimer);
         resolve({ visibleCount });
       }
@@ -1344,6 +1389,8 @@ export function createParticleField(
     clearSprings,
     jellyPulse,
     tick,
+    setPopulationScale,
+    isAnimating,
   };
 }
 

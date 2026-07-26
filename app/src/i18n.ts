@@ -159,6 +159,9 @@ const STRINGS = {
   // absorbido en un cambio de filtro; el presupuesto de motion vive en
   // las transiciones celulares (15 R-8 / 20 H-02).
   modeFilterCaption: { es: "el modelo no cambió, tu filtro sí", en: "the model didn't change, your filter did" },
+  // F2 §5.4 — tag del QualityGovernor al bajar de tier: la degradación
+  // se COMUNICA, nunca es silenciosa (18 §5).
+  hudQualityMode: { es: "modo rendimiento", en: "performance mode" },
   hudError: { es: "error al iniciar el motor 3D", en: "error starting the 3D engine" },
 
   // --- P4: vx-color-key ---
