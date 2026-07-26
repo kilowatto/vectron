@@ -1,6 +1,7 @@
 import * as THREE from "three/webgpu";
 import { createHeroParticle, createDrift, nextColor, bodyColorOf, mutateHue, type DriftParams } from "./heroParticle";
 import { createInstancedField, INSTANCE_RADIUS, type InstancedField } from "./instancedField";
+import { createLiquidField, type LiquidField } from "./liquidParticle";
 import { BIRTH_VARIANTS } from "./animations/birth";
 import { DIVISION_VARIANTS } from "./animations/division";
 import { UNION_VARIANTS } from "./animations/union";
@@ -8,7 +9,7 @@ import { DEATH_VARIANTS } from "./animations/death";
 import { CONNECTOR_STYLES, type Connector } from "./connectorLines";
 import { tween, type Animation } from "./effects";
 import { easeInOutCubic } from "./easing";
-import { DEFAULT_CONFIG } from "./particulaConfig";
+import { DEFAULT_CONFIG, type LiquidConfig } from "./particulaConfig";
 
 /** Sólo necesitamos `target` de OrbitControls aquí — un tipo mínimo
  * evita acoplar state.ts al import del addon completo sólo por
@@ -238,6 +239,20 @@ export class ParticulaState {
   private instancedField: InstancedField | null = null;
   private instanceActiveCount = 0;
   private slotOwners: ParticleRecord[] = [];
+  /** Estilo de partícula activo — "hero" (los dos niveles de siempre:
+   * malla PBR individual / instanciado básico por INSTANCE_THRESHOLD,
+   * INTACTOS como referencia) o "liquid" (liquidParticle.ts: UN solo
+   * InstancedMesh con shader TSL custom a cualquier N — la partícula
+   * F1 de DOCs/21 §4). En modo liquid TODAS las rutas de creación que
+   * antes iban al nivel instanciado van al campo líquido (ver
+   * isInstancedTier/registerInstanced), así que no hay umbral ni swap
+   * de identidad visual en ningún conteo. */
+  private particleStyle: "hero" | "liquid" = "hero";
+  private liquidField: LiquidField | null = null;
+  private liquidActiveCount = 0;
+  private liquidSlotOwners: ParticleRecord[] = [];
+  private liquidEnv: THREE.Texture | null = null;
+  private liquidLook: LiquidConfig = DEFAULT_CONFIG.liquid;
   // Multiplicadores GLOBALES sobre la frecuencia/amplitud propia de
   // cada partícula — pedido explícito del usuario ("pon un slider
   // para configurar la velocidad y la intensidad del movimiento").
@@ -385,7 +400,17 @@ export class ParticulaState {
     for (const rec of this.particles.values()) {
       if (rec.mesh) result.push(rec.mesh);
     }
+    // En modo líquido la única malla es el InstancedMesh compartido —
+    // el raycast sí puede pegarle (las matrices de instancia se
+    // escriben en setSlot para esto); el pick resuelve la partícula
+    // por instanceId vía `particleIdAtSlot`.
+    if (this.liquidField) result.push(this.liquidField.mesh);
     return result;
+  }
+
+  /** instanceId del raycast → id de partícula (sólo modo líquido). */
+  particleIdAtSlot(slot: number): number | null {
+    return this.liquidSlotOwners[slot]?.id ?? null;
   }
 
   /** `pendingNet` es el cambio neto en `this.particles.size` que la
@@ -408,6 +433,11 @@ export class ParticulaState {
    * contra el conteo REAL que va a quedar, no uno transitorio a medio
    * aplicar. */
   private isInstancedTier(pendingNet: number = 0): boolean {
+    // Modo líquido: TODO se renderiza en el campo líquido instanciado a
+    // cualquier conteo (ver `particleStyle`) — es lo que hace que el
+    // look sea IDÉNTICO con 1, 50, 500 o 2000+, sin el acantilado de
+    // INSTANCE_THRESHOLD.
+    if (this.particleStyle === "liquid") return true;
     // Bug real medido en vivo (ver también `convertAllToInstanced` /
     // `startBatch`): arreglar sólo el conteo transitorio (`pendingNet`,
     // arriba) no bastaba. Un lote de "dividir en masa" apuntado a 2000
@@ -437,6 +467,132 @@ export class ParticulaState {
     return this.instancedField;
   }
 
+  /** Env PMREM compartido + bloque `liquid` de la config — main.ts lo
+   * llama una sola vez tras crear el engine (misma textura que ya usa
+   * la hero vía ensureEnvironment). */
+  attachLiquidSupport(envMap: THREE.Texture, look: LiquidConfig) {
+    this.liquidEnv = envMap;
+    this.liquidLook = look;
+    if (this.liquidField) this.liquidField.setLook(look);
+  }
+
+  /** Cambia el estilo de partícula convirtiendo TODA la población
+   * existente (conserva ids, colores, homes, selección) — la hero
+   * clásica nunca se destruye como opción, sólo se cambia cómo se
+   * renderiza lo que ya hay. Bloqueado mientras hay animaciones o un
+   * lote en curso (convertir a media animación dispondría mallas que
+   * una variante sigue usando). */
+  setParticleStyle(style: "hero" | "liquid") {
+    if (style === this.particleStyle) return;
+    if (this.busy || this.batchActive) return;
+    this.particleStyle = style;
+    this.convertAllForStyle();
+    this.onChange();
+  }
+
+  getParticleStyle(): "hero" | "liquid" {
+    return this.particleStyle;
+  }
+
+  applyLiquidLook(look: LiquidConfig) {
+    this.liquidLook = look;
+    if (this.liquidField) this.liquidField.setLook(look);
+  }
+
+  private ensureLiquidField(): LiquidField {
+    if (!this.liquidField) {
+      this.liquidField = createLiquidField(this.scene, this.liquidEnv!, this.liquidLook, INSTANCE_CAPACITY);
+      this.liquidField.setMovement(this.movementSpeed, this.movementIntensity);
+    }
+    return this.liquidField;
+  }
+
+  /** Conversión de una sola vez al cambiar de estilo — misma filosofía
+   * que `convertAllToInstanced` (mismos ids, sólo cambia CÓMO se
+   * renderiza), pero entre estilos completos: dispone el pool que sale
+   * y registra a todas en el que entra. */
+  private convertAllForStyle() {
+    const records = Array.from(this.particles.values());
+    if (this.particleStyle === "liquid") {
+      for (const rec of records) {
+        if (rec.mesh) {
+          this.scene.remove(rec.mesh);
+          rec.mesh.geometry.dispose();
+          (rec.mesh.material as THREE.Material).dispose();
+          rec.mesh = null;
+        }
+        rec.instanceSlot = null;
+      }
+      if (this.instancedField) {
+        this.scene.remove(this.instancedField.mesh);
+        this.instancedField.mesh.geometry.dispose();
+        (this.instancedField.mesh.material as THREE.Material).dispose();
+        this.instancedField = null;
+      }
+      this.instanceActiveCount = 0;
+      this.slotOwners = [];
+      const radius = DEFAULT_CONFIG.liquid.radius;
+      for (const rec of records) {
+        rec.baseRadius = radius;
+        rec.instanceSlot = this.allocateLiquidSlot(rec, rec.renderPos);
+      }
+    } else {
+      for (const rec of records) rec.instanceSlot = null;
+      if (this.liquidField) {
+        this.liquidField.dispose();
+        this.liquidField = null;
+      }
+      this.liquidActiveCount = 0;
+      this.liquidSlotOwners = [];
+      // Al volver a "hero" se restauran los dos niveles de siempre —
+      // incluso el acantilado de INSTANCE_THRESHOLD, que es parte del
+      // comportamiento de referencia que este estilo conserva.
+      const useInstanced = this.particles.size >= INSTANCE_THRESHOLD;
+      for (const rec of records) {
+        if (useInstanced) {
+          rec.baseRadius = INSTANCE_RADIUS;
+          rec.instanceSlot = this.allocateInstanceSlot(rec, rec.renderPos);
+        } else {
+          const mesh = createHeroParticle(rec.baseColor);
+          mesh.position.copy(rec.renderPos);
+          mesh.userData.particleId = rec.id;
+          this.scene.add(mesh);
+          rec.mesh = mesh;
+          rec.baseRadius = (mesh.userData.baseRadius as number) ?? 0.32;
+        }
+      }
+    }
+  }
+
+  private allocateLiquidSlot(rec: ParticleRecord, position: THREE.Vector3): number {
+    const field = this.ensureLiquidField();
+    const slot = this.liquidActiveCount++;
+    this.liquidSlotOwners[slot] = rec;
+    field.setSlot(slot, position, rec.baseColor, rec.drift);
+    field.setActiveCount(this.liquidActiveCount);
+    return slot;
+  }
+
+  private freeLiquidSlot(rec: ParticleRecord) {
+    if (rec.instanceSlot === null || !this.liquidField) return;
+    const slot = rec.instanceSlot;
+    const lastSlot = this.liquidActiveCount - 1;
+    if (slot !== lastSlot) {
+      const moved = this.liquidSlotOwners[lastSlot];
+      this.liquidSlotOwners[slot] = moved;
+      moved.instanceSlot = slot;
+      // Aquí SÍ hace falta copiar los buffers: la CPU no reescribe
+      // nada por cuadro en el estilo líquido (la deriva va en el vertex
+      // shader), así que sin la copia el slot movido quedaría con los
+      // datos del slot liberado.
+      this.liquidField.copySlot(lastSlot, slot);
+    }
+    this.liquidSlotOwners.pop();
+    this.liquidActiveCount--;
+    rec.instanceSlot = null;
+    this.liquidField.setActiveCount(this.liquidActiveCount);
+  }
+
   /** Asigna el siguiente slot libre del pool instanciado — siempre al
    * final del rango activo (`instanceActiveCount`), nunca reutiliza un
    * hueco a medias: los huecos se evitan del todo con el patrón
@@ -453,7 +609,12 @@ export class ParticulaState {
   }
 
   private freeInstanceSlot(rec: ParticleRecord) {
-    if (rec.instanceSlot === null || !this.instancedField) return;
+    if (rec.instanceSlot === null) return;
+    if (this.particleStyle === "liquid") {
+      this.freeLiquidSlot(rec);
+      return;
+    }
+    if (!this.instancedField) return;
     const slot = rec.instanceSlot;
     const lastSlot = this.instanceActiveCount - 1;
     if (slot !== lastSlot) {
@@ -506,6 +667,15 @@ export class ParticulaState {
     return id;
   }
 
+  /** Semilla inicial en modo líquido — sin malla hero de por medio
+   * (main.ts decide según el estilo guardado en la config). */
+  seedLiquid(color: number, position: THREE.Vector3): number {
+    const id = this.registerLiquid(color, position);
+    this.mostRecentId = id;
+    this.onChange();
+    return id;
+  }
+
   /** Nivel INDIVIDUAL — `mesh` ya viene creada por `createHeroParticle`
    * (con `baseColor`/`baseRadius`/`drift` puestos en su `userData`);
    * se copian a la propia `ParticleRecord` aquí para que el resto del
@@ -532,8 +702,15 @@ export class ParticulaState {
 
   /** Nivel INSTANCIADO (ver INSTANCE_THRESHOLD) — no hay `THREE.Mesh`
    * propia; la posición/color viven como un slot dentro del
-   * `InstancedMesh` compartido (ver instancedField.ts). */
+   * `InstancedMesh` compartido (ver instancedField.ts). En modo
+   * líquido TODA creación pasa por aquí (isInstancedTier siempre da
+   * true) y se desvía al campo líquido — así las 3 rutas de creación
+   * (nacer/dividir/unir) y el lote masivo quedan cubiertos sin tocar
+   * su lógica. */
   private registerInstanced(color: number, radius: number, position: THREE.Vector3): number {
+    if (this.particleStyle === "liquid") {
+      return this.registerLiquid(color, position);
+    }
     const id = this.nextId++;
     const rec: ParticleRecord = {
       id,
@@ -547,6 +724,27 @@ export class ParticulaState {
       renderPos: position.clone(),
     };
     rec.instanceSlot = this.allocateInstanceSlot(rec, position);
+    this.particles.set(id, rec);
+    return id;
+  }
+
+  /** Registro en el campo líquido — radio único de la config a
+   * cualquier N (la identidad visual nunca cambia con el conteo). */
+  private registerLiquid(color: number, position: THREE.Vector3): number {
+    const id = this.nextId++;
+    const radius = DEFAULT_CONFIG.liquid.radius;
+    const rec: ParticleRecord = {
+      id,
+      mesh: null,
+      instanceSlot: null,
+      baseColor: color,
+      baseRadius: radius,
+      drift: createDrift(radius),
+      brainDir: null,
+      home: position.clone(),
+      renderPos: position.clone(),
+    };
+    rec.instanceSlot = this.allocateLiquidSlot(rec, position);
     this.particles.set(id, rec);
     return id;
   }
@@ -741,7 +939,9 @@ export class ParticulaState {
     // una instanciada vecina si cae más allá de la cuadrícula de 3×3×3
     // celdas — un caso de borde raro entre los dos niveles, no un
     // problema sistemático.
-    const cellRadius = this.instanceActiveCount > 0 ? INSTANCE_RADIUS : maxRadius;
+    const instancedActive = this.particleStyle === "liquid" ? this.liquidActiveCount : this.instanceActiveCount;
+    const instancedRadius = this.particleStyle === "liquid" ? DEFAULT_CONFIG.liquid.radius : INSTANCE_RADIUS;
+    const cellRadius = instancedActive > 0 ? instancedRadius : maxRadius;
     const cellSize = cellRadius * 2 * 1.1;
     const invCellSize = 1 / cellSize;
     // Offset/máscara de 10 bits por eje: soporta celdas en
@@ -1298,6 +1498,13 @@ export class ParticulaState {
   getSelectedColor(): { hue: number; intensity: number } | null {
     if (this.selectedId === null) return null;
     const rec = this.particles.get(this.selectedId);
+    // Modo líquido: el tono vive en `baseColor` y la "vida" en el
+    // atributo aGlow del slot (escala del núcleo emisivo por instancia).
+    if (rec && !rec.mesh && this.liquidField && rec.instanceSlot !== null) {
+      const hsl = { h: 0, s: 0, l: 0 };
+      new THREE.Color(rec.baseColor).getHSL(hsl, THREE.SRGBColorSpace);
+      return { hue: hsl.h * 360, intensity: this.liquidField.getGlow(rec.instanceSlot) };
+    }
     // `rec.mesh` sólo puede ser null para partículas del nivel
     // instanciado (ver INSTANCE_THRESHOLD) — y esas nunca pueden estar
     // seleccionadas (no aparecen en el raycast de `meshes()`), así que
@@ -1318,13 +1525,22 @@ export class ParticulaState {
   setSelectedHue(hueDeg: number) {
     if (this.selectedId === null) return;
     const rec = this.particles.get(this.selectedId);
-    if (!rec || !rec.mesh) return;
+    if (!rec) return;
     const c = DEFAULT_CONFIG.color;
     const normalized = ((hueDeg % 360) + 360) % 360;
     // Ver bodyColorOf en heroParticle.ts para el porqué de
     // SRGBColorSpace explícito — sin él, `lightness`/`saturation` no
     // significan lo que se espera perceptualmente.
     const color = new THREE.Color().setHSL(normalized / 360, c.saturation, c.lightness, THREE.SRGBColorSpace);
+    if (!rec.mesh) {
+      // Modo líquido — misma semántica (tono elegido a full, cuerpo
+      // oscurecido vía bodyColorOf dentro de liquidParticle.setColor).
+      if (this.liquidField && rec.instanceSlot !== null) {
+        rec.baseColor = color.getHex();
+        this.liquidField.setColor(rec.instanceSlot, rec.baseColor);
+      }
+      return;
+    }
     const mat = rec.mesh.material as THREE.MeshPhysicalMaterial;
     // Cuerpo oscurecido / brillo con el tono elegido a full — mismo
     // contraste que createHeroParticle (ver heroParticle.ts's
@@ -1342,7 +1558,13 @@ export class ParticulaState {
   setSelectedEmissiveIntensity(value: number) {
     if (this.selectedId === null) return;
     const rec = this.particles.get(this.selectedId);
-    if (!rec || !rec.mesh) return;
+    if (!rec) return;
+    if (!rec.mesh) {
+      if (this.liquidField && rec.instanceSlot !== null) {
+        this.liquidField.setGlow(rec.instanceSlot, value);
+      }
+      return;
+    }
     (rec.mesh.material as THREE.MeshPhysicalMaterial).emissiveIntensity = value;
   }
 
@@ -1351,12 +1573,14 @@ export class ParticulaState {
    * frecuencia propia de cada una (ver DriftParams), sólo la escala. */
   setMovementSpeed(value: number) {
     this.movementSpeed = value;
+    this.liquidField?.setMovement(value, this.movementIntensity);
   }
 
   /** Multiplicador global sobre la amplitud del deriva — 0 las deja
    * quietas en su `home` exacto, >1 las hace vibrar más lejos. */
   setMovementIntensity(value: number) {
     this.movementIntensity = value;
+    this.liquidField?.setMovement(this.movementSpeed, value);
   }
 
   isBatchActive(): boolean {
@@ -1544,13 +1768,19 @@ export class ParticulaState {
       );
       if (rec.mesh) {
         rec.mesh.position.copy(rec.renderPos);
-      } else if (rec.instanceSlot !== null && this.instancedField) {
+      } else if (rec.instanceSlot !== null && this.particleStyle !== "liquid" && this.instancedField) {
+        // En modo líquido la CPU NO escribe matrices por cuadro — la
+        // deriva va en el vertex shader del material (ver
+        // liquidParticle.ts); sólo `setTime` al final del tick.
         this.instancedField.setPosition(rec.instanceSlot, rec.renderPos);
         anyInstancedMoved = true;
       }
     }
     if (anyInstancedMoved && this.instancedField) {
       this.instancedField.markMatrixDirty();
+    }
+    if (this.liquidField) {
+      this.liquidField.setTime(this.time);
     }
 
     if (this.connectorEnabled && this.particles.size >= 2) {

@@ -14,9 +14,79 @@
  * mientras se prueba. `exportConfigJSON` es lo que el usuario copia y
  * me entrega cuando ya hay una "ganadora". */
 
+/** Look de la partícula LÍQUIDA (liquidParticle.ts — shader TSL
+ * instanciado, 1 draw call a cualquier N; ver DOCs/21 §4, F1). TODOS
+ * sus parámetros viven aquí para que "exportar configuración" capture
+ * el look ganador completo, igual que el resto del lab. */
+export interface LiquidConfig {
+  /** Radio único a CUALQUIER conteo — la prueba de fuego del estilo es
+   * que 1, 50, 500 o 2000+ partículas se vean IGUAL (nada de cambiar
+   * de radio/material al cruzar un umbral como los dos niveles hero/
+   * instanciado de state.ts). */
+  radius: number;
+  /** Detalle de la esfera geodésica (IcosahedronGeometry) — suficiente
+   * para que el wobble de membrana se deforme suave, sin disparar el
+   * conteo de vértices a 25,000 instancias. */
+  geometryDetail: number;
+  /** Dirección de la luz key (misma que la direccional de main.ts) —
+   * centralizada aquí para que el look exportado no dependa de una
+   * constante escondida en el setup de la escena. */
+  lightDir: [number, number, number];
+  /** Dirección (espacio de objeto) del hotspot bioluminiscente —
+   * desplazado del centro a propósito: un núcleo perfectamente
+   * centrado se lee como "esfera con brillo", uno desplazado se lee
+   * como "órgano interno" de la célula. */
+  coreDir: [number, number, number];
+  fresnelPower: number;
+  /** IOR "sentido", no físico: gobierna cuánto se dobla la normal al
+   * muestrear el env map para la transmisión FALSA (no se usa
+   * `transmission` de MeshPhysicalMaterial — muy probablemente no
+   * renderiza en el pipeline TSL custom, ver DOCs/18). */
+  iorFeel: number;
+  /** Fuerza de la transmisión falsa (env map por normal refractada,
+   * concentrada donde la vista atraviesa el centro del volumen). */
+  transmit: number;
+  envReflect: number;
+  /** Nivel de mip del PMREM para reflejo (duro) y refracción (difusa)
+   * — la refracción borrosa es lo que la hace leerse "agua" y no
+   * "espejo". */
+  envReflBlur: number;
+  envRefrBlur: number;
+  iridescenceStrength: number;
+  iridescenceSpeed: number;
+  /** Emisivo HDR del núcleo — DEBE cruzar `bloom.threshold` (0.52) para
+   * que la partícula florezca por su cuerpo; el emisivo ~0.10 de la
+   * hero clásica quedaba ~5× por debajo y nunca florecía (DOCs/18). */
+  coreEmissive: number;
+  coreFalloff: number;
+  /** Brillo base de todo el cuerpo (bioluminiscencia ambiente), muy
+   * por debajo del umbral de bloom — el contraste contra el hotspot es
+   * lo que lee "encendida desde dentro". */
+  baseGlow: number;
+  /** Pulso de respiración del núcleo (± fracción) — muy sutil a
+   * propósito; más de ~8% se lee como "parpadeo", no como "viva". */
+  breathAmp: number;
+  breathSpeed: number;
+  /** Wobble de membrana como fracción del radio (soft-body fake:
+   * senoidales de baja frecuencia en el vertex shader) — base para la
+   * mitosis/fusión de fases posteriores. */
+  wobbleAmp: number;
+  wobbleFreq: number;
+  specularPower: number;
+  specularStrength: number;
+  /** Backlight con wrap (dot(N,L)·0.5+0.5) — SSS falso que tiñe el
+   * cuerpo como si la luz atravesara el volumen. */
+  sssStrength: number;
+  ambient: number;
+}
+
 export interface ParticulaConfig {
   version: 1;
   duration: number;
+  /** Estilo de partícula activo — la hero clásica (MeshPhysicalMaterial
+   * individual, INTACTA como referencia de comparación) o la nueva
+   * líquida. Es un estilo ADICIONAL seleccionable, no un reemplazo. */
+  particleStyle: "hero" | "liquid";
   styles: {
     nacer: string;
     dividir: string;
@@ -180,11 +250,13 @@ export interface ParticulaConfig {
     radius: number;
     threshold: number;
   };
+  liquid: LiquidConfig;
 }
 
 export const DEFAULT_CONFIG: ParticulaConfig = {
   version: 1,
   duration: 1.5,
+  particleStyle: "hero",
   styles: {
     nacer: "fundido",
     dividir: "espontanea",
@@ -271,6 +343,33 @@ export const DEFAULT_CONFIG: ParticulaConfig = {
     radius: 0.28,
     threshold: 0.52,
   },
+  liquid: {
+    radius: 0.16,
+    geometryDetail: 2,
+    lightDir: [2, 3, 2],
+    coreDir: [0.45, -0.3, 0.6],
+    fresnelPower: 3.0,
+    iorFeel: 1.33,
+    transmit: 0.55,
+    envReflect: 0.9,
+    envReflBlur: 0.6,
+    envRefrBlur: 2.5,
+    iridescenceStrength: 0.7,
+    iridescenceSpeed: 0.05,
+    // 2.1 HDR >> threshold de bloom 0.52: el núcleo florece de verdad
+    // (ver el comentario de coreEmissive en LiquidConfig).
+    coreEmissive: 2.1,
+    coreFalloff: 2.2,
+    baseGlow: 0.14,
+    breathAmp: 0.06,
+    breathSpeed: 1.1,
+    wobbleAmp: 0.015,
+    wobbleFreq: 0.8,
+    specularPower: 500,
+    specularStrength: 1.1,
+    sssStrength: 0.55,
+    ambient: 0.22,
+  },
 };
 
 const STORAGE_KEY = "particula-config-v1";
@@ -299,8 +398,22 @@ export function loadConfig(): ParticulaConfig {
     const saved = JSON.parse(raw) as Partial<ParticulaConfig>;
     const config = structuredClone(DEFAULT_CONFIG);
     if (typeof saved.duration === "number") config.duration = saved.duration;
+    if (saved.particleStyle === "hero" || saved.particleStyle === "liquid") config.particleStyle = saved.particleStyle;
     if (typeof saved.connectorEnabled === "boolean") config.connectorEnabled = saved.connectorEnabled;
     if (saved.styles) Object.assign(config.styles, saved.styles);
+    // Sólo los parámetros de `liquid` con un control real en la UI
+    // sobreviven entre recargas — la afinación interna (coreDir, mips
+    // del PMREM, wobbleFreq...) sale siempre de DEFAULT_CONFIG, por la
+    // misma razón documentada arriba para los topes del lote.
+    if (saved.liquid) {
+      const l = saved.liquid;
+      if (typeof l.coreEmissive === "number") config.liquid.coreEmissive = l.coreEmissive;
+      if (typeof l.fresnelPower === "number") config.liquid.fresnelPower = l.fresnelPower;
+      if (typeof l.iridescenceStrength === "number") config.liquid.iridescenceStrength = l.iridescenceStrength;
+      if (typeof l.envReflect === "number") config.liquid.envReflect = l.envReflect;
+      if (typeof l.wobbleAmp === "number") config.liquid.wobbleAmp = l.wobbleAmp;
+      if (typeof l.breathAmp === "number") config.liquid.breathAmp = l.breathAmp;
+    }
     if (saved.movement) {
       if (typeof saved.movement.speedDefault === "number") config.movement.speedDefault = saved.movement.speedDefault;
       if (typeof saved.movement.intensityDefault === "number") config.movement.intensityDefault = saved.movement.intensityDefault;

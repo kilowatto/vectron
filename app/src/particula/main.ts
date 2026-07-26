@@ -59,14 +59,23 @@ async function main() {
 
   const state = new ParticulaState(engine.scene);
   state.attachCamera(engine.camera, engine.controls);
+  // La partícula líquida reutiliza el MISMO PMREM RoomEnvironment que
+  // la hero (un solo bake compartido, ver heroParticle.ts) y toma su
+  // look del bloque `liquid` de la config.
+  state.attachLiquidSupport(ensureEnvironment(engine.renderer, engine.scene), config.liquid);
+  state.setParticleStyle(config.particleStyle);
 
   // Primera partícula, ya en el centro, revelada con el estilo de
   // nacimiento por defecto pero instantánea (duración corta fija) —
   // no queremos que la carga de la página dependa del slider.
-  const seedMesh = createHeroParticle(0x5fc9ff);
-  seedMesh.position.set(0, 0, 0);
-  engine.scene.add(seedMesh);
-  state.seed(seedMesh);
+  if (state.getParticleStyle() === "liquid") {
+    state.seedLiquid(0x5fc9ff, new THREE.Vector3(0, 0, 0));
+  } else {
+    const seedMesh = createHeroParticle(0x5fc9ff);
+    seedMesh.position.set(0, 0, 0);
+    engine.scene.add(seedMesh);
+    state.seed(seedMesh);
+  }
 
   setupUi(state, engine.camera, canvas, config);
 
@@ -125,6 +134,20 @@ function setupUi(state: ParticulaState, camera: THREE.Camera, canvas: HTMLCanvas
   const batchReframeToggle = document.querySelector<HTMLInputElement>("#batch-reframe-toggle")!;
   const batchStartBtn = document.querySelector<HTMLButtonElement>("#batch-start-btn")!;
   const batchStatus = document.querySelector<HTMLParagraphElement>("#batch-status")!;
+  const styleToggleButtons = document.querySelectorAll<HTMLButtonElement>("#particle-style-toggle .segment");
+  const liquidSection = document.querySelector<HTMLDivElement>("#liquid-section")!;
+  const liquidCoreSlider = document.querySelector<HTMLInputElement>("#liquid-core-slider")!;
+  const liquidCoreOutput = document.querySelector<HTMLSpanElement>("#liquid-core-output")!;
+  const liquidFresnelSlider = document.querySelector<HTMLInputElement>("#liquid-fresnel-slider")!;
+  const liquidFresnelOutput = document.querySelector<HTMLSpanElement>("#liquid-fresnel-output")!;
+  const liquidIridSlider = document.querySelector<HTMLInputElement>("#liquid-irid-slider")!;
+  const liquidIridOutput = document.querySelector<HTMLSpanElement>("#liquid-irid-output")!;
+  const liquidEnvSlider = document.querySelector<HTMLInputElement>("#liquid-env-slider")!;
+  const liquidEnvOutput = document.querySelector<HTMLSpanElement>("#liquid-env-output")!;
+  const liquidWobbleSlider = document.querySelector<HTMLInputElement>("#liquid-wobble-slider")!;
+  const liquidWobbleOutput = document.querySelector<HTMLSpanElement>("#liquid-wobble-output")!;
+  const liquidBreathSlider = document.querySelector<HTMLInputElement>("#liquid-breath-slider")!;
+  const liquidBreathOutput = document.querySelector<HTMLSpanElement>("#liquid-breath-output")!;
 
   populateSelect(styleNacer, BIRTH_VARIANTS, config.styles.nacer);
   populateSelect(styleDividir, DIVISION_VARIANTS, config.styles.dividir);
@@ -152,6 +175,75 @@ function setupUi(state: ParticulaState, camera: THREE.Camera, canvas: HTMLCanvas
   movementIntensityOutput.textContent = config.movement.intensityDefault.toFixed(2);
   state.setMovementSpeed(config.movement.speedDefault);
   state.setMovementIntensity(config.movement.intensityDefault);
+
+  // Estilo de partícula (hero clásica | líquida) + sliders del look
+  // líquido — el toggle convierte la población existente conservando
+  // ids/colores (ver state.setParticleStyle); se deshabilita mientras
+  // hay animaciones o un lote en curso (refreshUi lo mantiene al día).
+  liquidCoreSlider.value = String(config.liquid.coreEmissive);
+  liquidCoreOutput.textContent = config.liquid.coreEmissive.toFixed(2);
+  liquidFresnelSlider.value = String(config.liquid.fresnelPower);
+  liquidFresnelOutput.textContent = config.liquid.fresnelPower.toFixed(1);
+  liquidIridSlider.value = String(config.liquid.iridescenceStrength);
+  liquidIridOutput.textContent = config.liquid.iridescenceStrength.toFixed(2);
+  liquidEnvSlider.value = String(config.liquid.envReflect);
+  liquidEnvOutput.textContent = config.liquid.envReflect.toFixed(2);
+  liquidWobbleSlider.value = String(config.liquid.wobbleAmp);
+  liquidWobbleOutput.textContent = config.liquid.wobbleAmp.toFixed(3);
+  liquidBreathSlider.value = String(config.liquid.breathAmp);
+  liquidBreathOutput.textContent = config.liquid.breathAmp.toFixed(3);
+
+  styleToggleButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const style = btn.dataset.style as "hero" | "liquid";
+      state.setParticleStyle(style);
+      config.particleStyle = state.getParticleStyle();
+      saveConfig(config);
+      refreshUi();
+    });
+  });
+  liquidCoreSlider.addEventListener("input", () => {
+    const value = Number(liquidCoreSlider.value);
+    liquidCoreOutput.textContent = value.toFixed(2);
+    config.liquid.coreEmissive = value;
+    state.applyLiquidLook(config.liquid);
+    saveConfig(config);
+  });
+  liquidFresnelSlider.addEventListener("input", () => {
+    const value = Number(liquidFresnelSlider.value);
+    liquidFresnelOutput.textContent = value.toFixed(1);
+    config.liquid.fresnelPower = value;
+    state.applyLiquidLook(config.liquid);
+    saveConfig(config);
+  });
+  liquidIridSlider.addEventListener("input", () => {
+    const value = Number(liquidIridSlider.value);
+    liquidIridOutput.textContent = value.toFixed(2);
+    config.liquid.iridescenceStrength = value;
+    state.applyLiquidLook(config.liquid);
+    saveConfig(config);
+  });
+  liquidEnvSlider.addEventListener("input", () => {
+    const value = Number(liquidEnvSlider.value);
+    liquidEnvOutput.textContent = value.toFixed(2);
+    config.liquid.envReflect = value;
+    state.applyLiquidLook(config.liquid);
+    saveConfig(config);
+  });
+  liquidWobbleSlider.addEventListener("input", () => {
+    const value = Number(liquidWobbleSlider.value);
+    liquidWobbleOutput.textContent = value.toFixed(3);
+    config.liquid.wobbleAmp = value;
+    state.applyLiquidLook(config.liquid);
+    saveConfig(config);
+  });
+  liquidBreathSlider.addEventListener("input", () => {
+    const value = Number(liquidBreathSlider.value);
+    liquidBreathOutput.textContent = value.toFixed(3);
+    config.liquid.breathAmp = value;
+    state.applyLiquidLook(config.liquid);
+    saveConfig(config);
+  });
 
   batchTargetInput.min = String(config.batch.targetMin);
   batchTargetInput.max = String(config.batch.targetMax);
@@ -387,7 +479,12 @@ function setupUi(state: ParticulaState, camera: THREE.Camera, canvas: HTMLCanvas
       state.select(null);
       return;
     }
-    const id = hits[0].object.userData.particleId as number | undefined;
+    const hit = hits[0];
+    // En modo líquido la malla es el InstancedMesh compartido: la
+    // partícula se resuelve por instanceId → slot (state.particleIdAtSlot).
+    const id =
+      (hit.object.userData.particleId as number | undefined) ??
+      (hit.instanceId !== undefined ? state.particleIdAtSlot(hit.instanceId) : null);
     state.select(id ?? null);
   }
   canvas.addEventListener("pointerup", (e) => {
@@ -406,6 +503,17 @@ function setupUi(state: ParticulaState, camera: THREE.Camera, canvas: HTMLCanvas
   function refreshUi() {
     const n = state.count();
     countEl.textContent = `${n} ${n === 1 ? "partícula" : "partículas"}`;
+
+    // Toggle de estilo: seleccionado según el estilo ACTUAL del state
+    // (no el del config, por si setParticleStyle rechazó el cambio por
+    // estar ocupado) y deshabilitado mientras convertir sería inseguro.
+    const currentStyle = state.getParticleStyle();
+    const styleLocked = !state.canBirth();
+    styleToggleButtons.forEach((btn) => {
+      btn.classList.toggle("selected", btn.dataset.style === currentStyle);
+      btn.disabled = styleLocked;
+    });
+    liquidSection.hidden = currentStyle !== "liquid";
     actionButtons.forEach((btn) => {
       const action = btn.dataset.action;
       let enabled = true;

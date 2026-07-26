@@ -19,6 +19,61 @@
     <div id="particula-controls">
       <div id="particula-sheet">
         <div class="field">
+          <label class="title">Partícula</label>
+          <div class="segmented" id="particle-style-toggle">
+            <button type="button" class="segment" data-style="hero">Hero clásica</button>
+            <button type="button" class="segment" data-style="liquid">Líquida</button>
+          </div>
+        </div>
+
+        <div id="liquid-section" hidden>
+          <div class="field">
+            <div class="field-row">
+              <label class="title" for="liquid-core-slider">Líquida — núcleo (emisor)</label>
+              <span class="duration-value" id="liquid-core-output">2.10</span>
+            </div>
+            <input type="range" id="liquid-core-slider" min="0" max="4" step="0.05" value="2.1" />
+          </div>
+          <div class="field">
+            <div class="field-row">
+              <label class="title" for="liquid-fresnel-slider">Líquida — fresnel (borde)</label>
+              <span class="duration-value" id="liquid-fresnel-output">3.0</span>
+            </div>
+            <input type="range" id="liquid-fresnel-slider" min="1" max="6" step="0.1" value="3" />
+          </div>
+          <div class="field">
+            <div class="field-row">
+              <label class="title" for="liquid-irid-slider">Líquida — iridiscencia</label>
+              <span class="duration-value" id="liquid-irid-output">0.70</span>
+            </div>
+            <input type="range" id="liquid-irid-slider" min="0" max="2" step="0.05" value="0.7" />
+          </div>
+          <div class="field">
+            <div class="field-row">
+              <label class="title" for="liquid-env-slider">Líquida — reflejo de entorno</label>
+              <span class="duration-value" id="liquid-env-output">0.90</span>
+            </div>
+            <input type="range" id="liquid-env-slider" min="0" max="2" step="0.05" value="0.9" />
+          </div>
+          <div class="field">
+            <div class="field-row">
+              <label class="title" for="liquid-wobble-slider">Líquida — membrana (wobble)</label>
+              <span class="duration-value" id="liquid-wobble-output">0.015</span>
+            </div>
+            <input type="range" id="liquid-wobble-slider" min="0" max="0.06" step="0.001" value="0.015" />
+          </div>
+          <div class="field">
+            <div class="field-row">
+              <label class="title" for="liquid-breath-slider">Líquida — respiración</label>
+              <span class="duration-value" id="liquid-breath-output">0.060</span>
+            </div>
+            <input type="range" id="liquid-breath-slider" min="0" max="0.25" step="0.005" value="0.06" />
+          </div>
+        </div>
+
+        <hr class="sheet-divider" />
+
+        <div class="field">
           <div class="field-row">
             <label class="title" for="duration-slider">Duración de animación</label>
             <span class="duration-value" id="duration-output">1.5s</span>
