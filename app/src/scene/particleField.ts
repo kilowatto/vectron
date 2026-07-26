@@ -2,18 +2,29 @@ import * as THREE from "three/webgpu";
 import {
   Fn,
   attribute,
-  color,
+  cameraPosition,
   dot,
+  equirectUV,
   float,
-  normalView,
-  positionViewDirection,
+  fract,
+  mix,
+  normalGeometry,
+  normalWorld,
+  pmremTexture,
+  positionLocal,
+  positionWorld,
   pow,
+  reflect,
+  refract,
   sin,
+  smoothstep,
   time,
   uniform,
+  varying,
   vec3,
 } from "three/tsl";
 import type { Concept, PartOfSpeech } from "../data/concepts";
+import { bodyColorOf } from "../particula/heroParticle";
 import { createElectricLine, type ElectricLine } from "./electricLine";
 import { hoverableLines } from "./lineHover";
 
@@ -148,7 +159,51 @@ export interface ParticleFieldOptions {
    * una partícula) — quien llama usa esto para atenuar en sincronía
    * elementos fuera del InstancedMesh (las aristas del cubo). */
   onFocusChange?: (active: boolean) => void;
+  /** PMREM del RoomEnvironment horneado UNA vez en main.ts — el
+   * material líquido lo muestrea con la normal reflejada/refractada
+   * (transmisión falsa). Se pasa por opciones y NO se asigna a
+   * scene.environment para no cambiar el look del resto de la escena
+   * (contextChamber hornea el suyo propio). */
+  envMap: THREE.Texture;
 }
+
+/** Look del material líquido en el CUBO (F1.4 — port del ganador del
+ * lab /particula, DOCs/21 §4.2/§4.4). Los valores base son los del lab
+ * (DEFAULT_CONFIG.liquid), rebalanceados para 15,000-25,000 instancias:
+ * el núcleo HDR del lab (2.1) a esta densidad florecería toda la escena
+ * en vez de la partícula individual (el bloom del engine de producción
+ * es strength 0.27/threshold 0.58, mucho más suave que el del lab) — el
+ * wow aquí viene del material (fresnel/env/iridiscencia), no del bloom
+ * (anti-meta obligatoria de 17 Fase 2, ver DOCs/21 §4.2). */
+const CUBE_LIQUID = {
+  fresnelPower: 3.0,
+  iorFeel: 1.33,
+  transmit: 0.35,
+  envReflect: 0.55,
+  envReflBlur: 0.6,
+  envRefrBlur: 2.5,
+  iridescenceStrength: 0.45,
+  iridescenceSpeed: 0.05,
+  coreEmissive: 0.9,
+  coreFalloff: 2.2,
+  baseGlow: 0.1,
+  breathAmp: 0.06,
+  breathSpeed: 1.1,
+  wobbleAmp: 0.02,
+  wobbleFreq: 0.8,
+  /** Deriva orgánica en el vertex shader (CPU ≈ 0 por cuadro) —
+   * amplitud muy por debajo del radio (0.032) para que la codificación
+   * PCA se lea intacta; la honestidad central es la posición, la
+   * deriva es el "vivo". */
+  driftAmp: 0.008,
+  driftSpeed: 0.5,
+  specularPower: 500,
+  specularStrength: 0.7,
+  sssStrength: 0.5,
+  ambient: 0.22,
+  lightDir: [2, 3, 2] as [number, number, number],
+  coreDir: [0.45, -0.3, 0.6] as [number, number, number],
+};
 
 /**
  * Builds the glowing instanced-sphere cloud from real concept data:
@@ -157,18 +212,33 @@ export interface ParticleFieldOptions {
  */
 export function createParticleField(
   concepts: Concept[],
-  options: ParticleFieldOptions = {},
+  options: ParticleFieldOptions,
 ): ParticleField {
   const count = concepts.length;
   const geometry = new THREE.IcosahedronGeometry(0.032, 1);
-  const material = new THREE.MeshBasicNodeMaterial({
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-  });
+  // F1.4 — material líquido (port del lab /particula): OPACO con
+  // escritura de profundidad, NUNCA aditivo — la "sopa aditiva"
+  // anterior (17 VIS-01…03) venía de transparent+AdditiveBlending sin
+  // depthWrite; las células líquidas se ocluyen entre sí como esferas
+  // sólidas y el look (fresnel/env/iridiscencia/núcleo) lo pone el
+  // shader, no el blending.
+  const material = new THREE.MeshBasicNodeMaterial();
 
   const colorAttr = new Float32Array(count * 3);
   const phaseAttr = new Float32Array(count);
+  // F1.4 — atributos del patrón líquido (ver particula/liquidParticle.ts):
+  // la posición de render NO sale de la instanceMatrix sino de aHome
+  // (coordenada PCA real, jamás deformada) y la escala visible de
+  // aScale; la instanceMatrix se sigue escribiendo igual en
+  // writeInstance porque el raycast de hover/clic la usa.
+  const bodyAttr = new Float32Array(count * 3);
+  const homeAttr = new Float32Array(count * 3);
+  const freqAttr = new Float32Array(count * 3);
+  const scaleAttr = new Float32Array(count);
+  const bodyAttribute = new THREE.InstancedBufferAttribute(bodyAttr, 3);
+  const homeAttribute = new THREE.InstancedBufferAttribute(homeAttr, 3);
+  const freqAttribute = new THREE.InstancedBufferAttribute(freqAttr, 3);
+  const scaleAttribute = new THREE.InstancedBufferAttribute(scaleAttr, 1);
   const tmpColor = new THREE.Color();
 
   const mesh = new THREE.InstancedMesh(geometry, material, count);
@@ -205,13 +275,36 @@ export function createParticleField(
     posArray[id * 3 + 1] = pos[1];
     posArray[id * 3 + 2] = pos[2];
     scaleArray[id] = scale;
+    homeAttr[id * 3] = pos[0];
+    homeAttr[id * 3 + 1] = pos[1];
+    homeAttr[id * 3 + 2] = pos[2];
+    scaleAttr[id] = scale;
+  }
+
+  /** Los 3 buffers que writeInstance toca — subidos sólo cuando algo
+   * escribe instancias (filtros, reveal, morph), NUNCA por cuadro en
+   * reposo (la deriva/wobble van en el vertex shader, CPU ≈ 0). */
+  function markInstancesDirty(): void {
+    mesh.instanceMatrix.needsUpdate = true;
+    homeAttribute.needsUpdate = true;
+    scaleAttribute.needsUpdate = true;
   }
 
   concepts.forEach((concept, i) => {
     const hue = DOMAIN_HUES[concept.domain] ?? FALLBACK_HUE;
     tmpColor.setHex(hue);
     tmpColor.toArray(colorAttr, i * 3);
+    // Cuerpo oscurecido / brillo con el tono a full — MISMO modelo de
+    // color que la partícula del lab (ver heroParticle.ts's
+    // bodyColorOf); importado, no copiado, porque dos copias a mano
+    // desincronizadas ya causaron "cambia de material" en el lab.
+    bodyColorOf(hue).toArray(bodyAttr, i * 3);
     phaseAttr[i] = Math.random() * Math.PI * 2;
+    // Frecuencias de deriva por instancia (rango del lab: 0.4-0.9
+    // rad/s por eje) — cada célula tiene su propio ritmo.
+    freqAttr[i * 3] = 0.4 + Math.random() * 0.5;
+    freqAttr[i * 3 + 1] = 0.4 + Math.random() * 0.5;
+    freqAttr[i * 3 + 2] = 0.4 + Math.random() * 0.5;
 
     writeInstance(i, concept.coords, baseScaleOf(concept));
   });
@@ -223,7 +316,7 @@ export function createParticleField(
       if (show) visible++;
       writeInstance(i, concept.coords, show ? baseScaleOf(concept) : 0);
     });
-    mesh.instanceMatrix.needsUpdate = true;
+    markInstancesDirty();
     return visible;
   }
 
@@ -252,7 +345,7 @@ export function createParticleField(
     concepts.forEach((concept, i) => {
       writeInstance(i, concept.coords, shown.has(i) ? baseScaleOf(concept) : 0);
     });
-    mesh.instanceMatrix.needsUpdate = true;
+    markInstancesDirty();
   }
 
   // P2 — mode morph (mitosis/fusión). `currentAllowed` es null hasta la
@@ -545,7 +638,7 @@ export function createParticleField(
       ...buildSchedule(entering, "mitosis", parentOf, targetDuration),
       ...buildSchedule(leaving, "fusion", predatorOf, targetDuration),
     ];
-    mesh.instanceMatrix.needsUpdate = true;
+    markInstancesDirty();
     if (allItems.length === 0) return { visibleCount };
 
     return new Promise((resolve) => {
@@ -576,7 +669,7 @@ export function createParticleField(
       }
       const safetyTimer = setTimeout(() => {
         for (const item of allItems) finalize(item);
-        mesh.instanceMatrix.needsUpdate = true;
+        markInstancesDirty();
         resolveOnce();
       }, targetDuration + 6000);
 
@@ -620,7 +713,7 @@ export function createParticleField(
           }
         }
 
-        mesh.instanceMatrix.needsUpdate = true;
+        markInstancesDirty();
 
         const pending = active.size > 0 || started.some((s) => !s);
         if (pending) {
@@ -651,39 +744,103 @@ export function createParticleField(
   );
   geometry.setAttribute("instanceHighlight", highlightAttribute);
   geometry.setAttribute("instanceFocus", focusAttribute);
+  geometry.setAttribute("aBody", bodyAttribute);
+  geometry.setAttribute("aHome", homeAttribute);
+  geometry.setAttribute("aFreq", freqAttribute);
+  geometry.setAttribute("aScale", scaleAttribute);
 
-  // Restaurado (ver baseScaleOf arriba): el espaciado ya hace el
-  // trabajo pesado contra el traslape, no hace falta apagar el rim
-  // tanto — de vuelta cerca del valor original.
-  const glowStrength = uniform(0.58);
+  // Las posiciones de render vienen de aHome (atributo), no de la
+  // instanceMatrix — la esfera envolvente de la geometría (radio 0.032
+  // en el origen) no cubre el cubo y el frustum culling descartaría el
+  // campo entero.
+  mesh.frustumCulled = false;
+
   const instanceColor = attribute<"vec3">("instanceColor", "vec3");
   const instancePhase = attribute<"float">("instancePhase", "float");
   const instanceHighlight = attribute<"float">("instanceHighlight", "float");
   const instanceFocus = attribute<"float">("instanceFocus", "float");
+  const aBody = attribute<"vec3">("aBody", "vec3");
+  const aHome = attribute<"vec3">("aHome", "vec3");
+  const aFreq = attribute<"vec3">("aFreq", "vec3");
+  const aScale = attribute<"float">("aScale", "float");
 
-  const pulse = float(0.75).add(
-    float(0.16).mul(sin(time.mul(1.6).add(instancePhase))),
-  );
+  const L = CUBE_LIQUID;
+  // prefers-reduced-motion congela deriva y wobble (MUST del plan); el
+  // pulse/breath de brillo se conserva (es shimmer de relevancia, no
+  // movimiento espacial).
+  const uMotionScale = uniform(window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 1);
+  const uLightDir = uniform(new THREE.Vector3(...L.lightDir).normalize());
+  const uCoreDir = uniform(new THREE.Vector3(...L.coreDir).normalize());
 
-  const rim = pow(
-    float(1.0).sub(dot(normalView, positionViewDirection).abs()),
-    float(2.2),
-  );
-
-  material.colorNode = Fn(() => {
-    const base = color(instanceColor);
-    // 0.22 -> 0.14 -> 0.10 -> 0.18: bajarlo tanto dejó el cubo apagado
-    // en vistas ya poco densas (Principiante) sin que hiciera falta —
-    // el espaciado (CUBE_SCALE, ver seed.ts) es lo que de verdad
-    // resuelve el traslape ahora; este piso vuelve casi a su valor
-    // original para que el cubo se sienta vivo otra vez.
-    const glow = base.mul(
-      float(0.18).add(rim.mul(glowStrength)).add(instanceHighlight),
-    );
-    return vec3(glow).mul(pulse).mul(instanceFocus);
+  // Vertex: geometría × escala visible (filtro/morph) + wobble de
+  // membrana + hogar PCA real + deriva orgánica — todo en GPU, la CPU
+  // no escribe buffers por cuadro en reposo. La instanceMatrix NO se
+  // usa para render (positionNode la reemplaza) pero sigue escrita
+  // para el raycast de hover/clic (ver writeInstance).
+  material.positionNode = Fn(() => {
+    const driftT = time.mul(L.driftSpeed).mul(uMotionScale);
+    const drift = vec3(
+      sin(driftT.mul(aFreq.x).add(instancePhase)),
+      sin(driftT.mul(aFreq.y).add(instancePhase.mul(1.7).add(2.1))).mul(0.6),
+      sin(driftT.mul(aFreq.z).add(instancePhase.mul(2.3).add(4.2))),
+    ).mul(L.driftAmp);
+    // Wobble de membrana (soft-body fake) — las frecuencias espaciales
+    // (×20/×15) están escaladas al radio del cubo (0.032) para el mismo
+    // número de ondas por superficie que en el lab (×4/×3 a radio 0.16).
+    const wobble = sin(time.mul(L.wobbleFreq).add(instancePhase.mul(3.7)).add(positionLocal.y.mul(20.0)))
+      .add(sin(time.mul(L.wobbleFreq * 1.7).add(instancePhase.mul(2.3)).add(positionLocal.x.mul(15.0))).mul(0.5))
+      .mul(L.wobbleAmp * 0.032)
+      .mul(uMotionScale);
+    return positionLocal.add(normalGeometry.mul(wobble)).mul(aScale).add(aHome).add(drift);
   })();
 
-  mesh.instanceMatrix.needsUpdate = true;
+  // Fragment: el look líquido ganador del lab (gota + bioluminiscencia
+  // + burbuja) rebalanceado para la densidad del cubo (ver CUBE_LIQUID).
+  // El sistema de foco/búsqueda se conserva con la MISMA semántica:
+  // instanceFocus atenúa lo que no coincide (0.34) e instanceHighlight
+  // empuja lo que sí (hover 1.6 / búsqueda 1.05).
+  material.colorNode = Fn(() => {
+    const n = normalWorld.normalize();
+    const v = cameraPosition.sub(positionWorld).normalize();
+    const incident = v.negate();
+    const ndv = dot(n, v).abs().clamp(0, 1);
+    const fresnel = pow(float(1.0).sub(ndv), float(L.fresnelPower));
+
+    const wrap = dot(n, uLightDir).mul(0.5).add(0.5);
+    const body = aBody.mul(float(L.ambient).add(wrap.mul(L.sssStrength)));
+
+    const transmit = pmremTexture(options.envMap, equirectUV(refract(incident, n, float(1).div(L.iorFeel))), float(L.envRefrBlur))
+      .mul(mix(vec3(1, 1, 1), instanceColor, float(0.45)))
+      .mul(L.transmit)
+      .mul(pow(ndv, float(1.5)));
+
+    const reflection = pmremTexture(options.envMap, equirectUV(reflect(incident, n)), float(L.envReflBlur)).mul(fresnel).mul(L.envReflect);
+
+    const iridT = fract(float(1.0).sub(ndv).add(time.mul(L.iridescenceSpeed)));
+    const cian = vec3(0.15, 0.85, 0.95);
+    const magenta = vec3(0.9, 0.25, 0.85);
+    const dorado = vec3(1.0, 0.78, 0.28);
+    const iridescence = mix(mix(cian, magenta, smoothstep(float(0.0), float(0.5), iridT)), dorado, smoothstep(float(0.5), float(1.0), iridT))
+      .mul(fresnel)
+      .mul(L.iridescenceStrength);
+
+    const halfDir = uLightDir.add(v).normalize();
+    const specular = pow(dot(n, halfDir).max(0.0), float(L.specularPower)).mul(L.specularStrength);
+
+    // Núcleo + pulse: el shimmer de relevancia del cubo anterior
+    // (0.75+0.16·sin) se conserva multiplicando al término emisivo
+    // líquido — es la "vida" por partícula que el pulse ya daba.
+    const objN = varying(normalGeometry, "vCubeLiquidObjN").normalize();
+    const coreMask = pow(dot(objN, uCoreDir).mul(0.5).add(0.5).clamp(0, 1), float(L.coreFalloff));
+    const breath = sin(time.mul(L.breathSpeed).add(instancePhase)).mul(L.breathAmp).add(1.0);
+    const pulse = float(0.75).add(float(0.16).mul(sin(time.mul(1.6).add(instancePhase))));
+    const emissive = instanceColor.mul(float(L.baseGlow).add(coreMask.mul(L.coreEmissive))).mul(breath).mul(pulse);
+
+    const highlightBoost = float(1).add(instanceHighlight.mul(1.2));
+    return vec3(body.add(transmit).add(reflection).add(iridescence).add(vec3(specular)).add(emissive)).mul(instanceFocus).mul(highlightBoost);
+  })();
+
+  markInstancesDirty();
 
   const group = new THREE.Group();
   group.add(mesh);

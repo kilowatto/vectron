@@ -1,5 +1,6 @@
 import "./style.css";
 import * as THREE from "three/webgpu";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { createParticleField } from "./scene/particleField";
 import { createEngine } from "./scene/engine";
 import { setupConceptInteraction } from "./scene/conceptInteraction";
@@ -195,7 +196,17 @@ async function main() {
   // Atenuar las aristas junto con las partículas no seleccionadas
   // cuando hay foco activo (buscar texto o fijar una partícula) — todo
   // el "ruido visual" de fondo baja a la vez, refuerza el efecto.
+  //
+  // F1.4 — PMREM del RoomEnvironment para el material líquido del cubo
+  // (reflejo/transmisión falsa, ver particleField.ts): se hornea UNA
+  // vez aquí y se pasa sólo al field — NO se asigna a
+  // scene.environment para no cambiar el look del resto de la escena
+  // (contextChamber hornea el suyo propio aparte).
+  const pmrem = new THREE.PMREMGenerator(engine.renderer);
+  const cubeEnvMap = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  pmrem.dispose();
   const field = createParticleField(concepts, {
+    envMap: cubeEnvMap,
     onFocusChange: (active) => {
       tweenNumber(cubeEdgeMaterial.opacity, active ? 0.015 : CUBE_EDGE_OPACITY, 300, (v) => {
         cubeEdgeMaterial.opacity = v;
