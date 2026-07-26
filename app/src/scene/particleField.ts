@@ -5,9 +5,11 @@ import {
   cameraPosition,
   dot,
   equirectUV,
+  exp,
   float,
   fract,
   mix,
+  mx_noise_vec3,
   normalGeometry,
   normalWorld,
   pmremTexture,
@@ -23,6 +25,7 @@ import {
   varying,
   vec3,
 } from "three/tsl";
+import type Node from "three/src/nodes/core/Node.js";
 import type { Concept, PartOfSpeech } from "../data/concepts";
 import { bodyColorOf } from "../particula/heroParticle";
 import { createElectricLine, type ElectricLine } from "./electricLine";
@@ -152,6 +155,25 @@ export interface ParticleField {
    * (distinto de `setSimilarityLines`, que es la estrella de vecinos
    * reales de una partícula fijada). Devuelve el objeto de línea. */
   setChainLines: (instanceIds: number[]) => THREE.Object3D | null;
+  /** Resortes semánticos (F2 §5.1): al fijar un concepto, sus vecinos
+   * reales se atraen suavemente hacia él — desplazamiento proporcional
+   * al coseno (más similar = más cerca queda), con entrada elástica
+   * (overshoot = sensación de resorte). Escribe un atributo vec3 sólo
+   * para las ~10-20 instancias afectadas; la animación es UN uniform
+   * por cuadro durante ~0.7s, la deformación la hace el vertex shader.
+   * Llamar de nuevo reemplaza los resortes anteriores. */
+  setSprings: (neighbors: { instanceId: number; score: number }[], pinnedInstanceId: number) => void;
+  /** Suelta los resortes (salida suavizada, sin salto). */
+  clearSprings: () => void;
+  /** Impulso jelly soft-body en UNA instancia (F2 §5.1): oscilación
+   * amortiguada de escala no uniforme a lo largo de `axis` — el
+   * mecanismo que las transiciones celulares de conteo reutilizarán.
+   * Escribe 2 atributos de una sola instancia; la GPU hace el resto. */
+  jellyPulse: (instanceId: number, amp: number, axis: THREE.Vector3) => void;
+  /** Reloj del campo (jelly/spring-ease) — llamar una vez por cuadro
+   * desde el loop del engine. CPU: 1-2 floats de uniform por cuadro,
+   * nunca buffers. */
+  tick: (dt: number) => void;
 }
 
 export interface ParticleFieldOptions {
@@ -191,12 +213,34 @@ const CUBE_LIQUID = {
   breathSpeed: 1.1,
   wobbleAmp: 0.02,
   wobbleFreq: 0.8,
-  /** Deriva orgánica en el vertex shader (CPU ≈ 0 por cuadro) —
-   * amplitud muy por debajo del radio (0.032) para que la codificación
-   * PCA se lea intacta; la honestidad central es la posición, la
-   * deriva es el "vivo". */
+  /** Amplitud OBJETIVO de la deriva de fluido (curl noise, F2 §5.1) —
+   * muy por debajo del radio de interacción para que la codificación
+   * PCA se lea intacta (17 Fase 2 anti-goal: jamás jitter agresivo que
+   * mienta sobre vecindarios). El movimiento es coherente espacialmente
+   * (las partículas cercanas derivan juntas, como un fluido — esa es la
+   * diferencia real con la deriva Lissajous independiente anterior). */
   driftAmp: 0.008,
-  driftSpeed: 0.5,
+  /** Curl noise 3D (2 octavas) en el vertex shader: escala del dominio
+   * de ruido sobre las coords PCA (±2 unidades), paso de diferencias
+   * finitas para el rotacional, velocidad de animación del campo y
+   * ganancia que mapea magnitud de curl → desplazamiento. */
+  curlScale: 0.7,
+  curlEps: 0.3,
+  curlSpeed: 0.05,
+  curlGain: 0.5,
+  /** Resortes semánticos (F2 §5.1): al fijar un concepto, sus vecinos
+   * reales (Vectorize) se atraen hacia él con desplazamiento
+   * proporcional al coseno (rest-length ∝ distancia coseno: más
+   * similar = más cerca queda). 0.35 = el vecino más similar recorre
+   * como mucho ~35% de su distancia al fijado — suficiente para leer
+   * "se agrupan", nunca para colapsar la nube. */
+  springStrength: 0.35,
+  springEaseSeconds: 0.7,
+  /** Jelly soft-body (F2 §5.1, base para las transiciones celulares de
+   * conteo): oscilación amortiguada de escala NO uniforme a lo largo de
+   * un eje — frecuencia y decaimiento del impulso. */
+  jellyFreq: 10,
+  jellyDecay: 4,
   specularPower: 500,
   specularStrength: 0.7,
   sssStrength: 0.5,
@@ -239,6 +283,17 @@ export function createParticleField(
   const homeAttribute = new THREE.InstancedBufferAttribute(homeAttr, 3);
   const freqAttribute = new THREE.InstancedBufferAttribute(freqAttr, 3);
   const scaleAttribute = new THREE.InstancedBufferAttribute(scaleAttr, 1);
+  // F2 §5.1 — resortes semánticos (vec3: desplazamiento objetivo de la
+  // atracción al concepto fijado, 0 = sin resorte) y jelly soft-body
+  // (vec4: eje xyz + amplitud w; float: tiempo de inicio del impulso,
+  // en el reloj del campo — ver tick/uTime). Sólo se escriben por
+  // EVENTO (pin/jelly), nunca por cuadro para todo el campo.
+  const springVecAttr = new Float32Array(count * 3);
+  const jellyAxisAmpAttr = new Float32Array(count * 4);
+  const jellyT0Attr = new Float32Array(count).fill(-1e9);
+  const springVecAttribute = new THREE.InstancedBufferAttribute(springVecAttr, 3);
+  const jellyAxisAmpAttribute = new THREE.InstancedBufferAttribute(jellyAxisAmpAttr, 4);
+  const jellyT0Attribute = new THREE.InstancedBufferAttribute(jellyT0Attr, 1);
   const tmpColor = new THREE.Color();
 
   const mesh = new THREE.InstancedMesh(geometry, material, count);
@@ -748,6 +803,9 @@ export function createParticleField(
   geometry.setAttribute("aHome", homeAttribute);
   geometry.setAttribute("aFreq", freqAttribute);
   geometry.setAttribute("aScale", scaleAttribute);
+  geometry.setAttribute("aSpringVec", springVecAttribute);
+  geometry.setAttribute("aJellyAxisAmp", jellyAxisAmpAttribute);
+  geometry.setAttribute("aJellyT0", jellyT0Attribute);
 
   // Las posiciones de render vienen de aHome (atributo), no de la
   // instanceMatrix — la esfera envolvente de la geometría (radio 0.032
@@ -761,29 +819,61 @@ export function createParticleField(
   const instanceFocus = attribute<"float">("instanceFocus", "float");
   const aBody = attribute<"vec3">("aBody", "vec3");
   const aHome = attribute<"vec3">("aHome", "vec3");
-  const aFreq = attribute<"vec3">("aFreq", "vec3");
   const aScale = attribute<"float">("aScale", "float");
+  const aSpringVec = attribute<"vec3">("aSpringVec", "vec3");
+  const aJellyAxisAmp = attribute<"vec4">("aJellyAxisAmp", "vec4");
+  const aJellyT0 = attribute<"float">("aJellyT0", "float");
+  // aFreq queda escrito en el buffer (lo usa la tabla §4.2 para las
+  // transiciones celulares F2 posteriores) pero ya no alimenta la
+  // deriva — el curl noise la reemplazó (F2 §5.1).
 
   const L = CUBE_LIQUID;
   // prefers-reduced-motion congela deriva y wobble (MUST del plan); el
   // pulse/breath de brillo se conserva (es shimmer de relevancia, no
   // movimiento espacial).
-  const uMotionScale = uniform(window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 1);
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const uMotionScale = uniform(reducedMotion ? 0 : 1);
   const uLightDir = uniform(new THREE.Vector3(...L.lightDir).normalize());
   const uCoreDir = uniform(new THREE.Vector3(...L.coreDir).normalize());
+  // F2 §5.1 — reloj propio del campo (lo alimenta tick() una vez por
+  // cuadro: 1 float) para el jelly, y ease global de los resortes
+  // semánticos (0=sin atracción, 1=resorte a su rest-length).
+  const uTime = uniform(0);
+  const uSpringEase = uniform(0);
+
+  // Curl noise 3D, 2 octavas — potencial vectorial ψ cuyo ROTACIONAL
+  // (por diferencias finitas) es la velocidad de deriva: campo sin
+  // divergencia, las partículas cercanas derivan juntas como un fluido
+  // y nada se sincroniza jamás (F2 §5.1). 4 muestras de ψ por vértice
+  // (centro + 3 ejes), cada una con 2 octavas de mx_noise_vec3.
+  const curlPotential = (p: Node<"vec3">) => {
+    const t1 = time.mul(L.curlSpeed);
+    return mx_noise_vec3(p.mul(L.curlScale).add(t1)).add(mx_noise_vec3(p.mul(L.curlScale * 2.3).add(t1.mul(1.6)).add(vec3(11.3, 7.7, 5.1))).mul(0.5));
+  };
 
   // Vertex: geometría × escala visible (filtro/morph) + wobble de
-  // membrana + hogar PCA real + deriva orgánica — todo en GPU, la CPU
-  // no escribe buffers por cuadro en reposo. La instanceMatrix NO se
-  // usa para render (positionNode la reemplaza) pero sigue escrita
-  // para el raycast de hover/clic (ver writeInstance).
+  // membrana + jelly + hogar PCA real + deriva curl + resorte
+  // semántico — todo en GPU, la CPU no escribe buffers por cuadro en
+  // reposo. La instanceMatrix NO se usa para render (positionNode la
+  // reemplaza) pero sigue escrita para el raycast de hover/clic (ver
+  // writeInstance).
   material.positionNode = Fn(() => {
-    const driftT = time.mul(L.driftSpeed).mul(uMotionScale);
-    const drift = vec3(
-      sin(driftT.mul(aFreq.x).add(instancePhase)),
-      sin(driftT.mul(aFreq.y).add(instancePhase.mul(1.7).add(2.1))).mul(0.6),
-      sin(driftT.mul(aFreq.z).add(instancePhase.mul(2.3).add(4.2))),
-    ).mul(L.driftAmp);
+    const e = L.curlEps;
+    const psi0 = curlPotential(aHome);
+    const dX = curlPotential(aHome.add(vec3(e, 0, 0))).sub(psi0).div(e);
+    const dY = curlPotential(aHome.add(vec3(0, e, 0))).sub(psi0).div(e);
+    const dZ = curlPotential(aHome.add(vec3(0, 0, e))).sub(psi0).div(e);
+    const curl = vec3(dY.z.sub(dZ.y), dZ.x.sub(dX.z), dX.y.sub(dY.y));
+    const drift = curl.mul(L.driftAmp * L.curlGain).mul(uMotionScale);
+    // Resorte semántico: offset pre-computado por instancia (ver
+    // setSprings) × ease global con overshoot — la sensación de resorte
+    // la da el easing, el vector es estático durante la atracción.
+    const springOffset = aSpringVec.mul(uSpringEase);
+    // Jelly soft-body: estiramiento no uniforme a lo largo del eje del
+    // impulso, oscilación amortiguada desde aJellyT0 (reloj del campo).
+    const jellyT = uTime.sub(aJellyT0).max(0.0);
+    const jelly = sin(jellyT.mul(L.jellyFreq)).mul(exp(jellyT.mul(-L.jellyDecay))).mul(aJellyAxisAmp.w).mul(uMotionScale);
+    const jellyDeform = aJellyAxisAmp.xyz.mul(dot(positionLocal, aJellyAxisAmp.xyz)).mul(jelly);
     // Wobble de membrana (soft-body fake) — las frecuencias espaciales
     // (×20/×15) están escaladas al radio del cubo (0.032) para el mismo
     // número de ondas por superficie que en el lab (×4/×3 a radio 0.16).
@@ -791,7 +881,7 @@ export function createParticleField(
       .add(sin(time.mul(L.wobbleFreq * 1.7).add(instancePhase.mul(2.3)).add(positionLocal.x.mul(15.0))).mul(0.5))
       .mul(L.wobbleAmp * 0.032)
       .mul(uMotionScale);
-    return positionLocal.add(normalGeometry.mul(wobble)).mul(aScale).add(aHome).add(drift);
+    return positionLocal.add(normalGeometry.mul(wobble)).add(jellyDeform).mul(aScale).add(aHome).add(drift).add(springOffset);
   })();
 
   // Fragment: el look líquido ganador del lab (gota + bioluminiscencia
@@ -942,6 +1032,79 @@ export function createParticleField(
 
   let chainLine: ElectricLine | null = null;
   let chainColorCounter = 0;
+
+  // F2 §5.1 — estado CPU de los resortes semánticos: qué instancias
+  // tienen resorte escrito ahora mismo (para limpiarlas al re-fijar o
+  // soltar) y la animación del ease global (1 uniform por cuadro
+  // durante ~0.7s; nada más). Con reduced-motion el ease salta directo
+  // a su valor final — la atracción semántica se conserva, sin vaivén.
+  let springOwnerIds: number[] = [];
+  let springEaseAnim: { from: number; to: number; elapsed: number; duration: number; elastic: boolean } | null = null;
+
+  function elasticOut(t: number): number {
+    if (t <= 0) return 0;
+    if (t >= 1) return 1;
+    return Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * ((2 * Math.PI) / 3)) + 1;
+  }
+
+  function startSpringEase(to: number, elastic: boolean) {
+    const from = uSpringEase.value as number;
+    if (reducedMotion) {
+      uSpringEase.value = to;
+      springEaseAnim = null;
+      return;
+    }
+    springEaseAnim = { from, to, elapsed: 0, duration: L.springEaseSeconds, elastic };
+  }
+
+  function setSprings(neighbors: { instanceId: number; score: number }[], pinnedInstanceId: number): void {
+    for (const id of springOwnerIds) {
+      springVecAttr[id * 3] = 0;
+      springVecAttr[id * 3 + 1] = 0;
+      springVecAttr[id * 3 + 2] = 0;
+    }
+    const pinned = concepts[pinnedInstanceId].coords;
+    springOwnerIds = [];
+    for (const { instanceId, score } of neighbors) {
+      const c = concepts[instanceId].coords;
+      // rest-length ∝ distancia coseno: el desplazamiento es la
+      // fracción `strength·score` del vector hacia el fijado — más
+      // similar (score alto) = termina más cerca.
+      const k = L.springStrength * Math.max(0, Math.min(1, score));
+      springVecAttr[instanceId * 3] = (pinned[0] - c[0]) * k;
+      springVecAttr[instanceId * 3 + 1] = (pinned[1] - c[1]) * k;
+      springVecAttr[instanceId * 3 + 2] = (pinned[2] - c[2]) * k;
+      springOwnerIds.push(instanceId);
+    }
+    springVecAttribute.needsUpdate = true;
+    startSpringEase(1, true);
+  }
+
+  function clearSprings(): void {
+    startSpringEase(0, false);
+  }
+
+  let fieldTime = 0;
+  function tick(dt: number): void {
+    fieldTime += dt;
+    uTime.value = fieldTime;
+    if (springEaseAnim) {
+      springEaseAnim.elapsed += dt;
+      const t = Math.min(springEaseAnim.elapsed / springEaseAnim.duration, 1);
+      const eased = springEaseAnim.elastic ? elasticOut(t) : 1 - Math.pow(1 - t, 3);
+      uSpringEase.value = springEaseAnim.from + (springEaseAnim.to - springEaseAnim.from) * eased;
+      if (t >= 1) springEaseAnim = null;
+    }
+  }
+
+  function jellyPulse(instanceId: number, amp: number, axis: THREE.Vector3): void {
+    const a = axis.lengthSq() > 1e-8 ? axis : new THREE.Vector3(0, 1, 0);
+    a.normalize().toArray(jellyAxisAmpAttr, instanceId * 4);
+    jellyAxisAmpAttr[instanceId * 4 + 3] = amp;
+    jellyT0Attr[instanceId] = fieldTime;
+    jellyAxisAmpAttribute.needsUpdate = true;
+    jellyT0Attribute.needsUpdate = true;
+  }
   function setChainLines(instanceIds: number[]): THREE.Object3D | null {
     if (chainLine) {
       hoverableLines.delete(chainLine.object);
@@ -978,6 +1141,10 @@ export function createParticleField(
     estimateMorphDuration,
     setSimilarityLines,
     setChainLines,
+    setSprings,
+    clearSprings,
+    jellyPulse,
+    tick,
   };
 }
 

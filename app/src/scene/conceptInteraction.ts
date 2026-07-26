@@ -81,6 +81,14 @@ export function setupConceptInteraction(options: ConceptInteractionOptions): Con
       views.push({ concept: field.concepts[nInstanceId], score: n.score });
     }
     const lineObj = field.setSimilarityLines(instanceId, neighborInstanceIds);
+    // Resortes semánticos (F2 §5.1): los vecinos reales se atraen
+    // suavemente hacia el fijado con rest-length ∝ coseno — junto con
+    // las líneas eléctricas, el claim local "los vecinos viven cerca"
+    // se refuerza sin mover nada más.
+    field.setSprings(
+      views.map((v, i) => ({ instanceId: neighborInstanceIds[i], score: v.score })),
+      instanceId,
+    );
     if (lineObj) {
       // Hover sobre cada rayo muestra su similitud de coseno real — el
       // mismo score de Vectorize que aparece en la tarjeta. Un segmento
@@ -100,6 +108,13 @@ export function setupConceptInteraction(options: ConceptInteractionOptions): Con
     currentPinnedInstanceId = instanceId;
     field.setPointerHighlight(instanceId);
     field.setPinnedFocus(true);
+    // Impulso jelly al fijar (F2 §5.1): la partícula "tiembla" como
+    // membrana al quedar seleccionada — eje al azar por pin.
+    field.jellyPulse(
+      instanceId,
+      0.3,
+      new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5),
+    );
     card.showPinned(field.concepts[instanceId], [], defaultTopK);
     loadNeighbors(instanceId, defaultTopK);
     const c = field.concepts[instanceId].coords;
@@ -122,6 +137,7 @@ export function setupConceptInteraction(options: ConceptInteractionOptions): Con
     field.setSearchHighlights([]);
     field.setSimilarityLines(null, []);
     field.setChainLines([]);
+    field.clearSprings();
     options.onFocusPoint?.(null);
   }
 

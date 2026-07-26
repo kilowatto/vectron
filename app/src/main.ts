@@ -611,6 +611,9 @@ async function main() {
   engine.start(
     (dt) => {
       applyKeyboardNav(dt);
+      // Reloj del campo líquido (F2 §5.1: jelly/resortes — 1-2 floats
+      // de uniform por cuadro, nunca buffers).
+      field.tick(dt);
       // Bug real corregido (ver engine.ts): el giro automático ahora es
       // controls.autoRotate (gira la cámara alrededor de
       // controls.target, no el grupo alrededor del origen del mundo) —
