@@ -105,6 +105,15 @@ export interface ParticleField {
    * responden normal. Evita atrapar el cursor en una partícula
    * atenuada cuando lo que se quiere tocar es la que sí importa. */
   getFocusedIds: () => Set<number> | null;
+  /** Picking manual ray-esfera sobre las instancias REALES visibles —
+   * reemplaza al raycast de three contra el InstancedMesh, que exigía
+   * mantener la instanceMatrix escrita y eran 4 vertex buffers más que
+   * ya no caben en el tope de 8 de WebGPU (ver el bloque de atributos
+   * empaquetados más abajo). `onlyIds`, si se da (foco activo),
+   * restringe los candidatos a las instancias que siguen a brillo
+   * normal; las portadoras (slots ≥ concepts.length) nunca se
+   * consideran. Devuelve el id de la más cercana al rayo, o null. */
+  pickInstanceAtRay: (raycaster: THREE.Raycaster, onlyIds?: Set<number> | null) => number | null;
   /** Principiante=sustantivos, Intermedio=+adjetivos, Avanzado=+verbos
    * — las instancias fuera del filtro se escalan a 0 (sin geometría
    * visible ni alcanzable por raycasting) en vez de reconstruir el
@@ -277,11 +286,15 @@ export function createParticleField(
    * visible al cambiar de nivel — nada aparece de la nada ni desaparece
    * sin animación. Heredan el tono de su concepto ancla para que la
    * nube se lea coherente; no son alcanzables por hover/clic (ver
-   * conceptInteraction.pickInstance). */
+   * pickInstanceAtRay, que sólo itera slots reales). */
   const CAPACITY = 25000;
   const realCount = concepts.length;
   const count = realCount;
   const geometry = new THREE.IcosahedronGeometry(0.032, 1);
+  // El shader líquido no usa uv — fuera: cada atributo que el pipeline
+  // declara cuenta contra el tope de 8 vertex buffers de WebGPU (ver el
+  // bloque de atributos empaquetados más abajo).
+  geometry.deleteAttribute("uv");
   // F1.4 — material líquido (port del lab /particula): OPACO con
   // escritura de profundidad, NUNCA aditivo — la "sopa aditiva"
   // anterior (17 VIS-01…03) venía de transparent+AdditiveBlending sin
@@ -290,47 +303,48 @@ export function createParticleField(
   // shader, no el blending.
   const material = new THREE.MeshBasicNodeMaterial();
 
-  const colorAttr = new Float32Array(CAPACITY * 3);
-  const phaseAttr = new Float32Array(CAPACITY);
-  // F1.4 — atributos del patrón líquido (ver particula/liquidParticle.ts):
-  // la posición de render NO sale de la instanceMatrix sino de aHome
-  // (coordenada PCA real, jamás deformada) y la escala visible de
-  // aScale; la instanceMatrix se sigue escribiendo igual en
-  // writeInstance porque el raycast de hover/clic la usa.
-  const bodyAttr = new Float32Array(CAPACITY * 3);
-  const homeAttr = new Float32Array(CAPACITY * 3);
-  const freqAttr = new Float32Array(CAPACITY * 3);
-  const scaleAttr = new Float32Array(CAPACITY);
-  const bodyAttribute = new THREE.InstancedBufferAttribute(bodyAttr, 3);
-  const homeAttribute = new THREE.InstancedBufferAttribute(homeAttr, 3);
-  const freqAttribute = new THREE.InstancedBufferAttribute(freqAttr, 3);
-  const scaleAttribute = new THREE.InstancedBufferAttribute(scaleAttr, 1);
-  // F2 §5.1 — resortes semánticos (vec3: desplazamiento objetivo de la
-  // atracción al concepto fijado, 0 = sin resorte) y jelly soft-body
-  // (vec4: eje xyz + amplitud w; float: tiempo de inicio del impulso,
-  // en el reloj del campo — ver tick/uTime). Sólo se escriben por
-  // EVENTO (pin/jelly), nunca por cuadro para todo el campo.
-  const springVecAttr = new Float32Array(CAPACITY * 3);
-  const jellyAxisAmpAttr = new Float32Array(CAPACITY * 4);
-  const jellyT0Attr = new Float32Array(CAPACITY).fill(-1e9);
-  const springVecAttribute = new THREE.InstancedBufferAttribute(springVecAttr, 3);
+  // ── PRESUPUESTO DE VERTEX BUFFERS (bug producción 2026-07-26) ─────
+  // WebGPU garantiza sólo maxVertexBuffers=8 (lo que reporta el adapter
+  // de Chrome; pedir más con requiredLimits hace que requestDevice
+  // rechace). El pipeline anterior declaraba 15 buffers (position,
+  // normal, uv + 12 atributos instanciados) y createRenderPipeline
+  // FALLABA — el cubo se renderizaba negro para todos los usuarios.
+  // Todo el estado por instancia viaja ahora en 6 atributos vec4
+  // empaquetados (+ position/normal de la geometría = 8 totales, el
+  // máximo exacto). La instanceMatrix se eliminó por completo (eran 4
+  // buffers más): el vertex shader posiciona con aHomeScale y el
+  // picking es ray-esfera manual en CPU (ver pickInstanceAtRay).
+  const homeScaleAttr = new Float32Array(CAPACITY * 4); // xyz=hogar PCA real, w=escala visible
+  // rgb=tono del dominio, w=ganancia foco/highlight pre-multiplicada en
+  // CPU (focus·(1+highlight·1.2) — el fragment multiplica una sola vez).
+  const colorGainAttr = new Float32Array(CAPACITY * 4).fill(1);
+  const bodyPhaseAttr = new Float32Array(CAPACITY * 4); // rgb=cuerpo oscurecido, w=fase de pulso/wobble
+  const springAttr = new Float32Array(CAPACITY * 4); // xyz=desplazamiento resorte, w=t0 del impulso jelly
+  const jellyAxisAmpAttr = new Float32Array(CAPACITY * 4); // xyz=eje jelly, w=amplitud
+  const animAttr = new Float32Array(CAPACITY * 4); // x=tipo, y=progreso, zw=intensidades
+  // t0 jelly arranca "hace una eternidad" = impulso jamás disparado.
+  for (let i = 0; i < CAPACITY; i++) springAttr[i * 4 + 3] = -1e9;
+  const homeScaleAttribute = new THREE.InstancedBufferAttribute(homeScaleAttr, 4);
+  const colorGainAttribute = new THREE.InstancedBufferAttribute(colorGainAttr, 4);
+  const bodyPhaseAttribute = new THREE.InstancedBufferAttribute(bodyPhaseAttr, 4);
+  const springAttribute = new THREE.InstancedBufferAttribute(springAttr, 4);
   const jellyAxisAmpAttribute = new THREE.InstancedBufferAttribute(jellyAxisAmpAttr, 4);
-  const jellyT0Attribute = new THREE.InstancedBufferAttribute(jellyT0Attr, 1);
-  // F2 §5.2 — animación celular por instancia (mismo patrón que aAnim
-  // del lab): x=tipo (0 idle, 2 división, 3 fusión), y=progreso 0-1,
-  // z/w=intensidades (estiramiento / boost de wobble); aAnimAxis =
-  // vector hogar↔ancla de la transición. La CPU escribe parámetros al
-  // arrancar cada celda animada y el progreso por cuadro SÓLO de las
-  // celdas activas (ver el scheduler del morph celular).
-  const animAttr = new Float32Array(CAPACITY * 4);
-  const animAxisAttr = new Float32Array(CAPACITY * 3);
   const animAttribute = new THREE.InstancedBufferAttribute(animAttr, 4);
-  const animAxisAttribute = new THREE.InstancedBufferAttribute(animAxisAttr, 3);
   const tmpColor = new THREE.Color();
 
   const mesh = new THREE.InstancedMesh(geometry, material, CAPACITY);
   mesh.count = CAPACITY; // todos los slots viven siempre; ocultar = aScale 0
-  const dummy = new THREE.Object3D();
+  // La instanceMatrix se elimina DEL TODO: NodeMaterial la aplica
+  // automáticamente a normalLocal en cuanto existe (InstancedMesh), y
+  // a 25k instancias la empaqueta como buffer interleaved que ocupa el
+  // 9º vertex buffer — uno más que el tope de 8 de WebGPU y el pipeline
+  // vuelve a fallar (verificado instrumentando createRenderPipeline:
+  // stride 64 × 4 atributos @8-11). Ni el shader (posiciona con
+  // aHomeScale, normales unitarias por instancia) ni el picking
+  // (ray-esfera manual, ver pickInstanceAtRay) la necesitan; el backend
+  // WebGPU y el fallback WebGL de este renderer tampoco la leen (el
+  // conteo de instancias sale de mesh.count). Bonus: libera 1.6MB.
+  mesh.instanceMatrix = null as unknown as THREE.InstancedBufferAttribute;
 
   // Corrección sobre la corrección: bajar tamaño Y brillo A LA VEZ que
   // separar el espacio (CUBE_SCALE ×1.52, ver seed.ts) fue demasiado —
@@ -356,44 +370,33 @@ export function createParticleField(
   const scaleArray = new Float32Array(CAPACITY);
 
   function writeInstance(id: number, pos: readonly [number, number, number], scale: number): void {
-    dummy.position.set(pos[0], pos[1], pos[2]);
-    dummy.scale.setScalar(scale);
-    dummy.updateMatrix();
-    mesh.setMatrixAt(id, dummy.matrix);
     posArray[id * 3] = pos[0];
     posArray[id * 3 + 1] = pos[1];
     posArray[id * 3 + 2] = pos[2];
     scaleArray[id] = scale;
-    homeAttr[id * 3] = pos[0];
-    homeAttr[id * 3 + 1] = pos[1];
-    homeAttr[id * 3 + 2] = pos[2];
-    scaleAttr[id] = scale;
+    homeScaleAttr[id * 4] = pos[0];
+    homeScaleAttr[id * 4 + 1] = pos[1];
+    homeScaleAttr[id * 4 + 2] = pos[2];
+    homeScaleAttr[id * 4 + 3] = scale;
   }
 
-  /** Los 3 buffers que writeInstance toca — subidos sólo cuando algo
+  /** El único buffer que writeInstance toca — subido sólo cuando algo
    * escribe instancias (filtros, reveal, morph), NUNCA por cuadro en
    * reposo (la deriva/wobble van en el vertex shader, CPU ≈ 0). */
   function markInstancesDirty(): void {
-    mesh.instanceMatrix.needsUpdate = true;
-    homeAttribute.needsUpdate = true;
-    scaleAttribute.needsUpdate = true;
+    homeScaleAttribute.needsUpdate = true;
   }
 
   concepts.forEach((concept, i) => {
     const hue = DOMAIN_HUES[concept.domain] ?? FALLBACK_HUE;
     tmpColor.setHex(hue);
-    tmpColor.toArray(colorAttr, i * 3);
+    tmpColor.toArray(colorGainAttr, i * 4);
     // Cuerpo oscurecido / brillo con el tono a full — MISMO modelo de
     // color que la partícula del lab (ver heroParticle.ts's
     // bodyColorOf); importado, no copiado, porque dos copias a mano
     // desincronizadas ya causaron "cambia de material" en el lab.
-    bodyColorOf(hue).toArray(bodyAttr, i * 3);
-    phaseAttr[i] = Math.random() * Math.PI * 2;
-    // Frecuencias de deriva por instancia (rango del lab: 0.4-0.9
-    // rad/s por eje) — cada célula tiene su propio ritmo.
-    freqAttr[i * 3] = 0.4 + Math.random() * 0.5;
-    freqAttr[i * 3 + 1] = 0.4 + Math.random() * 0.5;
-    freqAttr[i * 3 + 2] = 0.4 + Math.random() * 0.5;
+    bodyColorOf(hue).toArray(bodyPhaseAttr, i * 4);
+    bodyPhaseAttr[i * 4 + 3] = Math.random() * Math.PI * 2;
 
     writeInstance(i, concept.coords, baseScaleOf(concept));
   });
@@ -409,12 +412,9 @@ export function createParticleField(
     carrierAnchor[i] = anchorIdx;
     const anchor = concepts[anchorIdx];
     const hue = DOMAIN_HUES[anchor.domain] ?? FALLBACK_HUE;
-    tmpColor.setHex(hue).toArray(colorAttr, i * 3);
-    bodyColorOf(hue).toArray(bodyAttr, i * 3);
-    phaseAttr[i] = Math.random() * Math.PI * 2;
-    freqAttr[i * 3] = 0.4 + Math.random() * 0.5;
-    freqAttr[i * 3 + 1] = 0.4 + Math.random() * 0.5;
-    freqAttr[i * 3 + 2] = 0.4 + Math.random() * 0.5;
+    tmpColor.setHex(hue).toArray(colorGainAttr, i * 4);
+    bodyColorOf(hue).toArray(bodyPhaseAttr, i * 4);
+    bodyPhaseAttr[i * 4 + 3] = Math.random() * Math.PI * 2;
     const theta = Math.random() * Math.PI * 2;
     const z = Math.random() * 2 - 1;
     const r = 0.04 + Math.random() * 0.08;
@@ -601,14 +601,16 @@ export function createParticleField(
    * patrón que aAnim del lab): parámetros una vez al arrancar la celda,
    * progreso por cuadro sólo de las activas. La deformación
    * (estiramiento peanut, separación/encogido, wobble) la hace el
-   * vertex shader — la CPU nunca reescribe posiciones por cuadro. */
-  function setInstanceAnim(id: number, type: number, p1: number, p2: number, axis: THREE.Vector3): void {
+   * vertex shader — la CPU nunca reescribe posiciones por cuadro. El
+   * eje de la transición ya NO viaja por instancia (no cabía en el
+   * presupuesto de 8 vertex buffers): el shader lo deriva por hash
+   * determinista del hogar + tipo (ver positionNode). */
+  function setInstanceAnim(id: number, type: number, p1: number, p2: number): void {
     const o = id * 4;
     animAttr[o] = type;
     animAttr[o + 1] = 0;
     animAttr[o + 2] = p1;
     animAttr[o + 3] = p2;
-    axis.toArray(animAxisAttr, id * 3);
   }
 
   function clearInstanceAnim(id: number): void {
@@ -947,17 +949,16 @@ export function createParticleField(
               started[idx] = true;
               startTimes[idx] = elapsed;
               active.add(idx);
-              const home = homeOf(item.id);
-              const anchorHome = homeOf(item.anchor);
               if (item.kind === "mitosis") {
-                // La hija nace a tamaño completo JUNTO al padre
-                // (aAnimAxis = ancla − hogar: en t=0 se renderiza en la
-                // ancla) y se separa estirada hacia su hogar real.
-                scaleAttr[item.id] = item.toScale;
-                setInstanceAnim(item.id, 2, 0.55, 5, new THREE.Vector3(anchorHome[0] - home[0], anchorHome[1] - home[1], anchorHome[2] - home[2]));
+                // La hija nace a tamaño completo JUNTO a su ancla (el
+                // eje lo deriva el shader por hash — en t=0 se renderiza
+                // desplazada hacia atrás sobre ese eje) y se separa
+                // estirada hacia su hogar real.
+                homeScaleAttr[item.id * 4 + 3] = item.toScale;
+                setInstanceAnim(item.id, 2, 0.55, 5);
               } else {
                 // La comida viaja hacia su depredador encogiendo a 0.
-                setInstanceAnim(item.id, 3, 0.7, 6, new THREE.Vector3(anchorHome[0] - home[0], anchorHome[1] - home[1], anchorHome[2] - home[2]));
+                setInstanceAnim(item.id, 3, 0.7, 6);
               }
             } else {
               continue;
@@ -977,7 +978,6 @@ export function createParticleField(
 
         markInstancesDirty();
         animAttribute.needsUpdate = true;
-        animAxisAttribute.needsUpdate = true;
 
         const pending = active.size > 0 || started.some((s) => !s);
         if (pending) {
@@ -990,55 +990,35 @@ export function createParticleField(
     });
   }
 
-  const highlightAttrArray = new Float32Array(CAPACITY);
-  const highlightAttribute = new THREE.InstancedBufferAttribute(highlightAttrArray, 1);
-  // 1 = brillo normal, ~0.05 = casi invisible — apaga todo lo que NO
-  // coincide con la búsqueda/partícula fijada para que lo que sí
-  // coincide se sienta protagonista absoluto del cubo.
-  const focusAttrArray = new Float32Array(CAPACITY).fill(1);
-  const focusAttribute = new THREE.InstancedBufferAttribute(focusAttrArray, 1);
-
-  geometry.setAttribute(
-    "instanceColor",
-    new THREE.InstancedBufferAttribute(colorAttr, 3),
-  );
-  geometry.setAttribute(
-    "instancePhase",
-    new THREE.InstancedBufferAttribute(phaseAttr, 1),
-  );
-  geometry.setAttribute("instanceHighlight", highlightAttribute);
-  geometry.setAttribute("instanceFocus", focusAttribute);
-  geometry.setAttribute("aBody", bodyAttribute);
-  geometry.setAttribute("aHome", homeAttribute);
-  geometry.setAttribute("aFreq", freqAttribute);
-  geometry.setAttribute("aScale", scaleAttribute);
-  geometry.setAttribute("aSpringVec", springVecAttribute);
+  geometry.setAttribute("aHomeScale", homeScaleAttribute);
+  geometry.setAttribute("aColorGain", colorGainAttribute);
+  geometry.setAttribute("aBodyPhase", bodyPhaseAttribute);
+  geometry.setAttribute("aSpring", springAttribute);
   geometry.setAttribute("aJellyAxisAmp", jellyAxisAmpAttribute);
-  geometry.setAttribute("aJellyT0", jellyT0Attribute);
   geometry.setAttribute("aAnim", animAttribute);
-  geometry.setAttribute("aAnimAxis", animAxisAttribute);
 
-  // Las posiciones de render vienen de aHome (atributo), no de la
+  // Las posiciones de render vienen de aHomeScale (atributo), no de la
   // instanceMatrix — la esfera envolvente de la geometría (radio 0.032
   // en el origen) no cubre el cubo y el frustum culling descartaría el
   // campo entero.
   mesh.frustumCulled = false;
 
-  const instanceColor = attribute<"vec3">("instanceColor", "vec3");
-  const instancePhase = attribute<"float">("instancePhase", "float");
-  const instanceHighlight = attribute<"float">("instanceHighlight", "float");
-  const instanceFocus = attribute<"float">("instanceFocus", "float");
-  const aBody = attribute<"vec3">("aBody", "vec3");
-  const aHome = attribute<"vec3">("aHome", "vec3");
-  const aScale = attribute<"float">("aScale", "float");
-  const aSpringVec = attribute<"vec3">("aSpringVec", "vec3");
+  const aHomeScale = attribute<"vec4">("aHomeScale", "vec4");
+  const aColorGain = attribute<"vec4">("aColorGain", "vec4");
+  const aBodyPhase = attribute<"vec4">("aBodyPhase", "vec4");
+  const aSpring = attribute<"vec4">("aSpring", "vec4");
   const aJellyAxisAmp = attribute<"vec4">("aJellyAxisAmp", "vec4");
-  const aJellyT0 = attribute<"float">("aJellyT0", "float");
   const aAnim = attribute<"vec4">("aAnim", "vec4");
-  const aAnimAxis = attribute<"vec3">("aAnimAxis", "vec3");
-  // aFreq queda escrito en el buffer (lo usa la tabla §4.2 para las
-  // transiciones celulares F2 posteriores) pero ya no alimenta la
-  // deriva — el curl noise la reemplazó (F2 §5.1).
+  // Alias con los nombres semánticos de siempre — el resto del shader
+  // queda igual que cuando cada dato viajaba en su propio atributo.
+  const aHome = aHomeScale.xyz;
+  const aScale = aHomeScale.w;
+  const instanceColor = aColorGain.rgb;
+  const aGain = aColorGain.a;
+  const aBody = aBodyPhase.rgb;
+  const instancePhase = aBodyPhase.a;
+  const aSpringVec = aSpring.xyz;
+  const aJellyT0 = aSpring.w;
 
   const L = CUBE_LIQUID;
   // prefers-reduced-motion congela deriva y wobble (MUST del plan); el
@@ -1067,9 +1047,10 @@ export function createParticleField(
   // Vertex: geometría × escala visible (filtro/morph) + wobble de
   // membrana + jelly + hogar PCA real + deriva curl + resorte
   // semántico — todo en GPU, la CPU no escribe buffers por cuadro en
-  // reposo. La instanceMatrix NO se usa para render (positionNode la
-  // reemplaza) pero sigue escrita para el raycast de hover/clic (ver
-  // writeInstance).
+  // reposo. La instanceMatrix se eliminó del todo (eran 4 vertex
+  // buffers que ya no caben en el tope de 8 de WebGPU): el render se
+  // posiciona con aHomeScale y el picking de hover/clic es ray-esfera
+  // manual en CPU (ver pickInstanceAtRay).
   material.positionNode = Fn(() => {
     const e = L.curlEps;
     const psi0 = curlPotential(aHome);
@@ -1088,9 +1069,9 @@ export function createParticleField(
     const jelly = sin(jellyT.mul(L.jellyFreq)).mul(exp(jellyT.mul(-L.jellyDecay))).mul(aJellyAxisAmp.w).mul(uMotionScale);
     const jellyDeform = aJellyAxisAmp.xyz.mul(dot(positionLocal, aJellyAxisAmp.xyz)).mul(jelly);
     // Animación celular (F2 §5.2 — pesos branch-free como en el lab):
-    //   2 división: hogar = aHome + axis·(1−t) (nace en el padre) +
+    //   2 división: hogar = aHome + axis·(1−t) (nace junto a la ancla) +
     //     estiramiento peanut sin(πt)·z; w = boost de wobble
-    //   3 fusión: hogar = aHome + axis·t (viaja al depredador), escala
+    //   3 fusión: hogar = aHome + axis·t (viaja hacia su ancla), escala
     //     1−t, mismo estiramiento; w = boost de wobble
     const animT = aAnim.y;
     const oneAnimT = float(1).sub(animT);
@@ -1099,9 +1080,19 @@ export function createParticleField(
     const w3 = float(1).sub(aAnim.x.sub(3).abs().min(1));
     const animIdle = float(1).sub(w2.add(w3).min(1));
     const animScale = w2.add(w3.mul(oneAnimT.max(0))).add(animIdle);
-    const animAxisLen = aAnimAxis.length().max(0.0001);
-    const animAxisN = aAnimAxis.div(animAxisLen);
-    const homeOffset = aAnimAxis.mul(w2.mul(oneAnimT).add(w3.mul(animT)));
+    // El eje de la transición ya no viaja en atributo (aAnimAxis era el
+    // vector hogar↔ancla y no cabía en el presupuesto de 8 buffers): se
+    // deriva por hash determinista sin/fract del hogar + tipo de
+    // animación — cada célula/tipo tiene su eje estable, visualmente
+    // equivalente al eje aleatorio por animación anterior. La amplitud
+    // fija 0.12 ≈ la distancia típica hogar↔ancla (anclas cercanas por
+    // diseño, ver nearestStable/pickAnchorNear).
+    const animAxisHash = fract(
+      sin(aHome.mul(127.1).add(vec3(aAnim.x.mul(311.7), aAnim.x.add(1).mul(74.7), aAnim.x.mul(269.5).add(19.19)))).mul(43758.5453),
+    ).mul(2.0).sub(1.0);
+    const animAxisN = animAxisHash.div(animAxisHash.length().max(0.0001));
+    const animAxis = animAxisN.mul(0.12);
+    const homeOffset = animAxis.mul(w2.mul(oneAnimT).add(w3.mul(animT)));
     const animStretch = sinPiT.mul(w2.add(w3)).mul(aAnim.z);
     const animDeform = animAxisN.mul(dot(positionLocal, animAxisN)).mul(animStretch);
     const animWobbleBoost = sinPiT.mul(w2.add(w3)).mul(aAnim.w);
@@ -1126,9 +1117,12 @@ export function createParticleField(
 
   // Fragment: el look líquido ganador del lab (gota + bioluminiscencia
   // + burbuja) rebalanceado para la densidad del cubo (ver CUBE_LIQUID).
-  // El sistema de foco/búsqueda se conserva con la MISMA semántica:
-  // instanceFocus atenúa lo que no coincide (0.34) e instanceHighlight
-  // empuja lo que sí (hover 1.6 / búsqueda 1.05).
+  // El sistema de foco/búsqueda se conserva con la MISMA semántica, pero
+  // viaja pre-multiplicado en UN solo float por instancia (aColorGain.a
+  // = focus·(1+highlight·1.2), calculado en recomputeHighlights): antes
+  // eran dos atributos (instanceFocus atenuaba lo que no coincide,
+  // instanceHighlight empujaba lo que sí) y no cabían en el presupuesto
+  // de 8 vertex buffers.
   material.colorNode = Fn(() => {
     const n = normalWorld.normalize();
     const v = cameraPosition.sub(positionWorld).normalize();
@@ -1170,8 +1164,9 @@ export function createParticleField(
     const emissiveAnim = float(1).sub(wFuse.mul(aAnim.y));
     const emissive = instanceColor.mul(float(L.baseGlow).add(coreMask.mul(L.coreEmissive))).mul(breath).mul(pulse).mul(emissiveAnim);
 
-    const highlightBoost = float(1).add(instanceHighlight.mul(1.2));
-    return vec3(body.add(transmit).add(reflection).add(iridescence).add(vec3(specular)).add(emissive)).mul(instanceFocus).mul(highlightBoost);
+    // aGain = focus·(1+highlight·1.2) pre-multiplicado en CPU — idéntico
+    // al .mul(instanceFocus).mul(highlightBoost) anterior, un buffer menos.
+    return vec3(body.add(transmit).add(reflection).add(iridescence).add(vec3(specular)).add(emissive)).mul(aGain);
   })();
 
   markInstancesDirty();
@@ -1194,8 +1189,9 @@ export function createParticleField(
     // negro puro en pantalla. 0.34 sigue de-enfatizando claramente lo
     // que no coincide sin que desaparezca como contexto.
     const dim = active ? 0.34 : 1;
-    highlightAttrArray.fill(0);
-    focusAttrArray.fill(dim);
+    // La ganancia viaja pre-multiplicada en aColorGain.a (ver colorNode):
+    // highlight 0 → ganancia = focus (dim o 1); highlight h → focus·(1+h·1.2).
+    for (let i = 0; i < CAPACITY; i++) colorGainAttr[i * 4 + 3] = dim;
     const nowFocused = active ? new Set(searchIds) : null;
     for (const id of searchIds) {
       // 0.55 -> 1.05: reportado en vivo ("falta más intensidad") — con
@@ -1204,19 +1200,18 @@ export function createParticleField(
       // igual de discreto que el resto del cubo). 1.05 la separa con
       // claridad incluso de frente (glow~1.2-1.8x) sin llegar a
       // quemarse contra el pulso (pulse máx ~0.91).
-      highlightAttrArray[id] = 1.05;
-      focusAttrArray[id] = 1;
+      colorGainAttr[id * 4 + 3] = 1 + 1.05 * 1.2;
     }
     if (pointerId !== null) {
-      highlightAttrArray[pointerId] = 1.6;
+      // focus del cursor es siempre 1 (activo o no — ver el código
+      // anterior): ganancia = 1+1.6·1.2 en ambos casos.
+      colorGainAttr[pointerId * 4 + 3] = 1 + 1.6 * 1.2;
       if (active) {
-        focusAttrArray[pointerId] = 1;
         nowFocused?.add(pointerId);
       }
     }
     focusedIds = nowFocused;
-    highlightAttribute.needsUpdate = true;
-    focusAttribute.needsUpdate = true;
+    colorGainAttribute.needsUpdate = true;
 
     if (active !== focusActive) {
       focusActive = active;
@@ -1303,9 +1298,9 @@ export function createParticleField(
 
   function setSprings(neighbors: { instanceId: number; score: number }[], pinnedInstanceId: number): void {
     for (const id of springOwnerIds) {
-      springVecAttr[id * 3] = 0;
-      springVecAttr[id * 3 + 1] = 0;
-      springVecAttr[id * 3 + 2] = 0;
+      springAttr[id * 4] = 0;
+      springAttr[id * 4 + 1] = 0;
+      springAttr[id * 4 + 2] = 0;
     }
     const pinned = concepts[pinnedInstanceId].coords;
     springOwnerIds = [];
@@ -1315,12 +1310,12 @@ export function createParticleField(
       // fracción `strength·score` del vector hacia el fijado — más
       // similar (score alto) = termina más cerca.
       const k = L.springStrength * Math.max(0, Math.min(1, score));
-      springVecAttr[instanceId * 3] = (pinned[0] - c[0]) * k;
-      springVecAttr[instanceId * 3 + 1] = (pinned[1] - c[1]) * k;
-      springVecAttr[instanceId * 3 + 2] = (pinned[2] - c[2]) * k;
+      springAttr[instanceId * 4] = (pinned[0] - c[0]) * k;
+      springAttr[instanceId * 4 + 1] = (pinned[1] - c[1]) * k;
+      springAttr[instanceId * 4 + 2] = (pinned[2] - c[2]) * k;
       springOwnerIds.push(instanceId);
     }
-    springVecAttribute.needsUpdate = true;
+    springAttribute.needsUpdate = true;
     startSpringEase(1, true);
   }
 
@@ -1345,10 +1340,64 @@ export function createParticleField(
     const a = axis.lengthSq() > 1e-8 ? axis : new THREE.Vector3(0, 1, 0);
     a.normalize().toArray(jellyAxisAmpAttr, instanceId * 4);
     jellyAxisAmpAttr[instanceId * 4 + 3] = amp;
-    jellyT0Attr[instanceId] = fieldTime;
+    springAttr[instanceId * 4 + 3] = fieldTime;
     jellyAxisAmpAttribute.needsUpdate = true;
-    jellyT0Attribute.needsUpdate = true;
+    springAttribute.needsUpdate = true;
   }
+
+  // Picking manual ray-esfera (reemplazo del raycast contra el
+  // InstancedMesh — su instanceMatrix eran 4 vertex buffers que ya no
+  // caben). Itera sólo slots REALES visibles: 25k tests por evento de
+  // pointer son sub-ms. La deriva curl (amp 0.008) se ignora a propósito:
+  // es muy por debajo del padding del radio.
+  const pickRay = new THREE.Ray();
+  const pickInvMatrix = new THREE.Matrix4();
+
+  function pickInstanceAtRay(raycaster: THREE.Raycaster, onlyIds?: Set<number> | null): number | null {
+    // El rayo llega en espacio mundo y las posiciones CPU están en
+    // espacio local del mesh (dentro de `group`) — se transforma el
+    // rayo, no las 25k instancias.
+    pickRay.copy(raycaster.ray).applyMatrix4(pickInvMatrix.copy(mesh.matrixWorld).invert());
+    const ox = pickRay.origin.x;
+    const oy = pickRay.origin.y;
+    const oz = pickRay.origin.z;
+    const dx = pickRay.direction.x;
+    const dy = pickRay.direction.y;
+    const dz = pickRay.direction.z;
+    const springEase = uSpringEase.value as number;
+    let best = -1;
+    let bestT = Infinity;
+    const consider = (id: number) => {
+      const scale = scaleArray[id];
+      if (scale <= 1e-3) return; // oculta por filtro/reveal/morph
+      // Centro = hogar PCA + resorte activo (si hay) — la misma base
+      // sobre la que el vertex shader suma deriva/deformes menores.
+      const cx = posArray[id * 3] + springAttr[id * 4] * springEase;
+      const cy = posArray[id * 3 + 1] + springAttr[id * 4 + 1] * springEase;
+      const cz = posArray[id * 3 + 2] + springAttr[id * 4 + 2] * springEase;
+      const r = 0.032 * scale * 1.4; // radio base × escala visible × padding
+      const ocx = ox - cx;
+      const ocy = oy - cy;
+      const ocz = oz - cz;
+      const b = ocx * dx + ocy * dy + ocz * dz;
+      const c = ocx * ocx + ocy * ocy + ocz * ocz - r * r;
+      const disc = b * b - c;
+      if (disc < 0) return;
+      const sq = Math.sqrt(disc);
+      let t = -b - sq;
+      if (t < 0) t = -b + sq; // origen del rayo dentro de la esfera
+      if (t < 0 || t >= bestT) return;
+      bestT = t;
+      best = id;
+    };
+    if (onlyIds) {
+      for (const id of onlyIds) if (id < realCount) consider(id);
+    } else {
+      for (let id = 0; id < realCount; id++) consider(id);
+    }
+    return best === -1 ? null : best;
+  }
+
   function setChainLines(instanceIds: number[]): THREE.Object3D | null {
     if (chainLine) {
       hoverableLines.delete(chainLine.object);
@@ -1379,6 +1428,7 @@ export function createParticleField(
     setPinnedFocus,
     setTokenFocus,
     getFocusedIds,
+    pickInstanceAtRay,
     setPartOfSpeechFilter,
     revealProgressively,
     morphToPartOfSpeechFilter,
