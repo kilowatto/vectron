@@ -2,27 +2,19 @@ import * as THREE from "three/webgpu";
 import {
   Fn,
   attribute,
-  cameraPosition,
   dot,
-  equirectUV,
   exp,
   float,
   fract,
-  mix,
   mx_noise_vec3,
   normalGeometry,
-  normalWorld,
-  pmremTexture,
+  normalView,
   positionLocal,
-  positionWorld,
+  positionViewDirection,
   pow,
-  reflect,
-  refract,
   sin,
-  smoothstep,
   time,
   uniform,
-  varying,
   vec3,
 } from "three/tsl";
 import type Node from "three/src/nodes/core/Node.js";
@@ -290,14 +282,7 @@ export function createParticleField(
   const CAPACITY = 25000;
   const realCount = concepts.length;
   const count = realCount;
-  // Radio 0.032 → 0.052 (2026-07-26, iteración visual con capturas):
-  // a 0.032 cada célula proyecta ~3-4 px y el shading líquido (fresnel,
-  // núcleo, iridiscencia) no tiene píxeles donde vivir — la nube se
-  // leía como confeti mate, no como gotas ("no se ve acuoso"). Con
-  // 0.052 las células se solapan y la nube se funde en cuerpo
-  // gelatinoso; el detalle 1 del icosaedro se mantiene (a este tamaño
-  // los vértices extra no se aprecian y cuestan).
-  const geometry = new THREE.IcosahedronGeometry(0.052, 1);
+  const geometry = new THREE.IcosahedronGeometry(0.032, 1);
   // El shader líquido no usa uv — fuera: cada atributo que el pipeline
   // declara cuenta contra el tope de 8 vertex buffers de WebGPU (ver el
   // bloque de atributos empaquetados más abajo).
@@ -1022,7 +1007,6 @@ export function createParticleField(
   const aScale = aHomeScale.w;
   const instanceColor = aColorGain.rgb;
   const aGain = aColorGain.a;
-  const aBody = aBodyPhase.rgb;
   const instancePhase = aBodyPhase.a;
   const aSpringVec = aSpring.xyz;
   const aJellyT0 = aSpring.w;
@@ -1033,8 +1017,6 @@ export function createParticleField(
   // movimiento espacial).
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const uMotionScale = uniform(reducedMotion ? 0 : 1);
-  const uLightDir = uniform(new THREE.Vector3(...L.lightDir).normalize());
-  const uCoreDir = uniform(new THREE.Vector3(...L.coreDir).normalize());
   // F2 §5.1 — reloj propio del campo (lo alimenta tick() una vez por
   // cuadro: 1 float) para el jelly, y ease global de los resortes
   // semánticos (0=sin atracción, 1=resorte a su rest-length).
@@ -1122,63 +1104,38 @@ export function createParticleField(
       .add(springOffset);
   })();
 
-  // Fragment: el look líquido ganador del lab (gota + bioluminiscencia
-  // + burbuja) rebalanceado para la densidad del cubo (ver CUBE_LIQUID).
-  // El sistema de foco/búsqueda se conserva con la MISMA semántica, pero
-  // viaja pre-multiplicado en UN solo float por instancia (aColorGain.a
-  // = focus·(1+highlight·1.2), calculado en recomputeHighlights): antes
-  // eran dos atributos (instanceFocus atenuaba lo que no coincide,
-  // instanceHighlight empujaba lo que sí) y no cabían en el presupuesto
-  // de 8 vertex buffers.
+  // Fragment: el look CLÁSICO del cubo de luz (restaurado 2026-07-26
+  // por decisión del usuario: "estaba mejor lo que tenía antes"). Es el
+  // colorNode anterior a F1.4a — color × (piso + rim glow) × pulse —
+  // con dos adaptaciones de la arquitectura nueva: la ganancia
+  // foco/highlight viaja pre-multiplicada en UN float (aColorGain.a =
+  // focus·(1+highlight·1.2), calculado en recomputeHighlights) y el
+  // apagado de fusión celular (emissiveAnim) se conserva. El port
+  // líquido con PMREM (fresnel/env/iridiscencia) se retira: lavaba los
+  // colores de dominio, costaba 2 muestras de textura por fragmento
+  // (el costo grande a 25k) y no reflejaba la visión del usuario. El
+  // material/vertex (wobble, jelly, resortes, curl noise) NO cambia.
   material.colorNode = Fn(() => {
-    const n = normalWorld.normalize();
-    const v = cameraPosition.sub(positionWorld).normalize();
-    const incident = v.negate();
-    const ndv = dot(n, v).abs().clamp(0, 1);
-    const fresnel = pow(float(1.0).sub(ndv), float(L.fresnelPower));
-
-    const wrap = dot(n, uLightDir).mul(0.5).add(0.5);
-    const body = aBody.mul(float(L.ambient).add(wrap.mul(L.sssStrength)));
-
-    const transmit = pmremTexture(options.envMap, equirectUV(refract(incident, n, float(1).div(L.iorFeel))), float(L.envRefrBlur))
-      // Tinte 0.45 → 0.85 (iteración visual 2026-07-26): con 0.45 el env
-      // blanco del RoomEnvironment dominaba y TODAS las células se
-      // lavaban a gris-perla — se perdía la codificación por color de
-      // dominio (que ES la lectura pedagógica) y el look de joya. A
-      // 0.85 la luz transmitida hereda el tono de la célula.
-      .mul(mix(vec3(1, 1, 1), instanceColor, float(0.85)))
-      .mul(L.transmit)
-      .mul(pow(ndv, float(1.5)));
-
-    const reflection = pmremTexture(options.envMap, equirectUV(reflect(incident, n)), float(L.envReflBlur)).mul(fresnel).mul(L.envReflect);
-
-    const iridT = fract(float(1.0).sub(ndv).add(time.mul(L.iridescenceSpeed)));
-    const cian = vec3(0.15, 0.85, 0.95);
-    const magenta = vec3(0.9, 0.25, 0.85);
-    const dorado = vec3(1.0, 0.78, 0.28);
-    const iridescence = mix(mix(cian, magenta, smoothstep(float(0.0), float(0.5), iridT)), dorado, smoothstep(float(0.5), float(1.0), iridT))
-      .mul(fresnel)
-      .mul(L.iridescenceStrength);
-
-    const halfDir = uLightDir.add(v).normalize();
-    const specular = pow(dot(n, halfDir).max(0.0), float(L.specularPower)).mul(L.specularStrength);
-
-    // Núcleo + pulse: el shimmer de relevancia del cubo anterior
-    // (0.75+0.16·sin) se conserva multiplicando al término emisivo
-    // líquido — es la "vida" por partícula que el pulse ya daba.
-    const objN = varying(normalGeometry, "vCubeLiquidObjN").normalize();
-    const coreMask = pow(dot(objN, uCoreDir).mul(0.5).add(0.5).clamp(0, 1), float(L.coreFalloff));
-    const breath = sin(time.mul(L.breathSpeed).add(instancePhase)).mul(L.breathAmp).add(1.0);
+    const rim = pow(
+      float(1.0).sub(dot(normalView, positionViewDirection).abs()),
+      float(2.2),
+    );
     const pulse = float(0.75).add(float(0.16).mul(sin(time.mul(1.6).add(instancePhase))));
-    // En fusión el núcleo se apaga con el progreso (la célula "muere"
-    // dentro de la que se la come — no un corte de brillo seco).
+    const breath = sin(time.mul(L.breathSpeed).add(instancePhase)).mul(L.breathAmp).add(1.0);
+    // En fusión el brillo se apaga con el progreso (la célula "muere"
+    // dentro de la que se la come — no un corte seco).
     const wFuse = float(1).sub(aAnim.x.sub(3).abs().min(1));
     const emissiveAnim = float(1).sub(wFuse.mul(aAnim.y));
-    const emissive = instanceColor.mul(float(L.baseGlow).add(coreMask.mul(L.coreEmissive))).mul(breath).mul(pulse).mul(emissiveAnim);
-
-    // aGain = focus·(1+highlight·1.2) pre-multiplicado en CPU — idéntico
-    // al .mul(instanceFocus).mul(highlightBoost) anterior, un buffer menos.
-    return vec3(body.add(transmit).add(reflection).add(iridescence).add(vec3(specular)).add(emissive)).mul(aGain);
+    // Piso 0.18 + rim 0.58: los valores del cubo de luz clásico (ver
+    // git 162a7aa^). aGain = focus·(1+highlight·1.2) pre-multiplicado
+    // en CPU — idéntico al .mul(instanceFocus).mul(highlightBoost)
+    // anterior, un buffer menos.
+    const glow = instanceColor
+      .mul(float(0.18).add(rim.mul(0.58)))
+      .mul(pulse)
+      .mul(breath)
+      .mul(emissiveAnim);
+    return vec3(glow).mul(aGain);
   })();
 
   markInstancesDirty();
