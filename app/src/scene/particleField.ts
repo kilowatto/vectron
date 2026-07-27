@@ -126,6 +126,26 @@ export interface ParticleField {
    * comentario completo junto a la implementación). `targetTotal` revela
    * también las portadoras al mismo ritmo (F2 §5.2). */
   revealProgressively: (fraction: number, allowedIds?: number[], targetTotal?: number) => void;
+  /** F1.3b — boot de CRECIMIENTO CELULAR (pedido explícito del usuario:
+   * "primero una célula, luego dos, luego 3, 5, 8… hasta completar la
+   * población"). Arranca con UNA célula visible (la más cercana al
+   * centro de la nube) y crece en olas Fibonacci 1→2→3→5→8→13 que luego
+   * aceleran ×φ hasta el conteo del nivel (con el escalado del governor
+   * aplicado). TODA célula nueva nace por mitosis visible (misma
+   * deformación peanut aAnim tipo 2 del morph de nivel) de una célula ya
+   * visible — padre = la visible más cercana al hogar de la hija (misma
+   * lógica que nearestStable, muestreada como pickAnchorNear para que
+   * las olas de miles no paguen O(N) por hija). El ritmo lo manda el
+   * progreso REAL de carga que main.ts alimenta con
+   * setBootGrowthProgress: las olas nunca corren más rápido que la
+   * fracción cargada; si la carga termina antes que las olas, las que
+   * falten se drenan en ≤2s. Devuelve una promesa que resuelve cuando
+   * la población está completa y toda mitosis terminó. Con
+   * prefers-reduced-motion: reveal instantáneo (sin olas). */
+  growCellularBoot: (allowedIds?: number[], targetTotal?: number) => Promise<void>;
+  /** Alimenta el progreso real de carga (0-1) al boot de crecimiento
+   * celular — llamar por cuadro mientras dure el arranque. */
+  setBootGrowthProgress: (fraction: number) => void;
   /** P2: la versión "viva" del filtro anterior — en vez de un corte
    * instantáneo, las partículas que entran nacen por mitosis desde la
    * más cercana (mismo dominio primero) que ya se veía, y las que salen
@@ -449,7 +469,7 @@ export function createParticleField(
   /** ¿Hay animación en curso (morph celular o ease de resortes)? — el
    * render-on-demand del tier Lite la usa para no saltarse cuadros. */
   function isAnimating(): boolean {
-    return morphAnimating || springEaseAnim !== null;
+    return morphAnimating || springEaseAnim !== null || bootAnimating;
   }
 
   /** Cuántas portadoras están visibles ahora — ventana contigua
@@ -530,6 +550,301 @@ export function createParticleField(
       carrierVisibleCount = showCarriers;
     }
     markInstancesDirty();
+  }
+
+  // ── F1.3b — boot de crecimiento celular (ver la doc de la interfaz) ──
+  // Pacing: las primeras olas Fibonacci duran BOOT_WAVE_DUR_FIRST para
+  // que la división se APRECIE (pedido explícito); de ahí la duración
+  // decae ×0.78 por ola (aceleración) hasta un piso. Con total=25k el
+  // último arranque de ola cae ~6.6s ≈ el objetivo de carga de 8s. El
+  // tope poblacional (total × fraction) garantiza que las olas nunca
+  // corran más rápido que la carga real; cuando fraction llega a 1
+  // quedando olas, sus minStart se reagendan comprimidas en ≤2s (drain).
+  const BOOT_WAVE_DUR_FIRST = 750; // ms por ola Fibonacci temprana
+  const BOOT_WAVE_DUR_MIN = 70;
+  const BOOT_WAVE_DECAY = 0.78;
+  const BOOT_DRAIN_MS = 2000;
+
+  let bootFraction = 0;
+  let bootAnimating = false;
+  let bootSeq = 0;
+
+  function setBootGrowthProgress(fraction: number): void {
+    bootFraction = fraction;
+  }
+
+  function growCellularBoot(allowedIds?: number[], targetTotal?: number): Promise<void> {
+    const seq = ++bootSeq;
+    const pool = allowedIds ?? concepts.map((_, i) => i);
+    const scaledTotal = scaledTarget(targetTotal);
+    const carrierTarget =
+      scaledTotal !== undefined
+        ? Math.max(0, Math.min(CAPACITY - realCount, scaledTotal - pool.length))
+        : 0;
+    const total = pool.length + carrierTarget;
+
+    // Reduced motion: reveal instantáneo, sin olas (MUST accesibilidad).
+    if (reducedMotion || total <= 1) {
+      revealProgressively(1, allowedIds, targetTotal);
+      return Promise.resolve();
+    }
+
+    // Todo a 0 menos la semilla: la primera célula es el concepto del
+    // pool más cercano al centro de la nube.
+    let seed = pool[0];
+    let seedD = Infinity;
+    for (const id of pool) {
+      const c = concepts[id].coords;
+      const d = c[0] * c[0] + c[1] * c[1] + c[2] * c[2];
+      if (d < seedD) {
+        seedD = d;
+        seed = id;
+      }
+    }
+    // La semilla (y las primeras ~150 células) nace con boost de escala
+    // — ver el comentario de launchBirths: sin él las primeras olas son
+    // puntos invisibles a esta distancia de cámara.
+    const boosted: { id: number; trueScale: number }[] = [];
+    concepts.forEach((concept, i) => writeInstance(i, concept.coords, 0));
+    for (let i = realCount; i < CAPACITY; i++) {
+      writeInstance(i, [posArray[i * 3], posArray[i * 3 + 1], posArray[i * 3 + 2]], 0);
+    }
+    writeInstance(seed, concepts[seed].coords, baseScaleOf(concepts[seed]) * 5);
+    boosted.push({ id: seed, trueScale: baseScaleOf(concepts[seed]) });
+    carrierVisibleCount = carrierTarget;
+    markInstancesDirty();
+
+    // Cola de nacimientos: conceptos reales primero (la semilla ya está
+    // fuera; el resto en orden fijo barajado, mismo espíritu que
+    // revealOrder), portadoras después por la misma vía.
+    const queue: number[] = shuffled(pool.filter((id) => id !== seed));
+    for (let i = 0; i < carrierTarget; i++) queue.push(realCount + i);
+
+    // Olas: acumulados Fibonacci 1→2→3→5→8→13 y de ahí ×φ hasta total.
+    const waves: number[] = [1, 2, 3, 5, 8, 13];
+    while (waves[waves.length - 1] < total) {
+      waves.push(Math.min(total, Math.max(waves[waves.length - 1] + 1, Math.round(waves[waves.length - 1] * 1.618))));
+    }
+    // minStart por ola (pacing puro; la fracción puede retrasarlo,
+    // nunca adelantarlo).
+    const minStart: number[] = [0];
+    {
+      let acc = 0;
+      for (let k = 1; k < waves.length; k++) {
+        const dur =
+          k <= 5
+            ? BOOT_WAVE_DUR_FIRST
+            : Math.max(BOOT_WAVE_DUR_MIN, BOOT_WAVE_DUR_FIRST * Math.pow(BOOT_WAVE_DECAY, k - 5));
+        acc += dur;
+        minStart.push(acc);
+      }
+    }
+
+    const morphSeqAtBoot = morphSeq;
+    // El reloj del pacing arranca con la PRIMERA señal de progreso real
+    // (primer setBootGrowthProgress): entre createParticleField y el
+    // arranque del render/feed pueden pasar segundos de init (WebGPU,
+    // PMREM, UI) en los que nadie vería las primeras olas — sin esto,
+    // el 1→2→3→5 se quemaba durante la init en máquinas lentas.
+    let t0: number | null = null;
+    const visibleCells: number[] = [seed];
+    let born = 1; // células ya agendadas (la semilla cuenta)
+    let waveIdx = 0;
+    let draining = false;
+    bootAnimating = true;
+
+    /** Padre de una hija: la visible más cercana a su hogar con
+     * preferencia por mismo dominio — la lógica de nearestStable,
+     * muestreada como pickAnchorNear (olas de miles: O(N) por hija no
+     * cabe en un frame). */
+    function pickBootParent(home: readonly [number, number, number], domain: string): number {
+      let best = -1;
+      let bestD = Infinity;
+      let bestDom = -1;
+      let bestDomD = Infinity;
+      const samples = Math.min(visibleCells.length, 200);
+      for (let s = 0; s < samples; s++) {
+        const j = visibleCells[(Math.random() * visibleCells.length) | 0];
+        const d = distSq(homeOf(j), home);
+        if (d < bestD) {
+          bestD = d;
+          best = j;
+        }
+        if (domainOfCell(j) === domain && d < bestDomD) {
+          bestDomD = d;
+          bestDom = j;
+        }
+      }
+      const picked = bestDom !== -1 ? bestDom : best;
+      return picked !== -1 ? picked : visibleCells[0];
+    }
+
+    interface BootItem {
+      id: number;
+      startAt: number; // epoch ms — jitter de arranque dentro de la ola
+      startEpoch: number; // -1 hasta que arranca la mitosis
+      duration: number;
+      toScale: number;
+    }
+
+    return new Promise<void>((resolve) => {
+      const items = new Set<BootItem>();
+      let settled = false;
+      function resolveOnce(): void {
+        if (settled) return;
+        settled = true;
+        bootAnimating = false;
+        clearInterval(watchdog);
+        resolve();
+      }
+
+      /** Agenda los nacimientos de queue[born-1 .. upTo-1]: cada hija
+       * nace por mitosis (aAnim tipo 2) junto a su padre — ordenadas de
+       * más cerca a más lejos del padre para que cada ola se vea crecer
+       * hacia afuera. Las primeras ~150 nacen con BOOST de escala (hasta
+       * ×5 en la segunda célula, decae lineal a ×1) que luego se asienta
+       * suavemente al tamaño real en tick(): a tamaño/brillo clásico las
+       * primeras olas serían puntos indistinguibles a esta distancia de
+       * cámara, y el pedido explícito es VER el 1→2→3→5→8 dividirse. El
+       * estado final (escala real) queda intacto. `boosted` vive fuera
+       * (la semilla también entra). */
+      function launchBirths(upTo: number, now: number): void {
+        const batch: { id: number; parentD: number }[] = [];
+        while (born < upTo) {
+          const id = queue[born - 1];
+          born++;
+          const home = homeOf(id);
+          const parent = pickBootParent(home, domainOfCell(id));
+          batch.push({ id, parentD: distSq(homeOf(parent), home) });
+          visibleCells.push(id);
+        }
+        batch.sort((a, b) => a.parentD - b.parentD);
+        for (const { id } of batch) {
+          const trueScale = baseScaleOfCell(id);
+          const boost = 1 + 4 * Math.max(0, 1 - born / 150);
+          if (boost > 1.001) boosted.push({ id, trueScale });
+          items.add({
+            id,
+            startAt: now + Math.random() * 120,
+            startEpoch: -1,
+            duration: 280 + Math.random() * 140,
+            toScale: trueScale * boost,
+          });
+        }
+      }
+
+      function flushAll(): void {
+        // Interrupción (otro boot o un morph): todo a estado final de
+        // inmediato — la siguiente clasificación por estado real
+        // (scaleArray) parte consistente.
+        for (const item of items) {
+          writeInstance(item.id, homeOf(item.id), item.toScale);
+          clearInstanceAnim(item.id);
+        }
+        items.clear();
+        for (const b of boosted) writeInstance(b.id, homeOf(b.id), b.trueScale);
+        boosted.length = 0;
+        while (born <= total && born - 1 < queue.length) {
+          const id = queue[born - 1];
+          born++;
+          writeInstance(id, homeOf(id), baseScaleOfCell(id));
+        }
+        markInstancesDirty();
+        animAttribute.needsUpdate = true;
+      }
+
+      function tick(): void {
+        if (settled) return;
+        if (seq !== bootSeq || morphSeq !== morphSeqAtBoot) {
+          flushAll();
+          resolveOnce();
+          return;
+        }
+        const now = performance.now();
+        if (t0 === null) {
+          if (bootFraction > 0) {
+            t0 = now;
+          } else {
+            // Aún no hay señal de progreso real (init de GPU/UI en
+            // curso): la semilla espera visible, las olas no arrancan.
+            requestAnimationFrame(tick);
+            return;
+          }
+        }
+        const elapsed = now - t0;
+
+        // Drenado: la carga terminó (fraction=1) y quedan olas — se
+        // comprimen en ≤ BOOT_DRAIN_MS.
+        if (!draining && bootFraction >= 1 && waveIdx < waves.length - 1) {
+          draining = true;
+          const remaining = waves.length - 1 - waveIdx;
+          const step = Math.min(BOOT_DRAIN_MS / Math.max(remaining, 1), 120);
+          for (let k = waveIdx + 1; k < waves.length; k++) {
+            minStart[k] = elapsed + step * (k - waveIdx);
+          }
+        }
+        while (waveIdx < waves.length - 1 && elapsed >= minStart[waveIdx + 1]) waveIdx++;
+        // Nunca más rápido que el progreso real: tope poblacional por
+        // fracción (la semilla siempre cuenta como 1).
+        const fracCap = Math.max(1, Math.floor(total * Math.min(Math.max(bootFraction, 0), 1)));
+        const cap = Math.min(waves[waveIdx], fracCap);
+        if (cap > born) launchBirths(cap, now);
+
+        // Progreso de las mitosis activas — mismo driver que el morph
+        // de nivel (parámetros una vez, 1 float de progreso por cuadro).
+        for (const item of items) {
+          if (item.startEpoch < 0) {
+            if (now < item.startAt) continue;
+            item.startEpoch = now;
+            // La hija nace a tamaño completo junto a su padre (el eje
+            // lo deriva el shader por hash) y se separa estirada hacia
+            // su hogar real.
+            homeScaleAttr[item.id * 4 + 3] = item.toScale;
+            setInstanceAnim(item.id, 2, 0.55, 5);
+          }
+          const localT = Math.min((now - item.startEpoch) / item.duration, 1);
+          animAttr[item.id * 4 + 1] = 1 - Math.pow(1 - localT, 3);
+          if (localT >= 1) {
+            writeInstance(item.id, homeOf(item.id), item.toScale);
+            clearInstanceAnim(item.id);
+            items.delete(item);
+          }
+        }
+        // Asentado del boost de las primeras células hacia su escala
+        // real (ease por frame — la sensación es de "zoom que se
+        // estabiliza", nunca un salto).
+        for (let i = boosted.length - 1; i >= 0; i--) {
+          const b = boosted[i];
+          const o = b.id * 4 + 3;
+          const nw = b.trueScale + (homeScaleAttr[o] - b.trueScale) * 0.985;
+          if (nw - b.trueScale < 0.002) {
+            writeInstance(b.id, homeOf(b.id), b.trueScale);
+            boosted.splice(i, 1);
+          } else {
+            homeScaleAttr[o] = nw;
+          }
+        }
+        markInstancesDirty();
+        animAttribute.needsUpdate = true;
+
+        if (born >= total && items.size === 0) {
+          // Snap final: lo que aún estuviera asentándose queda en su
+          // escala real exacta (a esta altura la diferencia es <2%).
+          for (const b of boosted) writeInstance(b.id, homeOf(b.id), b.trueScale);
+          boosted.length = 0;
+          markInstancesDirty();
+          resolveOnce();
+          return;
+        }
+        requestAnimationFrame(tick);
+      }
+
+      // Watchdog: Chrome pausa rAF en pestañas en segundo plano — el
+      // scheduling es por reloj (performance.now), así que un intervalo
+      // de refuerzo mantiene el boot avanzando aunque no haya cuadros.
+      const watchdog = setInterval(tick, 250);
+      requestAnimationFrame(tick);
+    });
   }
 
   // P2 — mode morph (mitosis/fusión). `currentAllowed` es null hasta la
@@ -1400,6 +1715,8 @@ export function createParticleField(
     pickInstanceAtRay,
     setPartOfSpeechFilter,
     revealProgressively,
+    growCellularBoot,
+    setBootGrowthProgress,
     morphToPartOfSpeechFilter,
     estimateMorphDuration,
     setSimilarityLines,

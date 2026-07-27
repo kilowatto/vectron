@@ -227,9 +227,12 @@ async function main() {
     },
   });
   engine.scene.add(field.group);
-  // Boot vacío — se puebla durante el resto del boot hacia el conteo
-  // celular del modo guardado (o Avanzado si aún no hay, ver MODE_CELLS).
-  field.revealProgressively(0, bootAllowedIds, MODE_CELLS[bootStoredMode ?? "avanzado"]);
+  // Boot de crecimiento celular: arranca con UNA célula y crece en olas
+  // Fibonacci aceleradas hacia el conteo del modo guardado (o Avanzado
+  // si aún no hay, ver MODE_CELLS). La promesa resuelve cuando la
+  // población está completa; el ritmo lo alimenta
+  // setBootGrowthProgress más abajo con el progreso REAL de carga.
+  const bootGrowthDone = field.growCellularBoot(bootAllowedIds, MODE_CELLS[bootStoredMode ?? "avanzado"]);
   countLabel.textContent = "0 embeddings";
 
   // Cámara de Contexto 3D (DOCs/13 §2.7/§6, Phase 2) — vive lejos del
@@ -673,8 +676,8 @@ async function main() {
         !reducedMotionMQ.matches && !card?.isPinned() && liveTokenCount === 0 && pressedNav.size === 0;
       if (contextChamber.group.visible) contextChamber.update(dt);
       // Actividad para el render-on-demand del tier Lite (F2 §5.4):
-      // durante el boot (reveal) o cualquier animación celular/resorte,
-      // el cuadro se renderiza aunque no haya input.
+      // durante el boot (crecimiento celular) o cualquier animación
+      // celular/resorte, el cuadro se renderiza aunque no haya input.
       return !appReady || field.isAnimating();
     },
     (fps) => {
@@ -693,22 +696,32 @@ async function main() {
   // Corre en paralelo con la animación de poblado (no depende de ella):
   // ambas deben terminar antes de dar por listo el arranque.
   splash.setProgress(65, t("bootTokenizers", lang));
-  const revealDone = new Promise<void>((resolve) => {
+  let tokenizersReady = false;
+  const tokenizersDone = Promise.all([tokenizeBPE(" "), tokenizeBGE(" ")]).then(() => {
+    tokenizersReady = true;
+  });
+  const revealTotal = bootAllowedIds?.length ?? concepts.length;
+  const progressFeedDone = new Promise<void>((resolve) => {
     const start = performance.now();
-    const durationMs = 2200;
-    const revealTotal = bootAllowedIds?.length ?? concepts.length;
+    const targetMs = 8000; // objetivo de carga ~8s (F1.3b)
     function step() {
-      const elapsed = Math.min((performance.now() - start) / durationMs, 1);
-      field.revealProgressively(elapsed, bootAllowedIds, MODE_CELLS[bootStoredMode ?? "avanzado"]);
-      splash.setProgress(65 + elapsed * 35, t(elapsed < 0.6 ? "bootTokenizers" : "bootWarm", lang));
-      const shown = Math.round(elapsed * revealTotal);
+      // El crecimiento celular sigue el progreso REAL: el reloj marca el
+      // ritmo (objetivo ~8s — las olas Fibonacci deben VERSE aunque la
+      // red sea instantánea) y la carga verdadera pone el techo: la
+      // fracción nunca pasa de 0.92 antes de terminar. Si la carga
+      // tarda más que el reloj, las olas esperan; si termina tarde,
+      // growCellularBoot drena las que falten en ≤2s.
+      const fraction = Math.min((performance.now() - start) / targetMs, tokenizersReady ? 1 : 0.92);
+      field.setBootGrowthProgress(fraction);
+      splash.setProgress(65 + fraction * 35, t(fraction < 0.6 ? "bootTokenizers" : "bootWarm", lang));
+      const shown = Math.round(fraction * revealTotal);
       countLabel.textContent = `${shown.toLocaleString(lang === "en" ? "en-US" : "es-MX")} embeddings`;
-      if (elapsed < 1) requestAnimationFrame(step);
+      if (fraction < 1) requestAnimationFrame(step);
       else resolve();
     }
     requestAnimationFrame(step);
   });
-  await Promise.all([tokenizeBPE(" "), tokenizeBGE(" "), revealDone]);
+  await Promise.all([tokenizersDone, progressFeedDone, bootGrowthDone]);
 
   splash.setProgress(100, t("bootReady", lang));
   await splash.finish(); // crossfade-out ANTES de level-select — nunca se superponen
