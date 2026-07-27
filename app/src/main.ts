@@ -218,8 +218,18 @@ async function main() {
   const pmrem = new THREE.PMREMGenerator(engine.renderer);
   const cubeEnvMap = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
   pmrem.dispose();
+  // Portadoras necesarias = el peor caso entre los tres niveles:
+  // (células del nivel − conceptos reales visibles en ese nivel). Se
+  // calcula del dataset REAL en cada arranque, así el cubo sigue
+  // cumpliendo R-3 (15k/20k/25k) a medida que el auto-grow lo engorda,
+  // en vez de depender de un tope escrito a mano.
+  const carrierHeadroom = (Object.keys(MODE_CELLS) as Mode[]).reduce((max, mode) => {
+    const realVisible = concepts.filter((c) => MODE_POS[mode].has(c.partOfSpeech)).length;
+    return Math.max(max, MODE_CELLS[mode] - realVisible);
+  }, 0);
   const field = createParticleField(concepts, {
     envMap: cubeEnvMap,
+    carrierHeadroom,
     onFocusChange: (active) => {
       tweenNumber(cubeEdgeMaterial.opacity, active ? 0.015 : CUBE_EDGE_OPACITY, 300, (v) => {
         cubeEdgeMaterial.opacity = v;
@@ -253,7 +263,23 @@ async function main() {
   // tiene histéresis asimétrica, nunca oscila, y toda degradación es
   // REVERSIBLE y COMUNICADA (tag "modo rendimiento" al bajar).
   const governor = createQualityGovernor();
-  engine.attachQualityGovernor(governor);
+  // OJO: el governor NO se engancha aquí. Se engancha DESPUÉS de que el
+  // boot celular termina (ver `engine.attachQualityGovernor` más abajo,
+  // tras el `await Promise.all([...bootGrowthDone])`).
+  //
+  // Bug real reportado en vivo ("no salen todas las partículas"): el
+  // boot tarda ~8 s construyendo la población célula por célula, y en
+  // ese tramo los FPS son los PEORES de toda la sesión (miles de
+  // mitosis + tokenizadores + horneado del PMREM compitiendo). El
+  // warmup del governor es de 2 s, así que a los ~3.5 s ya estaba
+  // dictando sentencia sobre una escena que todavía no existía —
+  // medido con el governor en aislamiento: a 40 fps baja a `medium` y
+  // deja Intermedio en 15 000 células, a 30 fps baja a `low` (10 000) y
+  // a 20 fps a `lite` (5 000). Es decir, el propio acto de construir el
+  // cubo disparaba el recorte de lo que se estaba construyendo, y el
+  // resultado violaba la decisión R-3 del usuario (15k/20k/25k), que es
+  // ley. Las palancas iniciales (DPR/bloom/tier detectado) sí se
+  // aplican desde ya — lo único que espera es el JUICIO por FPS.
   let qualityTagTimer: ReturnType<typeof setTimeout> | null = null;
   function applyQualityLevers(levers: QualityLevers, tier: string, direction: "down" | "up" | "initial") {
     engine.setDprCap(levers.dpr);
@@ -592,6 +618,38 @@ async function main() {
     [...keyNavEl.querySelectorAll<HTMLSpanElement>(".knh-key")].map((el) => [el.dataset.key, el]),
   );
 
+  // ── Controles fijos de escena (D-1) ──────────────────────────────
+  // "Restablecer vista" es, según la propia investigación, el cambio con
+  // más evidencia detrás de todo el informe: TODOS los exploradores 3D
+  // del prior art lo tienen, y el estudio de ViewCube documenta usuarios
+  // describiéndolo como su mecanismo de recuperación cuando se
+  // desorientan. Vectron no tenía ninguno — y `saveState()`/`reset()` ya
+  // venían en OrbitControls sin usarse.
+  engine.controls.saveState(); // pose de arranque = la que restaura ⌂
+  const resetViewBtn = document.querySelector<HTMLButtonElement>("#btn-reset-view")!;
+  const zoomInBtn = document.querySelector<HTMLButtonElement>("#btn-zoom-in")!;
+  const zoomOutBtn = document.querySelector<HTMLButtonElement>("#btn-zoom-out")!;
+
+  resetViewBtn.addEventListener("click", () => {
+    cancelFly();
+    engine.controls.reset();
+    // Devolver el foco a la escena: quien acaba de recuperarse de estar
+    // perdido lo más probable es que quiera seguir navegando.
+    canvas.focus();
+  });
+
+  // Zoom por botón = la alternativa SIN ARRASTRE que exige WCAG 2.5.7
+  // (nivel AA) para orbitar/zoom, que hoy sólo existen como gestos.
+  function nudgeZoom(factor: number) {
+    cancelFly();
+    const controls = engine.controls;
+    const offset = engine.camera.position.clone().sub(controls.target);
+    const next = THREE.MathUtils.clamp(offset.length() * factor, controls.minDistance, controls.maxDistance);
+    engine.camera.position.copy(controls.target).add(offset.setLength(next));
+  }
+  zoomInBtn.addEventListener("click", () => nudgeZoom(0.8));
+  zoomOutBtn.addEventListener("click", () => nudgeZoom(1.25));
+
   type NavDir = "forward" | "back" | "left" | "right";
   const NAV_KEYS: Record<string, NavDir> = {
     w: "forward",
@@ -622,25 +680,43 @@ async function main() {
     }
   }
 
-  window.addEventListener("keydown", (event) => {
+  // Las teclas de navegación viven en el CANVAS, no en `window` (ver el
+  // comentario de `tabindex` en index.html): colgadas de `window` eran
+  // atajos globales de un solo carácter, que es justo lo que WCAG 2.1.4
+  // (nivel A) prohíbe salvo que se puedan apagar, remapear, o estén
+  // activos sólo con el foco puesto. Esta es la tercera vía.
+  //
+  // `isTypingTarget()` se conserva por si el foco vive en un input DENTRO
+  // del canvas o de un shadow root anidado — cinturón y tirantes.
+  canvas.addEventListener("keydown", (event) => {
     if (event.repeat || isTypingTarget()) return;
     const dir = NAV_KEYS[event.key.toLowerCase()];
     if (!dir) return;
+    // La escena consume la tecla: si no, las flechas ADEMÁS hacen scroll
+    // del dock (conflicto real reportado en la auditoría 18).
+    event.preventDefault();
     pressedNav.add(dir);
     setNavKeyVisual(dir, true);
   });
-  window.addEventListener("keyup", (event) => {
+  canvas.addEventListener("keyup", (event) => {
     const dir = NAV_KEYS[event.key.toLowerCase()];
     if (!dir) return;
     pressedNav.delete(dir);
     setNavKeyVisual(dir, false);
   });
-  // Alt-tab / devtools a medio soltar una tecla no debe dejar la cámara
-  // moviéndose sola para siempre.
-  window.addEventListener("blur", () => {
+  // Soltar todo al perder el foco — tanto por alt-tab (window) como por
+  // salir del canvas con Tab: si no, la cámara se queda moviéndose sola.
+  const releaseNavKeys = () => {
     pressedNav.clear();
     keyNavEls.forEach((el) => el.classList.remove("active"));
-  });
+  };
+  canvas.addEventListener("blur", releaseNavKeys);
+  window.addEventListener("blur", releaseNavKeys);
+  // La pista de teclas sólo se muestra cuando de verdad sirven, o sea con
+  // el canvas enfocado — y así deja de anunciar un control que en ese
+  // momento no responde.
+  canvas.addEventListener("focus", () => cubePaneEl.classList.add("scene-focused"));
+  canvas.addEventListener("blur", () => cubePaneEl.classList.remove("scene-focused"));
 
   const NAV_ORBIT_SPEED = 1.1; // rad/s
   const NAV_DOLLY_SPEED = 1.6; // factor exponencial de distancia/s
@@ -722,6 +798,12 @@ async function main() {
     requestAnimationFrame(step);
   });
   await Promise.all([tokenizersDone, progressFeedDone, bootGrowthDone]);
+
+  // Recién AHORA el governor empieza a medir: la población ya está
+  // completa, así que los FPS que lea son los de la escena real y no
+  // los del proceso de construirla (ver el comentario largo donde se
+  // crea). A partir de aquí sí debe degradar si de verdad hace falta.
+  engine.attachQualityGovernor(governor);
 
   splash.setProgress(100, t("bootReady", lang));
   await splash.finish(); // crossfade-out ANTES de level-select — nunca se superponen
@@ -1191,6 +1273,17 @@ async function main() {
   // conservando la dirección de vista actual — después del vuelo, orbitar
   // y hacer zoom giran alrededor de la partícula, no del centro.
   const flyState = { id: 0 };
+  // Cualquier gesto del usuario ABORTA el vuelo en curso. Sin esto, un
+  // vuelo es un estado modal disfrazado: durante ~1s la cámara pelea con
+  // el arrastre del usuario y gana ella. Basta con invalidar el id — el
+  // `tick` se detiene solo en su siguiente cuadro y OrbitControls sigue
+  // desde donde quedó la cámara, sin salto.
+  const cancelFly = () => {
+    flyState.id++;
+  };
+  canvas.addEventListener("pointerdown", cancelFly);
+  canvas.addEventListener("wheel", cancelFly, { passive: true });
+
   function flyTo(worldPos: THREE.Vector3 | null, distanceOverride?: number) {
     const id = ++flyState.id;
     const controls = engine.controls;
@@ -1209,14 +1302,51 @@ async function main() {
     const fromT = controls.target.clone();
     const fromC = camera.position.clone();
     const toC = dest.clone().add(dir.multiplyScalar(targetDist));
-    const duration = 700;
+
+    // `prefers-reduced-motion` ⇒ CORTE, no vuelo. Y corte, no vuelo
+    // corto: acortar sube la velocidad angular, que para una sensibilidad
+    // vestibular es PEOR que el vuelo largo. La media query lo permite
+    // explícitamente — dice "remueve O REEMPLAZA" el movimiento.
+    if (reducedMotionMQ.matches) {
+      controls.target.copy(dest);
+      camera.position.copy(toC);
+      return;
+    }
+
+    // Duración proporcional al trayecto, no fija. van Wijk & Nuij (2003)
+    // dan la única formulación con principio: duración = trayecto ÷ V.
+    // Un clic en una partícula vecina no puede tardar lo mismo que uno
+    // que cruza el cubo entero — con 700 ms fijos, el primero se sentía
+    // moroso y el segundo atropellado.
+    const travel = fromC.distanceTo(toC) + fromT.distanceTo(dest);
+    const duration = THREE.MathUtils.clamp(380 + travel * 210, 380, 1150);
+
+    // Arqueo hacia afuera. ESTE es el mecanismo de preservación de
+    // orientación: van Wijk & Nuij muestran que hay que alejarse lo
+    // suficiente para que el punto de partida y el de llegada sean
+    // visibles A LA VEZ en algún momento del vuelo. Una interpolación
+    // recta (lo que había) nunca le enseña al usuario la relación entre
+    // de dónde venía y a dónde va: aparece en otro lado sin más. El arco
+    // es proporcional al trayecto, así que un salto corto casi no se
+    // arquea y uno largo sí sube a mirar el conjunto.
+    const arc = Math.min(travel * 0.28, 1.6);
+
     const start = performance.now();
     function tick() {
       if (id !== flyState.id) return; // otro vuelo lo reemplazó
       const t = Math.min((performance.now() - start) / duration, 1);
-      const e = 1 - Math.pow(1 - t, 3);
+      // Slow-in/slow-out: la única familia de easing que la literatura
+      // compara y da ganadora (Dragicevic et al. 2011). Antes era
+      // ease-out puro, que arranca de golpe.
+      const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
       controls.target.lerpVectors(fromT, dest, e);
       camera.position.lerpVectors(fromC, toC, e);
+      // sin(πt): cero en los extremos, máximo a mitad de vuelo — la
+      // cámara se aleja del pivote y vuelve, sin alterar dónde termina.
+      if (arc > 0) {
+        const lift = Math.sin(e * Math.PI) * arc;
+        camera.position.addScaledVector(camera.position.clone().sub(controls.target).normalize(), lift);
+      }
       if (t < 1) requestAnimationFrame(tick);
     }
     requestAnimationFrame(tick);

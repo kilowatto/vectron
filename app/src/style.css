@@ -32,6 +32,11 @@ body,
   width: 100%;
   height: 100%;
   overflow: hidden;
+  /* `overflow: hidden` NO basta para frenar los gestos del navegador:
+     Chrome Android sigue disparando pull-to-refresh y el deslizamiento
+     horizontal de navegación sobre un canvas a sangre completa. Sólo
+     `overscroll-behavior` los desactiva. */
+  overscroll-behavior: none;
   background: #05070a;
 }
 
@@ -270,6 +275,75 @@ body {
   touch-action: none;
 }
 
+/* El canvas es enfocable (ver index.html), así que NECESITA indicador de
+   foco visible — WCAG 2.4.7. Un anillo interior, porque el canvas ocupa
+   todo el panel y un outline exterior quedaría fuera de cuadro. Sólo con
+   :focus-visible: el clic del ratón no debe dibujar el anillo. */
+#scene:focus {
+  outline: none;
+}
+
+#scene:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px rgba(217, 138, 52, 0.9);
+}
+
+/* Controles fijos de escena — ver el comentario en index.html. 48px es
+   el tamaño que satisface a la vez la recomendación de Android (48dp) y
+   el objetivo por defecto de Apple (44pt), así que no hay que elegir. */
+#scene-controls {
+  position: absolute;
+  z-index: 14;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: max(18px, env(safe-area-inset-bottom));
+  display: flex;
+  gap: 8px;
+}
+
+.scene-ctl {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  line-height: 1;
+  color: rgba(233, 226, 214, 0.72);
+  background: rgba(10, 14, 20, 0.62);
+  border: 1px solid rgba(233, 226, 214, 0.16);
+  border-radius: 12px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.scene-ctl:hover {
+  color: rgba(233, 226, 214, 0.95);
+  background: rgba(16, 22, 30, 0.82);
+}
+
+.scene-ctl:focus-visible {
+  outline: 2px solid rgba(217, 138, 52, 0.9);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scene-ctl {
+    transition: none;
+  }
+}
+
+/* El contenido alternativo del canvas sólo lo leen los lectores de
+   pantalla / navegadores sin canvas — nunca debe verse. */
+#scene-fallback {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 #hud {
   position: absolute;
   inset: 0;
@@ -470,9 +544,18 @@ body {
     z-index: 12;
     right: max(20px, env(safe-area-inset-right));
     bottom: max(24px, env(safe-area-inset-bottom));
-    opacity: 0.4;
+    /* Atenuada mientras la escena NO tiene el foco: desde que las teclas
+       viven en el canvas (ver main.ts), anunciarlas a pleno brillo sin
+       foco sería prometer un control que en ese momento no responde. Al
+       enfocar sube — y eso mismo enseña que hay que hacer clic en la
+       escena primero. */
+    opacity: 0.18;
     transition: opacity 0.25s ease;
     pointer-events: none;
+  }
+
+  #cube-pane.scene-focused #key-nav-hint {
+    opacity: 0.55;
   }
 
   #key-nav-hint:hover {

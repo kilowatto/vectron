@@ -19,14 +19,27 @@ interface CameraRig {
 }
 
 /** Factor sobre la SUMA de radios que cuenta como "demasiado cerca" —
- * una sola constante compartida por el reintento al crear
+ * una sola FUENTE compartida por el reintento al crear
  * (`startDivide`'s retry) y por la relajación continua (`declump`) en
  * vez de dos números afinados por separado, precisamente porque dos
  * copias de la misma idea desincronizándose ya causó bugs reales en
  * esta sesión (ver comentario de DEFAULT_CONFIG.material). >1 deja un
  * margen sobre "apenas tocándose" para que el jitter browniano no
- * las haga rozarse visiblemente. */
-const MIN_SEPARATION_FACTOR = 1.15;
+ * las haga rozarse visiblemente.
+ *
+ * Ya no es constante: crece con la población (ver `spreadFrom` en
+ * particulaConfig.ts). Con 1.15 fijo, la separación LOCAL era idéntica
+ * con 2 células que con 25 000 — la nube ganaba radio pero por dentro
+ * seguía siendo una masa compacta sin huecos por donde navegar, que es
+ * justo lo que el usuario reportó con captura a 25 000. */
+function minSeparationFactor(population: number): number {
+  const { spreadFrom, spreadFullAt, spreadFactorNear, spreadFactorFar } = DEFAULT_CONFIG.batch;
+  if (population <= spreadFrom) return spreadFactorNear;
+  if (population >= spreadFullAt) return spreadFactorFar;
+  const t = Math.log(population / spreadFrom) / Math.log(spreadFullAt / spreadFrom);
+  const eased = t * t * (3 - 2 * t);
+  return spreadFactorNear + (spreadFactorFar - spreadFactorNear) * eased;
+}
 
 /** Deformación sutil hacia una silueta tipo "cerebro" — pedido
  * explícito del usuario ("que esta nube se vaya formando un cerebro,
@@ -157,8 +170,11 @@ function onFinish(anim: Animation, onDone: () => void): Animation {
 export interface BatchOptions {
   mode: "dividir" | "unir";
   variantKey: string;
-  targetCount: number;
+  /** Techo de duración por operación — la real la calcula
+   * `batchOperationDuration` según cuántas células haya en ese momento
+   * (aceleración progresiva, ver DEFAULT_CONFIG.batch.speedUpFrom). */
   duration: number;
+  targetCount: number;
   maxConcurrent: number;
   staggerSeconds: number;
   autoReframe: boolean;
@@ -400,15 +416,22 @@ export class ParticulaState {
     for (const rec of this.particles.values()) {
       if (rec.mesh) result.push(rec.mesh);
     }
-    // En modo líquido la única malla es el InstancedMesh compartido —
-    // el raycast sí puede pegarle (las matrices de instancia se
-    // escriben en setSlot para esto); el pick resuelve la partícula
-    // por instanceId vía `particleIdAtSlot`.
-    if (this.liquidField) result.push(this.liquidField.mesh);
+    // El InstancedMesh líquido NO va aquí: ya no tiene `instanceMatrix`
+    // (ver liquidParticle.ts — ocupaba un vertex buffer por encima del
+    // tope de WebGPU), así que un raycast de THREE no sabría dónde está
+    // cada instancia. Su selección se resuelve con `pickLiquidAtRay`.
     return result;
   }
 
-  /** instanceId del raycast → id de partícula (sólo modo líquido). */
+  /** Partícula líquida bajo el rayo, o null si no hay campo líquido /
+   * no le pega a ninguna. */
+  pickLiquidAtRay(raycaster: THREE.Raycaster): number | null {
+    if (!this.liquidField) return null;
+    const slot = this.liquidField.pickSlotAtRay(raycaster);
+    return slot === null ? null : this.particleIdAtSlot(slot);
+  }
+
+  /** slot del campo líquido → id de partícula. */
   particleIdAtSlot(slot: number): number | null {
     return this.liquidSlotOwners[slot]?.id ?? null;
   }
@@ -988,7 +1011,62 @@ export class ParticulaState {
     const instancedActive = this.particleStyle === "liquid" ? this.liquidActiveCount : this.instanceActiveCount;
     const instancedRadius = this.particleStyle === "liquid" ? DEFAULT_CONFIG.liquid.radius : INSTANCE_RADIUS;
     const cellRadius = instancedActive > 0 ? instancedRadius : maxRadius;
-    const cellSize = cellRadius * 2 * 1.1;
+    // Separación objetivo de ESTE cuadro (crece con la población, ver
+    // minSeparationFactor). Se lee UNA vez por cuadro, no por pareja:
+    // a 25 000 el bucle interior corre millones de veces.
+    const separation = minSeparationFactor(this.particles.size);
+
+    // ── CONTROL GLOBAL DE DENSIDAD ──────────────────────────────────
+    // La relajación de abajo sólo empuja entre vecinos inmediatos, así
+    // que "hacer sitio" para 25 000 células significa propagar ese
+    // empujón del centro al borde, vecino por vecino. Medido en vivo:
+    // yendo hacia 3.2 diámetros, la nube pasó de 2.14 a 2.51 en 7 s —
+    // habría tardado minutos, y mientras tanto se ve justo lo que el
+    // usuario reportó, una masa compacta sin huecos.
+    //
+    // Un problema de VOLUMEN global no se arregla con empujones
+    // locales: se arregla dimensionando la nube. Para N puntos repartidos
+    // en una bola, la distancia típica al vecino más cercano va como
+    // R/∛N, así que el radio que corresponde a la separación buscada es
+    // ~∛N · minDist. Se compara con el radio real (vía RMS, que es
+    // estable y ya cuesta O(N) dentro de un bucle que de todos modos
+    // recorre todo) y se corrige por homotecia respecto al ORIGEN —
+    // preserva la forma exacta, y el origen es donde nace la semilla y
+    // adonde ancla el atractor de cerebro.
+    //
+    // Corrección acotada por cuadro: la nube se acomoda en ~1 s en vez
+    // de saltar, y la relajación se queda con lo que sí sabe hacer, que
+    // es el detalle local (evitar traslapes concretos).
+    if (n > 8) {
+      let sumSq = 0;
+      for (let k = 0; k < n; k++) sumSq += s.px[k] * s.px[k] + s.py[k] * s.py[k] + s.pz[k] * s.pz[k];
+      const rms = Math.sqrt(sumSq / n);
+      if (rms > 1e-4) {
+        const targetRms = Math.cbrt(n) * cellRadius * 2 * separation * DEFAULT_CONFIG.batch.spreadPacking;
+        const raw = targetRms / rms;
+        const grow = Math.min(1.03, Math.max(0.99, raw)); // sube rápido, encoge con calma
+        if (Math.abs(grow - 1) > 1e-4) {
+          for (const rec of this.particles.values()) rec.home.multiplyScalar(grow);
+          for (let k = 0; k < n; k++) {
+            s.px[k] *= grow;
+            s.py[k] *= grow;
+            s.pz[k] *= grow;
+          }
+        }
+      }
+    }
+
+    // La celda DEBE cubrir la distancia mínima buscada, o el hash 3×3×3
+    // dejaría de ver parejas que sí hay que separar y la relajación se
+    // quedaría corta justo cuando más se necesita. Antes el 1.1 fijo ya
+    // se quedaba por debajo del 1.15 real; ahora escala con la
+    // separación (+5% de margen).
+    //
+    // No encarece: al separarse más, la densidad cae con el CUBO de la
+    // separación, así que una celda proporcionalmente más grande
+    // termina conteniendo el mismo número de vecinos. Los dos efectos
+    // se cancelan una vez que la relajación converge.
+    const cellSize = cellRadius * 2 * separation * 1.05;
     const invCellSize = 1 / cellSize;
     // Offset/máscara de 10 bits por eje: soporta celdas en
     // [-512, 511] por eje (miles de unidades de mundo a este tamaño de
@@ -1040,7 +1118,7 @@ export class ParticulaState {
           const diffY = s.py[a] - s.py[b];
           const diffZ = s.pz[a] - s.pz[b];
           const d = Math.sqrt(diffX * diffX + diffY * diffY + diffZ * diffZ);
-          const minDist = (s.r[a] + s.r[b]) * MIN_SEPARATION_FACTOR;
+          const minDist = (s.r[a] + s.r[b]) * separation;
           if (d > 1e-6 && d < minDist) {
             const overlap = minDist - d;
             const mag = overlap * 0.5 * correctionRate * dt;
@@ -1244,7 +1322,7 @@ export class ParticulaState {
     // ya existente) — ver `isTooClose`. Con un eje isotrópico de
     // verdad esto casi nunca hace falta más de 1-2 intentos salvo en
     // zonas ya muy densas.
-    const minDist = parentRadius * 2 * MIN_SEPARATION_FACTOR;
+    const minDist = parentRadius * 2 * minSeparationFactor(this.particles.size);
     let dir = this.randomIsotropicAxis();
     let posA = origin.clone().addScaledVector(dir, separation);
     let posB = origin.clone().addScaledVector(dir, -separation);
@@ -1793,6 +1871,24 @@ export class ParticulaState {
    * terminar la animación) — `this.particles.size` ya refleja el
    * conteo real en cada oleada, nunca hay que adivinar cuántas están
    * "en camino". */
+  /** Duración real de UNA operación del lote, según cuántas células hay
+   * AHORA (no según el progreso hacia el objetivo): pocas → duración
+   * íntegra y la mitosis se lee; muchas → hasta `speedUpFloor` del
+   * techo. Depender de la población actual y no de la dirección hace
+   * que unir se comporte solo: con miles va rápido, y conforme se
+   * fusionan y quedan pocas vuelve a frenarse, así las últimas también
+   * se ven. Rampa logarítmica + suavizado — ver el comentario de
+   * `speedUpFrom` en particulaConfig.ts. */
+  private batchOperationDuration(ceiling: number): number {
+    const { speedUpFrom, speedUpFullAt, speedUpFloor } = DEFAULT_CONFIG.batch;
+    const n = this.particles.size;
+    if (n <= speedUpFrom) return ceiling;
+    if (n >= speedUpFullAt) return ceiling * speedUpFloor;
+    const t = Math.log(n / speedUpFrom) / Math.log(speedUpFullAt / speedUpFrom);
+    const eased = t * t * (3 - 2 * t); // smoothstep: sin escalones en los extremos
+    return ceiling * (1 - eased * (1 - speedUpFloor));
+  }
+
   private runDivideWave(opts: BatchOptions) {
     const needed = opts.targetCount - this.particles.size;
     if (needed <= 0) return;
@@ -1803,9 +1899,14 @@ export class ParticulaState {
       if (eligible.length >= slots) break;
     }
     const toLaunch = Math.min(slots, needed, eligible.length);
+    // Una sola lectura por oleada, no por operación: todas las de la
+    // misma oleada comparten ritmo (si no, las lanzadas al final de la
+    // oleada irían un pelo más rápido que las del principio y el pulso
+    // del crecimiento se ensuciaría).
+    const duration = this.batchOperationDuration(opts.duration);
     for (let i = 0; i < toLaunch; i++) {
       this.batchInFlight++;
-      this.startDivide(eligible[i], opts.variantKey, opts.duration, () => {
+      this.startDivide(eligible[i], opts.variantKey, duration, () => {
         this.batchInFlight--;
       }, { reframe: false });
     }
@@ -1823,6 +1924,10 @@ export class ParticulaState {
     for (const id of this.particles.keys()) {
       if (!this.lockedIds.has(id)) eligible.add(id);
     }
+    // Misma aceleración que dividir y por la misma vía: como depende de
+    // la población ACTUAL, unir arranca rápido (hay miles) y se va
+    // frenando solo conforme quedan pocas — las últimas fusiones se ven.
+    const duration = this.batchOperationDuration(opts.duration);
     let launched = 0;
     while (launched < slots && eligible.size >= 2 && this.particles.size - launched > opts.targetCount) {
       const idA = eligible.values().next().value as number;
@@ -1841,7 +1946,7 @@ export class ParticulaState {
       eligible.delete(bestId);
       this.batchInFlight++;
       launched++;
-      this.startUnite(idA, bestId, opts.variantKey, opts.duration, () => {
+      this.startUnite(idA, bestId, opts.variantKey, duration, () => {
         this.batchInFlight--;
       }, { reframe: false });
     }

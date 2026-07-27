@@ -222,9 +222,18 @@ export class Liquid2DCellRenderer implements CellularRenderer {
   #core: HTMLCanvasElement;
   #irid: HTMLCanvasElement;
 
-  /** `bodyColor` = masa de color del dominio (dorado Vectron por defecto,
-   * el mismo del renderer provisional). */
-  constructor(canvas: HTMLCanvasElement, bodyColor: readonly [number, number, number] = [217, 138, 52]) {
+  /** `bodyColor` = masa de color de la célula. Por defecto, el MISMO
+   * azul de la semilla del lab `/particula` (`0x5fc9ff` = 95,201,255).
+   *
+   * Antes era el dorado de marca (217,138,52) y ese fue un bug real
+   * reportado en vivo: "el boot tiene una partícula que no es ni la
+   * original ni la que queda". Con el dorado, el arranque mostraba una
+   * TERCERA célula —perla metálica cálida— que no coincidía ni con la
+   * partícula líquida del lab ni con lo que aparece al terminar de
+   * cargar. La célula del loader debe ser la MISMA célula que el
+   * usuario va a seguir viendo; el dorado se queda donde pertenece, en
+   * el texto y el cromo de marca. */
+  constructor(canvas: HTMLCanvasElement, bodyColor: readonly [number, number, number] = [95, 201, 255]) {
     this.#ctx = canvas.getContext("2d")!;
     this.#color = bodyColor;
     this.#body = this.#buildBodySprite();
@@ -377,10 +386,14 @@ export class Liquid2DCellRenderer implements CellularRenderer {
 
     // Rim fresnel base: anillo luminoso uniforme en el borde.
     const rim = g.createRadialGradient(mid, mid, SPRITE_R * 0.7, mid, mid, SPRITE_R);
-    rim.addColorStop(0, "rgba(255, 252, 240, 0)");
-    rim.addColorStop(0.8, "rgba(255, 252, 240, 0.28)");
-    rim.addColorStop(0.95, "rgba(255, 252, 240, 0.55)");
-    rim.addColorStop(1, "rgba(255, 252, 240, 0)");
+    // Blanco neutro, no cálido (antes 255,252,240): el fresnel es luz
+    // reflejada, no tiene color propio — el tono lo pone el cuerpo y la
+    // iridiscencia. Cualquier sesgo cálido aquí volvía a empujar la
+    // célula hacia el bronce.
+    rim.addColorStop(0, "rgba(255, 255, 255, 0)");
+    rim.addColorStop(0.8, "rgba(255, 255, 255, 0.28)");
+    rim.addColorStop(0.95, "rgba(255, 255, 255, 0.55)");
+    rim.addColorStop(1, "rgba(255, 255, 255, 0)");
     g.fillStyle = rim;
     g.fillRect(0, 0, SPRITE_SIZE, SPRITE_SIZE);
 
@@ -411,7 +424,15 @@ export class Liquid2DCellRenderer implements CellularRenderer {
     return sprite;
   }
 
-  /** Sprite del núcleo: hotspot radial cálido (blanco-dorado → dominio). */
+  /** Sprite del núcleo BIOLUMINISCENTE: blanco caliente que decae al
+   * color de la propia célula.
+   *
+   * Antes decaía por dorados fijos (255,244,214 → 255,214,140), que era
+   * la otra mitad de por qué la célula del boot se leía como perla de
+   * bronce por más que el cuerpo cambiara de color. En el shader del
+   * lab el núcleo es `instanceColor` en HDR: el centro satura a blanco
+   * y el halo delata SU tono, nunca uno ajeno. Esto replica eso: la
+   * única parte neutra es el punto más caliente. */
   #buildCoreSprite(): HTMLCanvasElement {
     const sprite = document.createElement("canvas");
     sprite.width = sprite.height = SPRITE_SIZE;
@@ -419,9 +440,9 @@ export class Liquid2DCellRenderer implements CellularRenderer {
     const mid = SPRITE_SIZE / 2;
     const [cr, cg, cb] = this.#color;
     const grad = g.createRadialGradient(mid, mid, 0, mid, mid, SPRITE_R);
-    grad.addColorStop(0, "rgba(255, 244, 214, 0.95)");
-    grad.addColorStop(0.3, "rgba(255, 214, 140, 0.5)");
-    grad.addColorStop(0.65, `rgba(${cr}, ${cg}, ${cb}, 0.18)`);
+    grad.addColorStop(0, "rgba(255, 255, 255, 0.95)");
+    grad.addColorStop(0.3, `rgba(${Math.min(255, cr + 110)}, ${Math.min(255, cg + 45)}, ${Math.min(255, cb + 20)}, 0.5)`);
+    grad.addColorStop(0.65, `rgba(${cr}, ${cg}, ${cb}, 0.22)`);
     grad.addColorStop(1, `rgba(${cr}, ${cg}, ${cb}, 0)`);
     g.fillStyle = grad;
     g.fillRect(0, 0, SPRITE_SIZE, SPRITE_SIZE);

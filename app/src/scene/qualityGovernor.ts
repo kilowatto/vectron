@@ -134,12 +134,24 @@ const DEFAULT_LEVERS: Record<QualityTier, QualityLevers> = {
   // activos (corrección 2026-07-26: la tabla original de 18 §5 mataba
   // el bloom en low y lo recortaba a 0.18 en medium — el usuario lo
   // reportó como "se pierde la textura al cruzar un umbral").
-  medium: { dpr: 1.25, bloomStrength: 0.24, bloomEnabled: true, populationScale: 0.75, postFxEnabled: false, renderOnDemand: false },
-  low: { dpr: 1, bloomStrength: 0.18, bloomEnabled: true, populationScale: 0.5, postFxEnabled: false, renderOnDemand: false },
+  //
+  // La POBLACIÓN es la ÚLTIMA palanca, no la primera. Antes bajaba ya
+  // en medium (0.75) y low (0.5) — corrección tras el reporte "no salen
+  // todas las partículas": el conteo por nivel es la decisión R-3 del
+  // usuario (15k/20k/25k) y es LEY, mientras que DPR y bloom son
+  // exactamente donde se va el costo real de una escena limitada por
+  // fill-rate. Bajar DPR de 2 a 1.25 ya recorta ~61% de fragmentos sin
+  // quitarle NI UNA célula al usuario; tirar el 25% del contenido para
+  // ahorrar mucho menos es empezar por el lado caro en lo pedagógico y
+  // barato en lo técnico. R-5 ("móvil: mismo look con menos células")
+  // se sigue cumpliendo — pero recién cuando las palancas invisibles ya
+  // se agotaron.
+  medium: { dpr: 1.25, bloomStrength: 0.24, bloomEnabled: true, populationScale: 1, postFxEnabled: false, renderOnDemand: false },
+  low: { dpr: 1, bloomStrength: 0.18, bloomEnabled: true, populationScale: 0.75, postFxEnabled: false, renderOnDemand: false },
   // Render-on-demand: loop detenido, renderNow() en interacción. Único
   // tier sin bloom: la escena ya es estática, el costo del glow es
   // cero perceptible pero el ahorro de batería es real.
-  lite: { dpr: 1, bloomStrength: 0, bloomEnabled: false, populationScale: 0.25, postFxEnabled: false, renderOnDemand: true },
+  lite: { dpr: 1, bloomStrength: 0, bloomEnabled: false, populationScale: 0.5, postFxEnabled: false, renderOnDemand: true },
 };
 
 /**

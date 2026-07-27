@@ -12,7 +12,27 @@
     <div id="app">
       <div id="stage">
         <div id="cube-pane">
-          <canvas id="scene"></canvas>
+          <!-- tabindex/role/aria: el canvas TIENE que poder recibir foco.
+               Antes la navegación por teclado colgaba de `window`, así que
+               W/A/S/D y flechas eran atajos globales de un solo carácter —
+               probable incumplimiento de WCAG 2.1.4 (nivel A), que exige
+               poder apagarlos, remapearlos, O que estén activos sólo con el
+               foco puesto. Con foco propio se cumple la tercera vía, el
+               usuario de teclado por fin puede ALCANZAR la escena, y hay
+               dónde pintar el anillo de foco (2.4.7). El contenido interno
+               es el equivalente accesible que exige el estándar HTML para
+               `canvas`. -->
+          <canvas
+            id="scene"
+            tabindex="0"
+            role="application"
+            aria-label="Mapa 3D de conceptos. Usa las flechas para orbitar y acercarte."
+          >
+            <p id="scene-fallback">
+              Mapa 3D de conceptos. Tu navegador no puede mostrarlo, pero la
+              lista de palabras y sus vecinos sigue disponible en el panel.
+            </p>
+          </canvas>
           <div id="hud">
             <div id="hud-top">
               <span class="brand">VECTRON</span>
@@ -28,6 +48,19 @@
               <span class="dot">·</span>
               <span id="mode-caption" class="tag"></span>
             </div>
+          </div>
+          <!-- Controles fijos mínimos (D-1). Van FUERA de #hud porque el
+               HUD es `pointer-events: none` y estos sí se tocan.
+               Abajo-centro y ≥48px por dos razones: WCAG 2.5.7 exige que
+               todo lo que hoy sólo se hace arrastrando (orbitar, zoom)
+               tenga alternativa sin arrastre; y la investigación de campo
+               sobre agarre del teléfono da ~7 mm de objetivo al centro
+               contra ~12 mm en las esquinas, con 75% de la gente usando
+               un solo pulgar. -->
+          <div id="scene-controls">
+            <button type="button" id="btn-zoom-out" class="scene-ctl" aria-label="Alejar">−</button>
+            <button type="button" id="btn-reset-view" class="scene-ctl" aria-label="Restablecer vista">⌂</button>
+            <button type="button" id="btn-zoom-in" class="scene-ctl" aria-label="Acercar">+</button>
           </div>
         </div>
         <div id="side-pane"></div>

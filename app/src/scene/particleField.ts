@@ -218,6 +218,20 @@ export interface ParticleFieldOptions {
    * scene.environment para no cambiar el look del resto de la escena
    * (contextChamber hornea el suyo propio). */
   envMap: THREE.Texture;
+  /** Células portadoras que hay que poder mostrar ADEMÁS de todos los
+   * conceptos reales — lo calcula quien llama, que es el único que
+   * conoce la matriz POS y el conteo de cada nivel:
+   * `max(nivel.celdas − conceptosVisiblesEnEseNivel)`.
+   *
+   * Existe porque la capacidad NO puede ser una constante: el dataset
+   * crece solo (cron de auto-grow) y ya va en 19 442 conceptos. Con el
+   * tope fijo de 25 000 de antes, las portadoras disponibles eran
+   * 25 000 − 19 442 = 5 558 cuando Avanzado necesitaba 5 632, así que
+   * Avanzado topaba en 24 926 células y nunca alcanzaba las 25 000 que
+   * manda R-3 (medido en vivo). Peor: es una bomba de tiempo — cuando
+   * el dataset cruce los 25 000 conceptos, el cubo empezaría a NO
+   * poder mostrar conceptos que sí existen. */
+  carrierHeadroom: number;
 }
 
 /** Look del material líquido en el CUBO (F1.4 — port del ganador del
@@ -299,8 +313,11 @@ export function createParticleField(
    * sin animación. Heredan el tono de su concepto ancla para que la
    * nube se lea coherente; no son alcanzables por hover/clic (ver
    * pickInstanceAtRay, que sólo itera slots reales). */
-  const CAPACITY = 25000;
+  // Capacidad = TODOS los conceptos reales + las portadoras que el
+  // nivel más exigente necesite encima. Nunca una constante: el dataset
+  // crece por cron (ver `carrierHeadroom` en las opciones).
   const realCount = concepts.length;
+  const CAPACITY = realCount + Math.max(0, options.carrierHeadroom);
   const count = realCount;
   const geometry = new THREE.IcosahedronGeometry(0.032, 1);
   // El shader líquido no usa uv — fuera: cada atributo que el pipeline

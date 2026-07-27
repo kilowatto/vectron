@@ -87,6 +87,11 @@ export interface LiquidField {
   /** `prefers-reduced-motion` capturado al crear el campo — state.ts lo
    * usa para saltar las animaciones celulares (transición instantánea). */
   readonly reducedMotion: boolean;
+  /** Slot bajo el rayo, o null. Reemplaza al raycast contra el
+   * InstancedMesh: sin `instanceMatrix` (ver createLiquidField) THREE no
+   * sabe dónde está cada instancia, así que la intersección se calcula
+   * a mano contra la esfera de cada slot activo. */
+  pickSlotAtRay(raycaster: THREE.Raycaster): number | null;
   /** Aplica el bloque `liquid` de la config a los uniforms — al crear
    * el campo y en cada movimiento de los sliders del panel. */
   setLook(look: LiquidConfig): void;
@@ -98,52 +103,79 @@ export interface LiquidField {
 
 export function createLiquidField(scene: THREE.Scene, envMap: THREE.Texture, look: LiquidConfig, capacity: number): LiquidField {
   const geometry = new THREE.IcosahedronGeometry(look.radius, look.geometryDetail);
+  // Este shader nunca muestrea la uv de la geometría (`equirectUV`
+  // deriva la suya de una dirección) — fuera: cada atributo declarado
+  // cuenta contra el tope de 8 vertex buffers de WebGPU (ver el bloque
+  // de empaquetado justo abajo).
+  geometry.deleteAttribute("uv");
   const material = new THREE.MeshBasicNodeMaterial();
 
-  const colorArr = new Float32Array(capacity * 3);
-  const bodyArr = new Float32Array(capacity * 3);
-  const homeArr = new Float32Array(capacity * 3);
-  const freqArr = new Float32Array(capacity * 3);
-  const phaseArr = new Float32Array(capacity * 3);
-  const ampArr = new Float32Array(capacity);
-  const glowArr = new Float32Array(capacity);
+  // ── PRESUPUESTO DE VERTEX BUFFERS ────────────────────────────────
+  // Bug real reportado en vivo: el lab se veía NEGRO al elegir el
+  // estilo líquido —
+  //   "Vertex buffer count (12) exceeds the maximum (8)"
+  // → createRenderPipeline falla → no se dibuja NADA. Es exactamente el
+  // mismo fallo que ya tumbó el cubo de producción (ver el bloque
+  // equivalente en scene/particleField.ts): WebGPU garantiza sólo
+  // maxVertexBuffers=8 y el adapter de Chrome reporta 8 (pedir más por
+  // requiredLimits hace que requestDevice rechace). La versión anterior
+  // declaraba 12 (position, normal, uv + 9 atributos instanciados).
+  //
+  // Todo el estado por instancia viaja ahora en 6 atributos vec4
+  // empaquetados (+ position/normal = 8 exactos, el máximo). El
+  // empaquetado mantiene ÍNTEGROS como .xyz los vectores que el shader
+  // usa como unidad (hogar, color, frecuencia, fase, eje) y reparte el
+  // ÚNICO que se puede partir sin costo — el color de cuerpo, que el
+  // fragment reensambla en una sola línea — entre las tres .w libres.
+  //   1 aHomeAmp    xyz=hogar            w=amplitud de deriva
+  //   2 aColorGlow  rgb=color emisivo    w=escala de brillo (slider Vida)
+  //   3 aFreqBodyR  xyz=frecuencia       w=cuerpo.r
+  //   4 aPhaseBodyG xyz=fase             w=cuerpo.g
+  //   5 aAxisBodyB  xyz=eje de animación w=cuerpo.b
+  //   6 aAnim       x=tipo y=progreso zw=intensidades
+  const homeAmpArr = new Float32Array(capacity * 4);
+  const colorGlowArr = new Float32Array(capacity * 4);
+  const freqBodyRArr = new Float32Array(capacity * 4);
+  const phaseBodyGArr = new Float32Array(capacity * 4);
+  /** xyz = eje/vector de la animación: dirección de estiramiento en
+   * mitosis, vector hogar→resultado en fusión, eje de aplastado en
+   * muerte. w = azul del color de cuerpo. */
+  const axisBodyBArr = new Float32Array(capacity * 4);
   /** Estado de animación celular por instancia: x=tipo (LIQUID_ANIM),
    * y=progreso 0-1, z/w=intensidades (significado por tipo — ver el
    * vertex shader). La CPU sólo escribe `y` por cuadro y sólo para las
    * instancias animándose (unas pocas); el resto del tiempo este
    * buffer no se toca. */
   const animArr = new Float32Array(capacity * 4);
-  /** Eje/vector de la animación: dirección de estiramiento en mitosis,
-   * vector hogar→resultado en fusión, eje de aplastado en muerte. */
-  const animAxisArr = new Float32Array(capacity * 3);
-  const colorAttribute = new THREE.InstancedBufferAttribute(colorArr, 3);
-  const bodyAttribute = new THREE.InstancedBufferAttribute(bodyArr, 3);
-  const homeAttribute = new THREE.InstancedBufferAttribute(homeArr, 3);
-  const freqAttribute = new THREE.InstancedBufferAttribute(freqArr, 3);
-  const phaseAttribute = new THREE.InstancedBufferAttribute(phaseArr, 3);
-  const ampAttribute = new THREE.InstancedBufferAttribute(ampArr, 1);
-  const glowAttribute = new THREE.InstancedBufferAttribute(glowArr, 1);
+  const homeAmpAttribute = new THREE.InstancedBufferAttribute(homeAmpArr, 4);
+  const colorGlowAttribute = new THREE.InstancedBufferAttribute(colorGlowArr, 4);
+  const freqBodyRAttribute = new THREE.InstancedBufferAttribute(freqBodyRArr, 4);
+  const phaseBodyGAttribute = new THREE.InstancedBufferAttribute(phaseBodyGArr, 4);
+  const axisBodyBAttribute = new THREE.InstancedBufferAttribute(axisBodyBArr, 4);
   const animAttribute = new THREE.InstancedBufferAttribute(animArr, 4);
-  const animAxisAttribute = new THREE.InstancedBufferAttribute(animAxisArr, 3);
-  geometry.setAttribute("instanceColor", colorAttribute);
-  geometry.setAttribute("aBody", bodyAttribute);
-  geometry.setAttribute("aHome", homeAttribute);
-  geometry.setAttribute("aFreq", freqAttribute);
-  geometry.setAttribute("aPhase", phaseAttribute);
-  geometry.setAttribute("aAmp", ampAttribute);
-  geometry.setAttribute("aGlow", glowAttribute);
+  geometry.setAttribute("aHomeAmp", homeAmpAttribute);
+  geometry.setAttribute("aColorGlow", colorGlowAttribute);
+  geometry.setAttribute("aFreqBodyR", freqBodyRAttribute);
+  geometry.setAttribute("aPhaseBodyG", phaseBodyGAttribute);
+  geometry.setAttribute("aAxisBodyB", axisBodyBAttribute);
   geometry.setAttribute("aAnim", animAttribute);
-  geometry.setAttribute("aAnimAxis", animAxisAttribute);
 
-  const instanceColor = attribute<"vec3">("instanceColor", "vec3");
-  const aBody = attribute<"vec3">("aBody", "vec3");
-  const aHome = attribute<"vec3">("aHome", "vec3");
-  const aFreq = attribute<"vec3">("aFreq", "vec3");
-  const aPhase = attribute<"vec3">("aPhase", "vec3");
-  const aAmp = attribute<"float">("aAmp", "float");
-  const aGlow = attribute<"float">("aGlow", "float");
+  const aHomeAmp = attribute<"vec4">("aHomeAmp", "vec4");
+  const aColorGlow = attribute<"vec4">("aColorGlow", "vec4");
+  const aFreqBodyR = attribute<"vec4">("aFreqBodyR", "vec4");
+  const aPhaseBodyG = attribute<"vec4">("aPhaseBodyG", "vec4");
+  const aAxisBodyB = attribute<"vec4">("aAxisBodyB", "vec4");
   const aAnim = attribute<"vec4">("aAnim", "vec4");
-  const aAnimAxis = attribute<"vec3">("aAnimAxis", "vec3");
+  // Desempaquetado: nombres idénticos a los de antes para que el resto
+  // del shader se lea igual que cuando cada uno era su propio atributo.
+  const aHome = aHomeAmp.xyz;
+  const aAmp = aHomeAmp.w;
+  const instanceColor = aColorGlow.xyz;
+  const aGlow = aColorGlow.w;
+  const aFreq = aFreqBodyR.xyz;
+  const aPhase = aPhaseBodyG.xyz;
+  const aAnimAxis = aAxisBodyB.xyz;
+  const aBody = vec3(aFreqBodyR.w, aPhaseBodyG.w, aAxisBodyB.w);
 
   const uTime = uniform(0);
   const uMoveSpeed = uniform(DEFAULT_CONFIG.movement.speedDefault);
@@ -278,8 +310,21 @@ export function createLiquidField(scene: THREE.Scene, envMap: THREE.Texture, loo
     // Transmisión falsa: env por normal refractada, concentrada donde
     // la vista atraviesa el centro (ndv alto), teñida por el color de
     // la célula (absorción tipo Beer-Lambert, también falsa).
+    //
+    // El peso del tinte es 0.9, casi todo color: la luz que ATRAVIESA un
+    // volumen coloreado sale teñida por él — eso es absorción. Bug real
+    // visto en vivo (con el resto de términos apagados para aislarlo):
+    // con el 0.45 anterior, más de la mitad de la luz transmitida era
+    // blanco PURO, y como el PMREM del RoomEnvironment es brillante
+    // (paredes/luces claras, valores ~1+), ese blanco por sí solo
+    // lavaba la célula de verde azulado a casi blanco antes de sumar
+    // reflejo/iridiscencia/núcleo. Era justo lo contrario de lo que el
+    // comentario prometía: mezclar HACIA el blanco no es absorber, es
+    // desaturar. Con 0.9 la transmisión aporta luminosidad sin robarle
+    // el tono a la partícula — y el tono es información en el cubo real
+    // (hue = dominio semántico), no decoración.
     const transmit = pmremTexture(envMap, equirectUV(refract(incident, n, float(1.0).div(uIorFeel))), float(look.envRefrBlur))
-      .mul(mix(vec3(1, 1, 1), instanceColor, float(0.45)))
+      .mul(mix(vec3(1, 1, 1), instanceColor, float(0.9)))
       .mul(uTransmit)
       .mul(pow(ndv, float(1.5)));
 
@@ -325,27 +370,44 @@ export function createLiquidField(scene: THREE.Scene, envMap: THREE.Texture, loo
 
   const mesh = new THREE.InstancedMesh(geometry, material, capacity);
   mesh.count = 0;
-  // Las posiciones reales vienen de aHome en el shader — la esfera
-  // envolvente de la geometría (radio ~0.16 en el origen) no cubre la
-  // nube y el frustum culling la descartaría entera.
+  // Las posiciones reales vienen de aHomeAmp.xyz en el shader — la
+  // esfera envolvente de la geometría (radio ~0.16 en el origen) no
+  // cubre la nube y el frustum culling la descartaría entera.
   mesh.frustumCulled = false;
+  // La instanceMatrix se elimina DEL TODO: NodeMaterial la inyecta
+  // automáticamente en cuanto existe (InstancedMesh) y ocuparía un
+  // 9º vertex buffer — uno más que el tope de 8 y el pipeline vuelve a
+  // fallar (mismo razonamiento que en scene/particleField.ts). El
+  // shader no la necesita (posiciona con aHomeAmp.xyz) y el picking
+  // tampoco: es ray-esfera manual en CPU (ver pickSlotAtRay).
+  mesh.instanceMatrix = null as unknown as THREE.InstancedBufferAttribute;
   // Marca para el pick de main.ts: en esta malla la selección se
-  // resuelve por instanceId → slot (state.particleIdAtSlot).
+  // resuelve por slot → id (state.particleIdAtSlot).
   mesh.userData.liquidField = true;
   scene.add(mesh);
 
   const tmpColor = new THREE.Color();
-  const matrixArray = mesh.instanceMatrix.array as Float32Array;
+  const pickRay = new THREE.Ray();
+  const pickInvMatrix = new THREE.Matrix4();
 
   function writeColor(slot: number, colorHex: number) {
-    tmpColor.set(colorHex).toArray(colorArr, slot * 3);
-    bodyColorOf(colorHex).toArray(bodyArr, slot * 3);
-    colorAttribute.needsUpdate = true;
-    bodyAttribute.needsUpdate = true;
+    const o = slot * 4;
+    tmpColor.set(colorHex);
+    colorGlowArr[o] = tmpColor.r;
+    colorGlowArr[o + 1] = tmpColor.g;
+    colorGlowArr[o + 2] = tmpColor.b;
+    const body = bodyColorOf(colorHex);
+    freqBodyRArr[o + 3] = body.r;
+    phaseBodyGArr[o + 3] = body.g;
+    axisBodyBArr[o + 3] = body.b;
+    colorGlowAttribute.needsUpdate = true;
+    freqBodyRAttribute.needsUpdate = true;
+    phaseBodyGAttribute.needsUpdate = true;
+    axisBodyBAttribute.needsUpdate = true;
   }
 
-  function copyArray3(arr: Float32Array, attr: THREE.InstancedBufferAttribute, from: number, to: number) {
-    arr.copyWithin(to * 3, from * 3, from * 3 + 3);
+  function copyVec4(arr: Float32Array, attr: THREE.InstancedBufferAttribute, from: number, to: number) {
+    arr.copyWithin(to * 4, from * 4, from * 4 + 4);
     attr.needsUpdate = true;
   }
 
@@ -353,42 +415,38 @@ export function createLiquidField(scene: THREE.Scene, envMap: THREE.Texture, loo
     mesh,
     capacity,
     setSlot(slot, position, colorHex, drift) {
-      const o = slot * 16;
-      matrixArray[o + 12] = position.x;
-      matrixArray[o + 13] = position.y;
-      matrixArray[o + 14] = position.z;
-      mesh.instanceMatrix.needsUpdate = true;
-      position.toArray(homeArr, slot * 3);
-      drift.freq.toArray(freqArr, slot * 3);
-      drift.phase.toArray(phaseArr, slot * 3);
-      ampArr[slot] = drift.amp;
-      glowArr[slot] = 1;
-      animArr.fill(0, slot * 4, slot * 4 + 4);
-      animAxisArr.fill(0, slot * 3, slot * 3 + 3);
-      homeAttribute.needsUpdate = true;
-      freqAttribute.needsUpdate = true;
-      phaseAttribute.needsUpdate = true;
-      ampAttribute.needsUpdate = true;
-      glowAttribute.needsUpdate = true;
+      const o = slot * 4;
+      homeAmpArr[o] = position.x;
+      homeAmpArr[o + 1] = position.y;
+      homeAmpArr[o + 2] = position.z;
+      homeAmpArr[o + 3] = drift.amp;
+      freqBodyRArr[o] = drift.freq.x;
+      freqBodyRArr[o + 1] = drift.freq.y;
+      freqBodyRArr[o + 2] = drift.freq.z;
+      phaseBodyGArr[o] = drift.phase.x;
+      phaseBodyGArr[o + 1] = drift.phase.y;
+      phaseBodyGArr[o + 2] = drift.phase.z;
+      axisBodyBArr[o] = 0;
+      axisBodyBArr[o + 1] = 0;
+      axisBodyBArr[o + 2] = 0;
+      colorGlowArr[o + 3] = 1;
+      animArr.fill(0, o, o + 4);
+      homeAmpAttribute.needsUpdate = true;
+      freqBodyRAttribute.needsUpdate = true;
+      phaseBodyGAttribute.needsUpdate = true;
+      axisBodyBAttribute.needsUpdate = true;
       animAttribute.needsUpdate = true;
-      animAxisAttribute.needsUpdate = true;
+      // Escribe color emisivo + las 3 .w del cuerpo (y marca sus
+      // buffers) — va al final para no pisar las .w recién puestas.
       writeColor(slot, colorHex);
     },
     copySlot(from, to) {
-      matrixArray.copyWithin(to * 16, from * 16, from * 16 + 16);
-      mesh.instanceMatrix.needsUpdate = true;
-      copyArray3(colorArr, colorAttribute, from, to);
-      copyArray3(bodyArr, bodyAttribute, from, to);
-      copyArray3(homeArr, homeAttribute, from, to);
-      copyArray3(freqArr, freqAttribute, from, to);
-      copyArray3(phaseArr, phaseAttribute, from, to);
-      copyArray3(animAxisArr, animAxisAttribute, from, to);
-      animArr.copyWithin(to * 4, from * 4, from * 4 + 4);
-      animAttribute.needsUpdate = true;
-      ampArr[to] = ampArr[from];
-      glowArr[to] = glowArr[from];
-      ampAttribute.needsUpdate = true;
-      glowAttribute.needsUpdate = true;
+      copyVec4(homeAmpArr, homeAmpAttribute, from, to);
+      copyVec4(colorGlowArr, colorGlowAttribute, from, to);
+      copyVec4(freqBodyRArr, freqBodyRAttribute, from, to);
+      copyVec4(phaseBodyGArr, phaseBodyGAttribute, from, to);
+      copyVec4(axisBodyBArr, axisBodyBAttribute, from, to);
+      copyVec4(animArr, animAttribute, from, to);
     },
     setActiveCount(n) {
       mesh.count = n;
@@ -397,11 +455,11 @@ export function createLiquidField(scene: THREE.Scene, envMap: THREE.Texture, loo
       writeColor(slot, colorHex);
     },
     setGlow(slot, value) {
-      glowArr[slot] = value;
-      glowAttribute.needsUpdate = true;
+      colorGlowArr[slot * 4 + 3] = value;
+      colorGlowAttribute.needsUpdate = true;
     },
     getGlow(slot) {
-      return glowArr[slot];
+      return colorGlowArr[slot * 4 + 3];
     },
     setAnim(slot, type, p1, p2, axis) {
       const o = slot * 4;
@@ -409,9 +467,12 @@ export function createLiquidField(scene: THREE.Scene, envMap: THREE.Texture, loo
       animArr[o + 1] = 0;
       animArr[o + 2] = p1;
       animArr[o + 3] = p2;
-      axis.toArray(animAxisArr, slot * 3);
+      // Sólo .xyz — la .w lleva el azul del cuerpo, no tocar.
+      axisBodyBArr[o] = axis.x;
+      axisBodyBArr[o + 1] = axis.y;
+      axisBodyBArr[o + 2] = axis.z;
       animAttribute.needsUpdate = true;
-      animAxisAttribute.needsUpdate = true;
+      axisBodyBAttribute.needsUpdate = true;
     },
     setAnimProgress(slot, t) {
       animArr[slot * 4 + 1] = t;
@@ -420,6 +481,36 @@ export function createLiquidField(scene: THREE.Scene, envMap: THREE.Texture, loo
     clearAnim(slot) {
       animArr.fill(0, slot * 4, slot * 4 + 4);
       animAttribute.needsUpdate = true;
+    },
+    pickSlotAtRay(raycaster) {
+      // El rayo llega en espacio mundo y los hogares están en espacio
+      // local de la malla: se transforma el rayo, no las N instancias.
+      pickRay.copy(raycaster.ray).applyMatrix4(pickInvMatrix.copy(mesh.matrixWorld).invert());
+      const { x: ox, y: oy, z: oz } = pickRay.origin;
+      const { x: dx, y: dy, z: dz } = pickRay.direction;
+      // Radio con holgura: la deriva orgánica y el wobble mueven la
+      // superficie unos pocos % del radio alrededor del hogar.
+      const r = look.radius * 1.4;
+      const rSq = r * r;
+      let best: number | null = null;
+      let bestT = Infinity;
+      for (let slot = 0; slot < mesh.count; slot++) {
+        const o = slot * 4;
+        const ocx = ox - homeAmpArr[o];
+        const ocy = oy - homeAmpArr[o + 1];
+        const ocz = oz - homeAmpArr[o + 2];
+        const b = ocx * dx + ocy * dy + ocz * dz;
+        const c = ocx * ocx + ocy * ocy + ocz * ocz - rSq;
+        const disc = b * b - c;
+        if (disc < 0) continue;
+        const sq = Math.sqrt(disc);
+        let t = -b - sq;
+        if (t < 0) t = -b + sq; // origen del rayo dentro de la esfera
+        if (t < 0 || t >= bestT) continue;
+        bestT = t;
+        best = slot;
+      }
+      return best;
     },
     reducedMotion,
     setLook(next) {

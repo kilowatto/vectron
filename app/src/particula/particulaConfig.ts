@@ -224,6 +224,60 @@ export interface ParticulaConfig {
     duration: number;
     durationMin: number;
     durationMax: number;
+    /** Aceleración progresiva del lote (pedido explícito del usuario:
+     * "que se vaya acelerando conforme avanza... las primeras que se
+     * vean cómo se dividen y ya cuando hay 3000 o más se acelera").
+     *
+     * `duration` de arriba deja de ser fija y pasa a ser el techo: la
+     * duración REAL de cada operación se interpola entre ese techo (con
+     * pocas células, para que la mitosis se lea) y `duration ×
+     * speedUpFloor` (con muchas, donde una mitosis individual ya es
+     * invisible y lo que importa es el ritmo).
+     *
+     * La rampa es logarítmica, no lineal, a propósito: la población
+     * crece DOBLÁNDOSE (1→2→4→8…), así que una rampa lineal en N se
+     * sentiría estancada un buen rato y luego pegaría un salto. En log,
+     * cada duplicación acelera un escalón parejo — que es justo como se
+     * percibe el avance.
+     *
+     * NO es un límite duro (el usuario lo pidió así): a
+     * `speedUpFullAt` se llega al piso de forma suave, sin escalón.
+     *
+     * El piso NUNCA es 0: la duración es también lo que retiene el cupo
+     * de concurrencia, así que anularla reintroduciría la explosión de
+     * población por cuadro (ver el comentario en `startDivide`). */
+    speedUpFrom: number;
+    speedUpFullAt: number;
+    speedUpFloor: number;
+    /** Separación progresiva (pedido explícito del usuario: "con 25000
+     * no puedo navegar dentro de ellas... que al principio cuando son
+     * pocas estén cerca y mientras crecen también se separen poco a
+     * poco para poder navegar").
+     *
+     * Multiplicador sobre la suma de radios que cuenta como "demasiado
+     * cerca" (ver `MIN_SEPARATION_FACTOR` en state.ts). Antes era una
+     * constante 1.15 — o sea, la separación LOCAL era la misma con 2
+     * células que con 25 000: la nube crecía de radio pero por dentro
+     * seguía igual de apretada, hombro con hombro, y no había por dónde
+     * meter la cámara.
+     *
+     * Ahora crece con la población: pocas células juntas (se lee como
+     * un organismo), muchas células aireadas (se puede volar entre
+     * ellas). Misma rampa logarítmica que la aceleración, y por la
+     * misma razón: la población se duplica, así que cada duplicación
+     * debe abrir un escalón parejo. */
+    spreadFrom: number;
+    spreadFullAt: number;
+    spreadFactorNear: number;
+    spreadFactorFar: number;
+    /** Coeficiente de empaquetado del control global de densidad (ver
+     * `declump`): relaciona el radio RMS que debe tener la nube con
+     * `∛N · separación`. Calibrado midiendo la distancia real al vecino
+     * más cercano a 25 000 células, no derivado en papel — la nube no
+     * es una bola uniforme (tiene borde blando y la deformación de
+     * cerebro), así que la constante teórica de una bola perfecta se
+     * queda corta. */
+    spreadPacking: number;
     /** Cuántas operaciones pueden estar animándose al mismo tiempo —
      * el límite real de "cuántas a la vez" que pidió el usuario. Más
      * alto = más caótico/rápido pero más pesado (cada mitosis/fusión
@@ -282,7 +336,23 @@ export interface ParticulaConfig {
 export const DEFAULT_CONFIG: ParticulaConfig = {
   version: 1,
   duration: 1.5,
-  particleStyle: "hero",
+  // El lab arranca en LÍQUIDA, no en hero. Bug real reportado en vivo
+  // ("no es como la partícula original... además no está haciendo la
+  // animación de división", con captura de un lote a 25 000 lleno de
+  // discos planos): el estilo `hero` es una malla PBR + material PROPIO
+  // por partícula, así que no escala — pasadas ~2 000 cae al nivel
+  // instanciado barato (`instancedField.ts`), que cambia el look de
+  // golpe Y no anima mitosis/fusión. O sea: el default llevaba
+  // directo al acantilado que el usuario reportó.
+  //
+  // `liquid` es la ruta que R-1/R-9 ya habían decidido: UN shader
+  // instanciado, 1 draw call, MISMO look con 1 o con 25 000, y las
+  // animaciones celulares intactas a cualquier escala (verificado:
+  // división tipo 2 progresando con 700+ células en pantalla). El
+  // toggle "Hero clásica" sigue en el panel para comparar de cerca —
+  // sigue siendo la referencia de calidad, sólo que no es la que puede
+  // sostener el cubo.
+  particleStyle: "liquid",
   styles: {
     nacer: "fundido",
     dividir: "espontanea",
@@ -323,6 +393,24 @@ export const DEFAULT_CONFIG: ParticulaConfig = {
     duration: 0.4,
     durationMin: 0.1,
     durationMax: 3,
+    // Hasta 24 células, duración íntegra: son las primeras 4-5
+    // duplicaciones (1→2→4→8→16→24), exactamente las que se ven una por
+    // una. De ahí la rampa log hasta 3000 (el número que dio el
+    // usuario), donde queda en el 12% — a esa densidad una mitosis
+    // suelta ya no se distingue y lo que se lee es el crecimiento.
+    speedUpFrom: 24,
+    speedUpFullAt: 3000,
+    speedUpFloor: 0.12,
+    // 1.15 = el valor de siempre (apenas sin rozarse) hasta 8 células:
+    // ahí la cercanía es lo que hace que se lea como UN organismo que
+    // se divide. De ahí abre hasta 3.2 en 25 000, que deja un hueco de
+    // ~1.2 diámetros entre superficies — suficiente para meter la
+    // cámara y ver profundidad, sin que la nube se deshaga en polvo.
+    spreadFrom: 8,
+    spreadFullAt: 25000,
+    spreadFactorNear: 1.15,
+    spreadFactorFar: 3.2,
+    spreadPacking: 0.72,
     maxConcurrent: 10,
     maxConcurrentMin: 1,
     maxConcurrentMax: 40,
@@ -385,7 +473,15 @@ export const DEFAULT_CONFIG: ParticulaConfig = {
     // 2.1 HDR >> threshold de bloom 0.52: el núcleo florece de verdad
     // (ver el comentario de coreEmissive en LiquidConfig).
     coreEmissive: 2.1,
-    coreFalloff: 2.2,
+    // Un núcleo es un PUNTO, no medio cuerpo. Con el 2.2 anterior la
+    // máscara (dot·0.5+0.5)^falloff seguía valiendo ~0.46 a 90° del eje
+    // del núcleo, así que el emisivo HDR 2.1 bañaba TODO el hemisferio
+    // visible y saturaba la célula a blanco — junto con la transmisión
+    // desaturada (ver liquidParticle.ts) era la 2ª causa de que se
+    // perdiera el color. Con 8.0 el mismo 2.1 queda confinado a un
+    // hotspot chico que sí florea en el bloom, y el cuerpo conserva su
+    // tono translúcido alrededor.
+    coreFalloff: 8.0,
     baseGlow: 0.14,
     breathAmp: 0.06,
     breathSpeed: 1.1,

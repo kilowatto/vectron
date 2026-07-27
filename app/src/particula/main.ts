@@ -474,17 +474,11 @@ function setupUi(state: ParticulaState, camera: THREE.Camera, canvas: HTMLCanvas
     ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(ndc, camera);
+    // Estilo hero: mallas propias, raycast normal de THREE. Estilo
+    // líquido: una sola InstancedMesh sin `instanceMatrix`, con picking
+    // ray-esfera propio (ver liquidParticle.ts's pickSlotAtRay).
     const hits = raycaster.intersectObjects(state.meshes());
-    if (hits.length === 0) {
-      state.select(null);
-      return;
-    }
-    const hit = hits[0];
-    // En modo líquido la malla es el InstancedMesh compartido: la
-    // partícula se resuelve por instanceId → slot (state.particleIdAtSlot).
-    const id =
-      (hit.object.userData.particleId as number | undefined) ??
-      (hit.instanceId !== undefined ? state.particleIdAtSlot(hit.instanceId) : null);
+    const id = hits.length > 0 ? ((hits[0].object.userData.particleId as number | undefined) ?? null) : state.pickLiquidAtRay(raycaster);
     state.select(id ?? null);
   }
   canvas.addEventListener("pointerup", (e) => {
