@@ -1,6 +1,21 @@
 import { WorkflowEntrypoint, type WorkflowStep, type WorkflowEvent } from "cloudflare:workers";
 import type { Env } from "./index";
 import { projectWithBasis, type PcaBasis } from "./pcaProject";
+import { declumpAgainstFixed, type Point3 } from "./declump";
+
+/** Misma separación mínima que usó la siembra (`worker/scripts/seed.ts`
+ * MIN_SEPARATION): el objetivo es que un concepto nuevo quede tan
+ * separado como uno viejo, no más ni menos.
+ *
+ * Ojo con la expectativa: 0.1 NO es alcanzable a esta densidad y la
+ * siembra tampoco lo logra — el 75.9 % de sus pares queda por debajo
+ * incluso tras 300 pasadas. El objetivo real es igualar a la siembra y
+ * eliminar las superposiciones, no llegar a cero solapes. */
+const MIN_SEPARATION = 0.1;
+/** 120 y no 300 como la siembra: aquí sólo se mueven ~200 puntos contra
+ * paredes fijas, no 10 000 entre sí, y converge mucho antes. El tope
+ * también protege el presupuesto de CPU del Workflow. */
+const DECLUMP_ITERATIONS = 120;
 
 /** Pedido explícito del usuario 2026-07-22: "ya no quiero que tú
  * generes los conceptos... que la IA de Cloudflare llene todo, pero
@@ -382,11 +397,44 @@ Reglas estrictas:
       }
 
       const withCoords = await step.do("proyectar al cubo existente", async () => {
-        return finalBatch.map((c, i) => ({
+        const projected = finalBatch.map((c, i) => ({
           id: fromIndex + i + 1,
           ...c,
           coords: projectWithBasis(embeddings[i], basis),
         }));
+
+        // SEPARAR contra lo que ya existe. Sin este paso el camino del
+        // cron sólo proyectaba, y eso dejaba sus conceptos 2.73× más
+        // apiñados que los de la siembra, con pares prácticamente
+        // superpuestos — dos palabras distintas en la misma coordenada.
+        // Medido sobre producción y confirma `DOCs/16` §3d.
+        //
+        // La relajación es de UNA dirección (ver declump.ts): las
+        // partículas ya publicadas son paredes fijas y sólo se acomodan
+        // las nuevas, así que nadie ve moverse lo que ya había. Validado
+        // contra el corpus real: superposiciones 20 → 0 y la continuity
+        // de vecindarios MEJORA (0.775 → 0.787), o sea que separar no
+        // cuesta fidelidad.
+        const existing = await this.env.DB.prepare(
+          `SELECT coord_x, coord_y, coord_z FROM concepts`,
+        ).all<{ coord_x: number; coord_y: number; coord_z: number }>();
+        const fixed: Point3[] = (existing.results ?? []).map((r) => [
+          r.coord_x,
+          r.coord_y,
+          r.coord_z,
+        ]);
+        const res = declumpAgainstFixed(
+          projected.map((c) => c.coords as Point3),
+          fixed,
+          MIN_SEPARATION,
+          DECLUMP_ITERATIONS,
+          basis.cubeScale,
+        );
+        console.log(
+          `[auto-grow] declump: ${projected.length} nuevos contra ${fixed.length} fijos · ` +
+            `${res.iterationsUsed} pasadas · solapes restantes ${res.remainingOverlaps}`,
+        );
+        return projected.map((c, i) => ({ ...c, coords: res.points[i] }));
       });
 
       await step.do("insertar en d1", async () => {

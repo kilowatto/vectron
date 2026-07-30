@@ -12,7 +12,12 @@
  * Esto mide lo otro: los mismos vectores de 1024 dims contra las
  * coordenadas REALES servidas por /api/concepts.
  *
- * Uso: node --max-old-space-size=4096 worker/scripts/onscreen-fidelity.mjs <concepts.json>
+ * Uso: node worker/scripts/onscreen-fidelity.mjs <concepts.json> [sufijo]
+ *
+ * El sufijo evita un pisotón real que ya ocurrió: correrlo con un
+ * concepts.json experimental sobreescribía las cifras de PRODUCCIÓN en
+ * worker/diagnostics/, y hubo que recuperarlas de git. Con sufijo, cada
+ * variante escribe su propio archivo.
  */
 import { createReadStream, readFileSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
@@ -131,10 +136,11 @@ const out = {
     "Por eso estas cifras, no las de diagnostics.json, son las que describen " +
     "lo que el usuario tiene delante.",
 };
-writeFileSync(`${RESULTS}/onscreen-fidelity.json`, JSON.stringify(out, null, 2));
+const suffix = process.argv[3] ? `-${process.argv[3]}` : "";
+writeFileSync(`${RESULTS}/onscreen-fidelity${suffix}.json`, JSON.stringify(out, null, 2));
 
 console.log("\n=== Fidelidad EN PANTALLA (coordenadas servidas) ===");
 for (const K of K_LIST) {
   console.log(`k=${String(K).padStart(2)}  trustworthiness ${trust(K).toFixed(4)}   continuity ${cont(K).toFixed(4)}`);
 }
-console.log(`→ escrito ${RESULTS}/onscreen-fidelity.json`);
+console.log(`→ escrito ${RESULTS}/onscreen-fidelity${suffix}.json`);

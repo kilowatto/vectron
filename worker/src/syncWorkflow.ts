@@ -2,6 +2,13 @@ import { WorkflowEntrypoint, type WorkflowStep, type WorkflowEvent } from "cloud
 import type { Env } from "./index";
 import { SEED_CONCEPTS } from "./data/seedConcepts";
 import { projectWithBasis, type PcaBasis } from "./pcaProject";
+import { declumpAgainstFixed, type Point3 } from "./declump";
+
+/** Mismos valores y mismo motivo que en autoGrowWorkflow.ts — ver allí
+ * el comentario largo. Los dos caminos que INSERTAN conceptos tenían el
+ * mismo bug (proyectar sin separar), así que los dos se arreglan. */
+const MIN_SEPARATION = 0.1;
+const DECLUMP_ITERATIONS = 120;
 
 export interface SyncParams {
   /** Índice (0-based) en SEED_CONCEPTS donde empiezan los conceptos
@@ -92,7 +99,7 @@ export class SyncConceptsWorkflow extends WorkflowEntrypoint<Env, SyncParams> {
     }
 
     const withCoords = await step.do("proyectar al cubo existente", async () => {
-      return newConcepts.map((concept, i) => ({
+      const projected = newConcepts.map((concept, i) => ({
         id: fromIndex + i + 1,
         wordEs: concept.wordEs,
         wordEn: concept.wordEn,
@@ -103,6 +110,29 @@ export class SyncConceptsWorkflow extends WorkflowEntrypoint<Env, SyncParams> {
         partOfSpeech: concept.partOfSpeech ?? "sustantivo",
         coords: projectWithBasis(embeddings[i], basis),
       }));
+
+      // Separar contra lo ya publicado, igual que autoGrowWorkflow: sin
+      // esto los conceptos entrantes se apilaban sobre los existentes.
+      const existing = await this.env.DB.prepare(
+        `SELECT coord_x, coord_y, coord_z FROM concepts`,
+      ).all<{ coord_x: number; coord_y: number; coord_z: number }>();
+      const fixed: Point3[] = (existing.results ?? []).map((r) => [
+        r.coord_x,
+        r.coord_y,
+        r.coord_z,
+      ]);
+      const res = declumpAgainstFixed(
+        projected.map((c) => c.coords as Point3),
+        fixed,
+        MIN_SEPARATION,
+        DECLUMP_ITERATIONS,
+        basis.cubeScale,
+      );
+      console.log(
+        `[sync] declump: ${projected.length} nuevos contra ${fixed.length} fijos · ` +
+          `solapes restantes ${res.remainingOverlaps}`,
+      );
+      return projected.map((c, i) => ({ ...c, coords: res.points[i] }));
     });
 
     await step.do("insertar en d1", async () => {
