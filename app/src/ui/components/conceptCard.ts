@@ -267,6 +267,9 @@ export class VxConceptCard extends HTMLElement {
         </div>
         <input type="range" min="1" max="20" step="1" value="${topK}" />
         ${rows || `<div class="neighbor-empty">${t("cardNeighborsCalculating", lang)}</div>`}
+        <p class="lines-declared">${t("linesDeclared", lang)
+          .replace("{k}", String(neighbors.length))
+          .replace("{total}", diagnostics.dataset.vectors.toLocaleString(lang === "en" ? "en-US" : "es-MX"))}</p>
         <p class="scale-caveat">${t("diagCosineScaleHelp", lang)
           .replace("{mean}", chance.toFixed(2))
           .replace("{example}", "0.6")}</p>

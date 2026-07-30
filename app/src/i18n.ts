@@ -118,6 +118,19 @@ const STRINGS = {
   // F2 §5.3/§5.5 (P-22): la onda/resortes entre vecinas al fijar un
   // concepto es espectáculo con metáfora DECLARADA — un LLM no propaga
   // activación entre embeddings almacenados. Visible en Int/Avanzado.
+  // Corrección 3 de `26` D-4: rótulo VISIBLE. Sin él, las líneas se leen
+  // como "aquí está el grafo de conceptos" — un hecho del modelo. Con
+  // él son lo que de verdad son: el resultado de UNA consulta con UN k
+  // elegido. Un embedding es un espacio métrico, no un grafo; el grafo
+  // no existe hasta que eliges k.
+  linesDeclared: {
+    es: "las {k} más cercanas de {total}, por similitud coseno en ℝ¹⁰²⁴",
+    en: "the {k} closest of {total}, by cosine similarity in ℝ¹⁰²⁴",
+  },
+  linesAsymmetric: {
+    es: "las líneas cortadas no devuelven el favor: tú eres su vecino, ellas no el tuyo (hubness)",
+    en: "cut lines don't return the favour: you're their neighbour, they're not yours (hubness)",
+  },
   cardMetaphorLabel: { es: "metáfora, no mecanismo", en: "metaphor, not mechanism" },
   cardHint: { es: "clic fuera o Esc para cerrar", en: "click outside or Esc to close" },
   domainMatematicas: { es: "Matemáticas", en: "Mathematics" },

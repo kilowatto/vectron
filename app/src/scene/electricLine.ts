@@ -30,11 +30,19 @@ export interface ElectricLine {
 export function createElectricLine(
   polylines: THREE.Vector3[][],
   colorIndex = 0,
+  /** Corrección 2 de `26` D-4: intensidad POR LÍNEA, 0-1. Sin esto un
+   * coseno de 0.95 y uno de 0.55 se dibujaban idénticos (brecha L-3) —
+   * la línea afirmaba una relación sin decir cuán fuerte, que es
+   * exactamente el canal honesto desaprovechado. Ausente = todas a 1,
+   * que es el comportamiento de siempre (lo usan las líneas de FRASE,
+   * donde no hay grados: la secuencia es o no es). */
+  strengths?: number[],
 ): ElectricLine {
   const positions: number[] = [];
   const progress: number[] = [];
+  const strength: number[] = [];
 
-  for (const line of polylines) {
+  for (const [li, line] of polylines.entries()) {
     if (line.length < 2) continue;
     const dist = [0];
     for (let i = 1; i < line.length; i++) {
@@ -46,12 +54,15 @@ export function createElectricLine(
       const b = line[i + 1];
       positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
       progress.push(dist[i] / total, dist[i + 1] / total);
+      const w = strengths?.[li] ?? 1;
+      strength.push(w, w);
     }
   }
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute("lineProgress", new THREE.Float32BufferAttribute(progress, 1));
+  geometry.setAttribute("lineStrength", new THREE.Float32BufferAttribute(strength, 1));
 
   const material = new THREE.LineBasicNodeMaterial({
     transparent: true,
@@ -62,6 +73,7 @@ export function createElectricLine(
   const lineColor = uniform(new THREE.Color(ELECTRIC_PALETTE[colorIndex % ELECTRIC_PALETTE.length]));
   const revealUpTo = uniform(0);
   const lineProgress = attribute<"float">("lineProgress", "float");
+  const lineStrength = attribute<"float">("lineStrength", "float");
 
   material.colorNode = Fn(() => {
     // Banda brillante que viaja en loop por la polilínea — el "pulso
@@ -79,7 +91,11 @@ export function createElectricLine(
       smoothstep(revealUpTo, revealUpTo.add(0.06), lineProgress),
     );
 
-    return color(lineColor).mul(glow).mul(revealMask);
+    // La intensidad no baja a 0 en el mínimo: una línea que existe pero
+    // no se ve sería peor que no dibujarla — el usuario no puede
+    // preguntarse por algo invisible. 0.25 es el suelo.
+    const strengthGain = float(0.25).add(lineStrength.mul(0.75));
+    return color(lineColor).mul(glow).mul(revealMask).mul(strengthGain);
   })();
 
   const object = new THREE.LineSegments(geometry, material);

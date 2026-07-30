@@ -859,20 +859,56 @@ async function main() {
   canvas.addEventListener("focus", () => cubePaneEl.classList.add("scene-focused"));
   canvas.addEventListener("blur", () => cubePaneEl.classList.remove("scene-focused"));
 
-  const NAV_ORBIT_SPEED = 1.1; // rad/s
+  /** F1 · VELOCIDAD ACOPLADA A LA DISTANCIA (`26` D-1; Tan, Robertson y
+   * Czerwinski 2001 — el resultado empírico más aplicable; Potree usa
+   * `radius / 2.5`).
+   *
+   * Antes la órbita giraba a 1.1 rad/s SIEMPRE. A distancia de conjunto
+   * eso es lento y desde dentro de la nube es un latigazo: la misma
+   * velocidad angular recorre muchísimo más arco visual cuanto más
+   * cerca estás. Acoplarla a la distancia es lo que hace que un solo
+   * esquema sirva para las dos escalas — que es justo el argumento de
+   * D-1 para no tener dos modos de navegación. */
+  const NAV_ORBIT_BASE = 1.1; // rad/s a la distancia de referencia
+  const NAV_ORBIT_REF = 4.5; // distancia donde la velocidad es la base
   const NAV_DOLLY_SPEED = 1.6; // factor exponencial de distancia/s
+  /** F5 · velocidad de VUELO al atravesar la nube, en unidades/s. */
+  const NAV_FLY_SPEED = 1.35;
+
   function applyKeyboardNav(dt: number) {
     if (pressedNav.size === 0) return;
     const controls = engine.controls;
     const camera = engine.camera;
     const offset = camera.position.clone().sub(controls.target);
     const spherical = new THREE.Spherical().setFromVector3(offset);
-    if (pressedNav.has("left")) spherical.theta -= NAV_ORBIT_SPEED * dt;
-    if (pressedNav.has("right")) spherical.theta += NAV_ORBIT_SPEED * dt;
+
+    // Órbita: lenta de cerca, rápida de lejos. Con tope para que a
+    // distancias grandes no se dispare.
+    const orbitSpeed = Math.min(NAV_ORBIT_BASE * (spherical.radius / NAV_ORBIT_REF), 2.2);
+    if (pressedNav.has("left")) spherical.theta -= orbitSpeed * dt;
+    if (pressedNav.has("right")) spherical.theta += orbitSpeed * dt;
+
     let distScale = 1;
     if (pressedNav.has("forward")) distScale *= Math.exp(-NAV_DOLLY_SPEED * dt);
     if (pressedNav.has("back")) distScale *= Math.exp(NAV_DOLLY_SPEED * dt);
-    spherical.radius = Math.min(Math.max(spherical.radius * distScale, controls.minDistance), controls.maxDistance);
+    const wanted = spherical.radius * distScale;
+
+    // F5 · ENTRAR EN LA NUBE. Antes avanzar sólo encogía el radio, así
+    // que al tocar minDistance la cámara se quedaba CLAVADA orbitando
+    // por fuera: nunca se podía estar dentro de los datos. Cuando el
+    // radio ya está en el mínimo y se sigue empujando hacia delante, se
+    // mueve la CÁMARA Y EL OBJETIVO juntos a lo largo de la vista — se
+    // atraviesa la nube conservando la órbita como único paradigma
+    // (D-1), porque lo que orbitas pasa a ser el punto que tienes
+    // delante. Retroceder hace lo simétrico hasta recuperar el radio.
+    const atFloor = wanted <= controls.minDistance + 1e-4;
+    if (atFloor && pressedNav.has("forward")) {
+      const step = camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(NAV_FLY_SPEED * dt);
+      camera.position.add(step);
+      controls.target.add(step);
+      return;
+    }
+    spherical.radius = Math.min(Math.max(wanted, controls.minDistance), controls.maxDistance);
     offset.setFromSpherical(spherical);
     camera.position.copy(controls.target).add(offset);
   }
@@ -1971,6 +2007,9 @@ async function main() {
     const limit = MODE_CONCEPT_LIMIT[mode];
     currentTeaching = limit === null ? null : pickTeachingSet(concepts, allowedPos, limit);
     field.setTeachingSet(currentTeaching);
+    // Corrección 1 de `26` D-4: el tope de líneas es por nivel — 5 en
+    // Principiante, 8 en Intermedio y Avanzado.
+    field.setLineBudget(mode);
     const morphMs = field.estimateMorphDuration(allowedPos, MODE_CELLS[mode]);
     switcher.setTransitionMs(morphMs > 0 ? morphMs : 320);
     switcher.setAttribute("current", mode);

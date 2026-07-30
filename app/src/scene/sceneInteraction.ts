@@ -78,7 +78,29 @@ export function setupSceneInteraction(options: SceneInteractionOptions): SceneIn
       neighborInstanceIds.push(nInstanceId);
       views.push({ concept: field.concepts[nInstanceId], score: n.score });
     }
-    const lineObj = field.setSimilarityLines(instanceId, neighborInstanceIds);
+    // Corrección 5 de `26` D-4 · ASIMETRÍA. Se pregunta a cada vecino
+    // por SUS vecinos: si el concepto original no está en esa lista, la
+    // relación no es recíproca. Es la firma de hubness (Radovanović et
+    // al. 2010) y la forma más probable en que este producto engaña —
+    // una línea sin dirección hace parecer "concepto central" lo que
+    // sólo es una propiedad de la geometría en alta dimensión.
+    //
+    // Las consultas van en paralelo y NO bloquean el dibujo: las líneas
+    // aparecen ya, y si alguna resulta asimétrica se redibujan. Esperar
+    // a 8 consultas antes de mostrar nada rompería la respuesta
+    // inmediata al clic, que es lo que hace legible la interacción.
+    const scores = views.map((v) => v.score);
+    const lineObj = field.setSimilarityLines(instanceId, neighborInstanceIds, scores);
+    void Promise.all(
+      neighborInstanceIds.slice(0, 8).map(async (nid) => {
+        const back = await fetchSimilar(field.concepts[nid].id, 8).catch(() => []);
+        return back.some((b) => b.id === concept.id) ? null : nid;
+      }),
+    ).then((res) => {
+      if (currentPinnedInstanceId !== instanceId) return; // ya se cambió
+      const asym = new Set(res.filter((x): x is number => x !== null));
+      if (asym.size > 0) field.setSimilarityLines(instanceId, neighborInstanceIds, scores, asym);
+    });
     // Resortes semánticos (F2 §5.1): los vecinos reales se atraen
     // suavemente hacia el fijado con rest-length ∝ coseno.
     //

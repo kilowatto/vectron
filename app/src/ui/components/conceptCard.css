@@ -267,3 +267,15 @@
   border-top: 1px solid rgba(233, 226, 214, 0.1);
   padding-top: 7px;
 }
+
+/* Corrección 3 de `26` D-4: el rótulo que declara la consulta. Va ARRIBA
+   de la advertencia de escala y con el color de acento, porque es lo que
+   convierte un grafo aparente en un resultado con parámetros — la
+   distinción conceptual más importante de toda la vista. */
+.lines-declared {
+  margin: 7px 0 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  color: rgba(217, 138, 52, 0.85);
+}

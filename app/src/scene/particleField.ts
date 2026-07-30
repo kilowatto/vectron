@@ -256,7 +256,13 @@ export interface ParticleField {
   setSimilarityLines: (
     sourceInstanceId: number | null,
     neighborInstanceIds: number[],
+    /** Coseno real por vecino, mismo orden — corrección 2 de `26` D-4. */
+    scores?: number[],
+    /** Vecinos que no devuelven el favor — corrección 5 (hubness). */
+    asymmetric?: Set<number>,
   ) => THREE.Object3D | null;
+  /** Tope de líneas por nivel — corrección 1 de `26` D-4. */
+  setLineBudget: (mode: string) => void;
   /** Traza una línea de A a B a C… en el orden dado — usado para mostrar
    * cómo se conectan, en el cubo, las palabras de una frase escrita
    * (distinto de `setSimilarityLines`, que es la estrella de vecinos
@@ -1846,9 +1852,32 @@ export function createParticleField(
   }
 
   let similarityLine: ElectricLine | null = null;
+  /** Tope duro de líneas desde UNA partícula — corrección 1 de `26`
+   * D-4. Ghoniem et al. (2005): la lectura de un diagrama de nodos
+   * colapsa pasados ~20 nodos, y aquí además compiten con 20 000
+   * partículas de fondo. Por nivel, como pide la tabla de D-4. */
+  const MAX_SIMILARITY_LINES: Record<string, number> = {
+    principiante: 5,
+    intermedio: 8,
+    avanzado: 8,
+  };
+  let lineBudget = 8;
+  function setLineBudget(mode: string): void {
+    lineBudget = MAX_SIMILARITY_LINES[mode] ?? 8;
+  }
+
   function setSimilarityLines(
     sourceInstanceId: number | null,
     neighborInstanceIds: number[],
+    /** Coseno real por vecino, en el mismo orden. Sin esto todas las
+     * líneas se ven igual (corrección 2). */
+    scores?: number[],
+    /** Vecinos que NO devuelven el favor: el origen no está en SU lista
+     * (corrección 5). Es la firma de hubness (Radovanović et al. 2010) y
+     * la forma más probable en que este producto engaña — una línea sin
+     * dirección hace parecer "concepto central" lo que sólo es una
+     * propiedad de la geometría en alta dimensión. */
+    asymmetric?: Set<number>,
   ): THREE.Object3D | null {
     if (similarityLine) {
       hoverableLines.delete(similarityLine.object);
@@ -1860,11 +1889,29 @@ export function createParticleField(
 
     const src = concepts[sourceInstanceId].coords;
     const srcVec = new THREE.Vector3(src[0], src[1], src[2]);
-    const polylines = neighborInstanceIds.map((neighborId) => {
+    const capped = neighborInstanceIds.slice(0, lineBudget);
+    const polylines: THREE.Vector3[][] = [];
+    const strengths: number[] = [];
+    capped.forEach((neighborId, i) => {
       const dst = concepts[neighborId].coords;
-      return [srcVec, new THREE.Vector3(dst[0], dst[1], dst[2])];
+      const end = new THREE.Vector3(dst[0], dst[1], dst[2]);
+      // Corrección 5: la línea asimétrica se dibuja SIN llegar al vecino
+      // — se queda al 78 % del camino. No es decoración: comunica "esto
+      // apunta hacia allá pero no vuelve" sin usar flechas, que Holten y
+      // van Wijk (2009) probaron que se leen mal en 3D.
+      const cut = asymmetric?.has(neighborId)
+        ? srcVec.clone().lerp(end, 0.78)
+        : end;
+      polylines.push([srcVec, cut]);
+      // Normalizado desde el suelo de azar: sin esto, con todos los
+      // cosenos entre 0.6 y 0.9 las intensidades salían casi idénticas y
+      // la corrección no corregía nada.
+      const raw = scores?.[i];
+      strengths.push(
+        raw === undefined ? 1 : Math.max(0, Math.min(1, (raw - 0.412) / (1 - 0.412))),
+      );
     });
-    similarityLine = createElectricLine(polylines, 0);
+    similarityLine = createElectricLine(polylines, 0, strengths);
     group.add(similarityLine.object);
     hoverableLines.add(similarityLine.object);
     similarityLine.reveal();
@@ -2041,6 +2088,7 @@ export function createParticleField(
     morphToPartOfSpeechFilter,
     estimateMorphDuration,
     setSimilarityLines,
+    setLineBudget,
     setChainLines,
     setSprings,
     clearSprings,
