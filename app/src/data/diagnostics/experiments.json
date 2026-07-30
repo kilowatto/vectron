@@ -1,0 +1,313 @@
+{
+  "generatedFor": "DOCs/27 Fase D · experimentos de fallo",
+  "corpus": 20473,
+  "chanceFloor": 0.412,
+  "sample": 2000,
+  "d1": {
+    "what": "La distancia miente — los dos fallos simétricos de la proyección",
+    "invented": [
+      {
+        "a": {
+          "id": "7111",
+          "word": "inmobiliario",
+          "domain": "lexico_adjetival"
+        },
+        "b": {
+          "id": "9661",
+          "word": "José López Portillo",
+          "domain": "personajes"
+        },
+        "screenDistance": 0.081,
+        "cosine": 0.234
+      },
+      {
+        "a": {
+          "id": "7951",
+          "word": "ontológico",
+          "domain": "lexico_adjetival"
+        },
+        "b": {
+          "id": "12231",
+          "word": "Huaves",
+          "domain": "sociedad"
+        },
+        "screenDistance": 0.071,
+        "cosine": 0.244
+      },
+      {
+        "a": {
+          "id": "411",
+          "word": "baldur",
+          "domain": "mitologia"
+        },
+        "b": {
+          "id": "15891",
+          "word": "Access Virus",
+          "domain": "musica"
+        },
+        "screenDistance": 0.08,
+        "cosine": 0.261
+      },
+      {
+        "a": {
+          "id": "10511",
+          "word": "Phoenix",
+          "domain": "geografia"
+        },
+        "b": {
+          "id": "10971",
+          "word": "Vladimir Komarov",
+          "domain": "personajes"
+        },
+        "screenDistance": 0.087,
+        "cosine": 0.264
+      },
+      {
+        "a": {
+          "id": "10221",
+          "word": "Proyector de video",
+          "domain": "tecnologia"
+        },
+        "b": {
+          "id": "10751",
+          "word": "Cetus",
+          "domain": "astronomia"
+        },
+        "screenDistance": 0.082,
+        "cosine": 0.265
+      }
+    ],
+    "lost": [
+      {
+        "a": {
+          "id": "8731",
+          "word": "trashumante",
+          "domain": "lexico_adjetival"
+        },
+        "b": {
+          "id": "18931",
+          "word": "transgresivo",
+          "domain": "arquitectura"
+        },
+        "screenDistance": 3.012,
+        "cosine": 0.523
+      },
+      {
+        "a": {
+          "id": "7261",
+          "word": "vaticinador",
+          "domain": "lexico_adjetival"
+        },
+        "b": {
+          "id": "15671",
+          "word": "acicalarse",
+          "domain": "biologia_animal"
+        },
+        "screenDistance": 2.945,
+        "cosine": 0.625
+      },
+      {
+        "a": {
+          "id": "1401",
+          "word": "telurio",
+          "domain": "quimica"
+        },
+        "b": {
+          "id": "4521",
+          "word": "puncionar",
+          "domain": "lexico_verbal"
+        },
+        "screenDistance": 2.861,
+        "cosine": 0.526
+      },
+      {
+        "a": {
+          "id": "1421",
+          "word": "radio (elemento)",
+          "domain": "quimica"
+        },
+        "b": {
+          "id": "3371",
+          "word": "radiar",
+          "domain": "lexico_verbal"
+        },
+        "screenDistance": 2.848,
+        "cosine": 0.671
+      },
+      {
+        "a": {
+          "id": "1591",
+          "word": "vaca",
+          "domain": "biologia_animal"
+        },
+        "b": {
+          "id": "14251",
+          "word": "sembrar",
+          "domain": "agricultura"
+        },
+        "screenDistance": 2.814,
+        "cosine": 0.649
+      }
+    ],
+    "counts": {
+      "invented": 112,
+      "lost": 440
+    }
+  },
+  "d2": {
+    "what": "Antónimos: relación no es acuerdo",
+    "pairs": [
+      {
+        "a": {
+          "id": "7871",
+          "word": "rápido"
+        },
+        "b": {
+          "id": "8345",
+          "word": "lento"
+        },
+        "cosine": 0.748,
+        "screenDistance": 1.046
+      },
+      {
+        "a": {
+          "id": "8892",
+          "word": "grande"
+        },
+        "b": {
+          "id": "8762",
+          "word": "pequeño"
+        },
+        "cosine": 0.672,
+        "screenDistance": 1.003
+      },
+      {
+        "a": {
+          "id": "8761",
+          "word": "nuevo"
+        },
+        "b": {
+          "id": "8760",
+          "word": "viejo"
+        },
+        "cosine": 0.667,
+        "screenDistance": 1.552
+      },
+      {
+        "a": {
+          "id": "8777",
+          "word": "duro"
+        },
+        "b": {
+          "id": "5921",
+          "word": "blando"
+        },
+        "cosine": 0.656,
+        "screenDistance": 0.982
+      },
+      {
+        "a": {
+          "id": "8887",
+          "word": "caliente"
+        },
+        "b": {
+          "id": "8840",
+          "word": "frío"
+        },
+        "cosine": 0.632,
+        "screenDistance": 0.258
+      },
+      {
+        "a": {
+          "id": "8752",
+          "word": "alto"
+        },
+        "b": {
+          "id": "8753",
+          "word": "bajo"
+        },
+        "cosine": 0.63,
+        "screenDistance": 0.466
+      },
+      {
+        "a": {
+          "id": "7457",
+          "word": "húmedo"
+        },
+        "b": {
+          "id": "6513",
+          "word": "seco"
+        },
+        "cosine": 0.625,
+        "screenDistance": 0.519
+      },
+      {
+        "a": {
+          "id": "8915",
+          "word": "claro"
+        },
+        "b": {
+          "id": "8914",
+          "word": "oscuro"
+        },
+        "cosine": 0.581,
+        "screenDistance": 0.993
+      },
+      {
+        "a": {
+          "id": "6509",
+          "word": "fuerte"
+        },
+        "b": {
+          "id": "8894",
+          "word": "débil"
+        },
+        "cosine": 0.581,
+        "screenDistance": 0.363
+      }
+    ]
+  },
+  "d3": {
+    "what": "Hubness: unos pocos conceptos aparecen en muchísimas listas",
+    "k": 10,
+    "meanOccurrence": 10,
+    "hubs": [
+      {
+        "id": "981",
+        "word": "dibujo",
+        "domain": "arte_y_cultura",
+        "count": 77
+      },
+      {
+        "id": "2271",
+        "word": "un",
+        "domain": "gramatica",
+        "count": 69
+      },
+      {
+        "id": "7841",
+        "word": "solícito",
+        "domain": "lexico_adjetival",
+        "count": 64
+      },
+      {
+        "id": "3391",
+        "word": "efectuar",
+        "domain": "lexico_verbal",
+        "count": 58
+      },
+      {
+        "id": "6021",
+        "word": "volante",
+        "domain": "lexico_adjetival",
+        "count": 56
+      },
+      {
+        "id": "7491",
+        "word": "invertebrado",
+        "domain": "lexico_adjetival",
+        "count": 56
+      }
+    ]
+  }
+}

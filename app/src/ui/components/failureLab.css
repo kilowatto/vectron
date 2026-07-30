@@ -1,0 +1,233 @@
+/* Laboratorio de fallos (D1-D3). Sobrio y en columna: cada experimento
+   se abre solo, uno a la vez — es segmentación de Mayer (d=0.79), no
+   una decisión estética. Ver tres a la vez invita a leerlos en diagonal,
+   que es exactamente lo contrario de predecir. */
+:host {
+  display: block;
+  max-width: 380px;
+}
+
+.lab {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lab-intro,
+.lab-source {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--dim);
+}
+
+.lab-source {
+  padding-top: 6px;
+  border-top: 1px solid rgba(233, 226, 214, 0.1);
+}
+
+.exp {
+  border: 1px solid rgba(233, 226, 214, 0.14);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.exp.open {
+  border-color: rgba(217, 138, 52, 0.5);
+}
+
+.exp-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 12px;
+  min-height: 44px; /* hit target */
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: left;
+  color: var(--ink);
+  background: rgba(16, 22, 30, 0.7);
+  border: none;
+  cursor: pointer;
+}
+
+.exp-head:hover {
+  background: rgba(22, 30, 40, 0.9);
+}
+
+.exp-head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.exp-chev {
+  color: var(--accent);
+  font-size: 14px;
+}
+
+.exp-body {
+  padding: 4px 12px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.q {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+.answers {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ans {
+  padding: 9px 11px;
+  min-height: 40px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.4;
+  text-align: left;
+  color: var(--ink);
+  background: rgba(24, 32, 42, 0.85);
+  border: 1px solid rgba(233, 226, 214, 0.16);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.ans:hover {
+  border-color: rgba(217, 138, 52, 0.6);
+}
+
+.ans:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.verdict {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+.verdict b {
+  color: var(--accent);
+}
+
+.case {
+  padding: 9px 10px;
+  background: rgba(12, 16, 22, 0.75);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.case-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.pair {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ink);
+}
+
+.metrics {
+  display: flex;
+  gap: 14px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 10.5px;
+  color: var(--dim);
+}
+
+.metrics b {
+  color: var(--ink);
+}
+
+.bar {
+  height: 7px;
+  border-radius: 4px;
+  background: rgba(233, 226, 214, 0.1);
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  background: var(--accent);
+}
+
+/* Por DEBAJO del azar: rojo, no naranja. Un coseno bajo el suelo no es
+   "poco parecido", es indistinguible de dos palabras al voleo, y el
+   color tiene que decir eso. */
+.bar-fill.below {
+  background: #d55e00;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 10.5em 1fr 2.4em;
+  align-items: center;
+  gap: 8px;
+}
+
+.row-words {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-score {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 10.5px;
+  color: var(--dim);
+  text-align: right;
+}
+
+.note,
+.explain {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.55;
+  color: var(--dim);
+}
+
+.explain {
+  padding-top: 3px;
+}
+
+/* Etiqueta real/simulado — la exige la plantilla de 13 §2.14 y es lo
+   que impide que un experimento se confunda con una animación bonita. */
+.tag {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  color: rgba(111, 190, 140, 0.85);
+}

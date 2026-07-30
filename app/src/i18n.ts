@@ -396,6 +396,78 @@ const STRINGS = {
     en: "That's called semantic similarity. Every word in the cube is a list of 1,024 numbers capturing its meaning, and the computer compares those lists — never the letters.",
   },
 
+  // --- D1-D3 · laboratorio de fallos (DOCs/27, 15 R-11/R-19, 16 R-14) ---
+  drawerFailLabel: { es: "¿Qué puede salir mal?", en: "What can go wrong?" },
+  failLabIntro: {
+    es: "Tres cosas que este cubo podría estar enseñándote mal. Adivina primero — luego mira los datos reales.",
+    en: "Three things this cube might be teaching you wrong. Guess first — then look at the real data.",
+  },
+  failLabSource: {
+    es: "Todas las cifras salen de los {n} conceptos reales del cubo, no de ejemplos inventados.",
+    en: "Every figure comes from the cube's {n} real concepts, not from made-up examples.",
+  },
+  failScreen: { es: "en pantalla:", en: "on screen:" },
+  failCosine: { es: "coseno real:", en: "real cosine:" },
+  failTagReal: { es: "· datos reales, no simulados", en: "· real data, not simulated" },
+
+  fail_d1_title: { es: "1 · ¿La distancia miente?", en: "1 · Does distance lie?" },
+  fail_d1_q: {
+    es: "Dos partículas que se ven pegadas en el cubo, ¿están siempre relacionadas?",
+    en: "Two particles that look adjacent in the cube — are they always related?",
+  },
+  fail_d1_a: { es: "Sí, por eso están cerca", en: "Yes, that's why they're close" },
+  fail_d1_b: { es: "No necesariamente", en: "Not necessarily" },
+  fail_d1_verdict: {
+    es: "No necesariamente — y falla en las dos direcciones.",
+    en: "Not necessarily — and it fails in both directions.",
+  },
+  fail_d1_caseInvented: { es: "Vecino inventado", en: "Invented neighbour" },
+  fail_d1_caseLost: { es: "Vecino perdido", en: "Lost neighbour" },
+  fail_d1_noteInvented: {
+    es: "Se tocan en pantalla, pero su coseno está POR DEBAJO de {chance}, que es lo que dan dos palabras al azar. Verlos juntos no significa nada.",
+    en: "They touch on screen, yet their cosine is BELOW {chance}, which is what two random words score. Seeing them together means nothing.",
+  },
+  fail_d1_noteLost: {
+    es: "Están en extremos opuestos del cubo y sin embargo son vecinos top-5 de verdad. La proyección los separó; el modelo no.",
+    en: "They sit at opposite ends of the cube yet are genuine top-5 neighbours. The projection split them; the model didn't.",
+  },
+  fail_d1_explain: {
+    es: "Comprimir 1024 dimensiones a 3 no cabe. En una muestra del cubo aparecen {inv} pares inventados y {lost} perdidos. Por eso las listas de vecinos se calculan en las 1024 dimensiones completas, nunca a partir de lo que ves.",
+    en: "Squeezing 1,024 dimensions into 3 doesn't fit. In a sample of the cube there are {inv} invented pairs and {lost} lost ones. That's why neighbour lists are computed in the full 1,024 dimensions, never from what you see.",
+  },
+
+  fail_d2_title: { es: "2 · ¿Lo contrario está lejos?", en: "2 · Are opposites far apart?" },
+  fail_d2_q: {
+    es: "Palabras que significan lo CONTRARIO, ¿quedan lejos una de otra?",
+    en: "Words that mean the OPPOSITE — do they end up far from each other?",
+  },
+  fail_d2_a: { es: "Sí, son opuestas", en: "Yes, they're opposites" },
+  fail_d2_b: { es: "No, quedan muy cerca", en: "No, they end up very close" },
+  fail_d2_verdict: {
+    es: "Quedan cerquísima. {top} es de los pares más altos del cubo.",
+    en: "They end up extremely close. {top} is among the highest-scoring pairs in the cube.",
+  },
+  fail_d2_explain: {
+    es: "El modelo aprende de CONTEXTOS, y los antónimos aparecen en los mismos: \"el café está caliente\" / \"el café está frío\". Así que mide RELACIÓN, no acuerdo. Con el azar en {chance}, estos valores son altísimos. Es la salvedad más profunda de todo esto: cerca no quiere decir que digan lo mismo.",
+    en: "The model learns from CONTEXTS, and antonyms appear in the same ones: \"the coffee is hot\" / \"the coffee is cold\". So it measures RELATEDNESS, not agreement. With chance at {chance}, these values are very high. It's the deepest caveat here: close doesn't mean they say the same thing.",
+  },
+
+  fail_d3_title: { es: "3 · ¿Todos pesan igual?", en: "3 · Does every concept weigh the same?" },
+  fail_d3_q: {
+    es: "¿Aparece cada concepto en más o menos el mismo número de listas de vecinos?",
+    en: "Does each concept show up in roughly the same number of neighbour lists?",
+  },
+  fail_d3_a: { es: "Sí, más o menos igual", en: "Yes, roughly the same" },
+  fail_d3_b: { es: "No, unos pocos dominan", en: "No, a few dominate" },
+  fail_d3_verdict: {
+    es: "Unos pocos dominan. {word} aparece en {count} listas; la media es {mean}.",
+    en: "A few dominate. {word} shows up in {count} lists; the average is {mean}.",
+  },
+  fail_d3_explain: {
+    es: "Se llama hubness y es geometría de alta dimensión, no un fallo del cubo: en muchas dimensiones unos pocos puntos acaban siendo vecinos de casi todo. Significa que \"aparece en tu búsqueda\" no siempre quiere decir \"tiene que ver contigo\".",
+    en: "It's called hubness, and it's high-dimensional geometry rather than a cube bug: in many dimensions a few points end up being neighbours of almost everything. It means \"it showed up in your search\" doesn't always mean \"it's about you\".",
+  },
+
   // --- C6 · sonda de ubicación (R-17) ---
   probeKicker: { es: "Una cosa más", en: "One more thing" },
   probe_q1: {

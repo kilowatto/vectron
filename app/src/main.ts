@@ -10,6 +10,8 @@ import { getStoredMode, setStoredMode, type Mode } from "./ui/components/modeSto
 import "./ui/components/levelSwitcher";
 import { openingAlreadySeen, type VxGuidedOpening } from "./ui/components/guidedOpening";
 import "./ui/components/guidedOpening";
+import type { VxFailureLab } from "./ui/components/failureLab";
+import "./ui/components/failureLab";
 import type { LevelChangeDetail, VxLevelSwitcher } from "./ui/components/levelSwitcher";
 import "./ui/components/langSwitcher";
 import type { LangChangeDetail } from "./ui/components/langSwitcher";
@@ -1399,6 +1401,19 @@ async function main() {
   mathDrawer.id = "math-drawer";
   mathDrawer.setAttribute("side", "right");
 
+  // D1-D3 · laboratorio de fallos. En cajón propio, y visible desde
+  // INTERMEDIO (no sólo Avanzado): las tres ideas equivocadas que
+  // corrige —la cercanía significa parecido, relacionado significa de
+  // acuerdo, todos los conceptos pesan igual— se forman en cuanto
+  // alguien empieza a interpretar el cubo, no cuando llega a la
+  // matemática. `15` R-19 pide que esta plantilla sea la forma de
+  // lección por defecto de Intermedio, no un extra de Avanzado.
+  const failLab = document.createElement("vx-failure-lab") as VxFailureLab;
+  const failDrawer = document.createElement("vx-drawer") as VxDrawer;
+  failDrawer.id = "fail-drawer";
+  failDrawer.setAttribute("side", "left");
+  failDrawer.appendChild(failLab);
+
   function applyShellLayout(mode: Mode) {
     stageEl.dataset.mode = mode;
     sidePaneEl.replaceChildren();
@@ -1906,6 +1921,16 @@ async function main() {
     zoomDrawer.setAttribute("label", t("drawerZoomLabel", lang));
     surfaceNavDrawer.setAttribute("label", t("drawerSurfacesLabel", lang));
     mathDrawer.setAttribute("label", t("drawerMathLabel", lang));
+    // El cajón de fallos NO existe en Principiante: ahí la lección es la
+    // apertura guiada, y añadir tres experimentos más sería justo el
+    // exceso de elementos que 15 §3.11 desaconseja (Serrell 1997).
+    failDrawer.setAttribute("label", t("drawerFailLabel", lang));
+    if (mode === "principiante") {
+      if (failDrawer.isConnected) failDrawer.remove();
+    } else {
+      if (!failDrawer.isConnected) cubePaneEl.appendChild(failDrawer);
+      failLab.refresh(); // re-render tras cambio de idioma
+    }
     field.setSearchHighlights([]); // suelta cualquier dominio aislado del modo anterior
 
     // Todo el "chrome" de la app (shell, composer/strip, HUD, color key)
