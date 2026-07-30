@@ -1,0 +1,91 @@
+{
+  "generatedFor": "DOCs/27 Fase B · DOCs/16 R-4 y R-5",
+  "dataset": {
+    "vectorsFile": "vectors.ndjson",
+    "vectors": 20473,
+    "dims": 1024,
+    "note": "Corpus COMPLETO: la siembra (2026-07-19) más los conceptos que añadió el cron, recuperados de Vectorize vía /api/vectors (fetch-missing-vectors.mjs). Antes esto cubría sólo el 46.8 % y las cifras salían optimistas — ver DOCs/27 §5."
+  },
+  "projection": {
+    "explainedVarianceRatio": {
+      "pc1": 0.03450018018164404,
+      "pc2": 0.016127872734747358,
+      "pc3": 0.01606857400955149
+    },
+    "cumulative3": 0.06669662692594289,
+    "totalVariance": 0.6067439783298676,
+    "screePartial": [
+      0.07082318725642439,
+      0.023303178772751863,
+      0.02280435591829207,
+      0.016366228726494313,
+      0.012893108021939095,
+      0.012284129226049914,
+      0.0107678226946801,
+      0.010194225197235158,
+      0.009283797507392798,
+      0.00868077538967572,
+      0.008222357501192134,
+      0.007952613108854017,
+      0.007717944540986696,
+      0.007551132306232308,
+      0.007351049667877296,
+      0.00691734266739274
+    ],
+    "screeSource": "spectrum.json (iteración ortogonal por bloques, monotonía comprobada)",
+    "screeNote": "Diez primeros valores propios como fracción de la varianza total, por iteración de potencia con deflación. La ausencia de codo es el punto: no hay 3 direcciones dominantes que justifiquen llamar 'fiel' a la vista."
+  },
+  "neighbourhood": {
+    "sample": 1500,
+    "sampleNote": "Muestreo determinista (paso fijo). Q_NX exacto sobre 20473 puntos son ~46M distancias de 1024 dims; con 1500 la estimación es estable.",
+    "trustworthiness": {
+      "k5": 0.6917067024128687,
+      "k10": 0.6941162231952397,
+      "k20": 0.6909624588862425
+    },
+    "continuity": {
+      "k5": 0.7884352100089366,
+      "k10": 0.7740986639721568,
+      "k20": 0.7554854031983668
+    }
+  },
+  "cosineScale": {
+    "randomPairs": 10000,
+    "mean": 0.4120339851619604,
+    "p01": 0.23910404911738461,
+    "p25": 0.35700841148911194,
+    "p50": 0.4084120900375723,
+    "p75": 0.46554427716507246,
+    "p99": 0.635233849993265,
+    "interpretation": "Si la masa cae claramente por encima de 0 la escala está comprimida (anisotropía): el ORDEN de los vecinos sigue siendo informativo, pero ningún umbral absoluto de 'similar' lo es. DOCs/16 R-5a."
+  },
+  "hubness": {
+    "k": 10,
+    "kOccurrenceMean": 10,
+    "kOccurrenceSd": 8.803711338596543,
+    "skewness": 1.9126687034188368,
+    "topHubs": [
+      {
+        "id": "2315",
+        "count": 69
+      },
+      {
+        "id": "2185",
+        "count": 62
+      },
+      {
+        "id": "5669",
+        "count": 61
+      },
+      {
+        "id": "157",
+        "count": 57
+      },
+      {
+        "id": "4291",
+        "count": 55
+      }
+    ],
+    "interpretation": "Asimetría alta = cola derecha pesada = unos pocos conceptos aparecen en muchas listas de vecinos (Radovanović et al. 2010). DOCs/16 R-5b."
+  }
+}

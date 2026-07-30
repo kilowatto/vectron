@@ -101,9 +101,16 @@ const STRINGS = {
   },
 
   // --- vx-concept-card ---
+  // "coseno real" era falso aquí y lo marcó la auditoría técnica
+  // (`DOCs/16` R-6): esta lista sale de `VECTORIZE.query()`, que es
+  // búsqueda APROXIMADA de vecinos (ANN, con IVF + cuantización de
+  // producto) y devuelve una puntuación aproximada, no el coseno exacto.
+  // El coseno exacto sí existe en el producto, pero en otro sitio:
+  // `/api/cosine` del Math Lab, que sigue etiquetado como real porque lo
+  // es. Mezclar los dos nombres enseñaba una precisión que no hay.
   cardNeighborsHeadDetailed: {
-    es: "vecinos más cercanos (coseno real)",
-    en: "closest neighbors (real cosine)",
+    es: "vecinos aproximados (ANN · coseno aprox.)",
+    en: "approximate neighbors (ANN · approx. cosine)",
   },
   cardNeighborsHeadSimple: { es: "palabras parecidas", en: "similar words" },
   cardNeighborsSearching: { es: "buscando…", en: "searching…" },

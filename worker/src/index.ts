@@ -459,6 +459,69 @@ async function maybeTriggerAutoGrow(env: Env): Promise<void> {
   }
 }
 
+
+/** GET /api/vectors?ids=1,2,3 — devuelve los embeddings crudos de esos
+ * conceptos, tal cual están en Vectorize.
+ *
+ * Por qué existe: los diagnósticos de proyección (`DOCs/27` Fase B,
+ * `DOCs/16` R-4/R-5) sólo podían leer `vectors.ndjson`, el volcado de la
+ * SIEMBRA — 9 591 de 20 473 conceptos, un 46.8 % de cobertura. Los que
+ * añade el cron nunca se escriben a disco: viven sólo en Vectorize. Sin
+ * este endpoint, cualquier cifra de varianza, fidelidad de vecindarios o
+ * hubness describe menos de la mitad del corpus y hay que declararlo
+ * como suposición. Con él, se mide el 100 %.
+ *
+ * No es secreto que proteger: el dataset es público y educativo, y los
+ * mismos vectores ya son alcanzables uno a uno por `/api/similar`.
+ *
+ * El tope es 20 y NO es una elección de diseño: es el límite duro de
+ * `Vectorize.getByIds`, medido contra el índice en producción (20 ids
+ * responden 200; 21 lanzan y el Worker devuelve un 1101 opaco). Se
+ * valida aquí para responder un 400 que explica el motivo en vez de
+ * dejar que reviente — un 1101 no le dice nada a quien llama, y ése fue
+ * exactamente el síntoma la primera vez. */
+const VECTORS_MAX_IDS = 20;
+
+async function handleVectors(env: Env, request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const raw = (url.searchParams.get("ids") ?? "").trim();
+  if (!raw) {
+    return Response.json(
+      { ok: false, error: "falta ?ids=1,2,3" },
+      { status: 400, headers: corsHeaders(request) },
+    );
+  }
+  const ids = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  if (ids.length > VECTORS_MAX_IDS) {
+    return Response.json(
+      {
+        ok: false,
+        error: `máximo ${VECTORS_MAX_IDS} ids por llamada (pediste ${ids.length}) — límite duro de Vectorize.getByIds`,
+      },
+      { status: 400, headers: corsHeaders(request) },
+    );
+  }
+  if (!ids.every((s) => /^[0-9]+$/.test(s))) {
+    return Response.json(
+      { ok: false, error: "ids debe ser una lista de enteros separados por coma" },
+      { status: 400, headers: corsHeaders(request) },
+    );
+  }
+  const stored = await env.VECTORIZE.getByIds(ids);
+  return Response.json(
+    {
+      ok: true,
+      // Se devuelve lo que HAY, no lo que se pidió: un id que ya no está
+      // en el índice simplemente no aparece, y quien llama lo detecta
+      // comparando longitudes en vez de recibir un hueco silencioso.
+      vectors: stored.map((v) => ({ id: v.id, values: v.values })),
+      requested: ids.length,
+      found: stored.length,
+    },
+    { headers: corsHeaders(request) },
+  );
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -477,6 +540,10 @@ export default {
 
     if (url.pathname === "/api/similar") {
       return handleSimilar(env, request);
+    }
+
+    if (url.pathname === "/api/vectors") {
+      return handleVectors(env, request);
     }
 
     if (url.pathname === "/api/pca-basis") {
