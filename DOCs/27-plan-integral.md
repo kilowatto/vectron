@@ -298,3 +298,57 @@ This session produced four consecutive failed deliveries by skipping this.
 3. **Measure a lab constant in the cube before copying it.** They differ by an order of magnitude in apparent size.
 4. **Look at the evidence before agreeing.** Open the video before commenting on it.
 5. **Search before reimplementing.** The cube already had cellular growth; another was painted on top of it for days.
+
+---
+
+## 7. Revisión del plan — 2026-07-30
+
+Se revisa tras cerrar la Fase B. **Medir cambió el orden de lo que queda**, así que esta sección manda sobre §3 donde discrepen.
+
+### 7.1 Estado por fase
+
+| Fase | Estado | Nota |
+|---|---|---|
+| **A** · Frente visual | **Parcial** | A2 (regresión de encuadre) y A4 (navegación en `/particula`) cerradas. **A1 y A3 siguen abiertas**: mitosis, cámara de boot y fps están en producción sin que nadie los haya visto moverse. Sólo las cierra el usuario. |
+| **B** · Honestidad medible | **CERRADA** | Las 5 cifras medidas sobre el 100 % del corpus y visibles en el producto. |
+| **C** · Principiante | **Siguiente** | Ver 7.2: ahora es urgente por una razón nueva. |
+| **D** · Intermedio | Desbloqueada y **más barata** | Los tres experimentos ya tienen sus datos calculados. |
+| **E** · Avanzado | **Parcialmente hecha sin querer** | El Libro Mayor de Aproximaciones (E1) es lo que quedó en la pestaña PCA. Faltan E2–E5. |
+| **F** · Navegación | Sin empezar | Las 4 decisiones del usuario en `26` siguen sin implementar. |
+| **G** · Accesibilidad | Sin empezar | Hay una **exposición WCAG vigente**, ver 7.3. |
+| **H** · Validación | H3 **cerrada** | El declump se promovió y se completó (datos + prevención). Quedan H1 (inventario) y H2 (estudio de usuarios). |
+
+### 7.2 El hallazgo que reordena todo: el producto se contradice
+
+Al publicar las cifras de la Fase B, el producto quedó afirmando dos cosas incompatibles:
+
+- **Pantalla de arranque**, primera frase que lee *todo* usuario de *todos* los niveles (`i18n.ts` `bootTagline`): *"Cada luz es una palabra. Las que significan parecido **viven cerca**."*
+- **Math Lab**, sólo en Avanzado: *"~30.6 % de lo que se ve cerca **NO está cerca** en las 1024 dimensiones."*
+
+No es una imprecisión heredada: es una contradicción que **nosotros acabamos de crear** al medir. Y cae exactamente sobre `15` §3.4 y `16` R-3, que ya decían que "fiel" no es defendible — sólo que ahora hay número.
+
+Peor: la contradicción está mal repartida. La afirmación falsa la ve **todo el mundo**; la corrección sólo llega a quien entra a Avanzado y abre una pestaña.
+
+**Por eso C5 (reformular la promesa espacial) pasa a ser lo primero del plan**, por delante incluso de la apertura guiada. Es copy, cuesta poco, y hasta que se haga estamos enseñando algo que nuestras propias cifras desmienten. La redacción honesta ya existe en `15` §3.4: la promesa se ata **a la consulta y al destello**, no a la geometría — *"pide una palabra y las relacionadas se encienden"* es enteramente cierto; *"las que se ven cerca son las relacionadas"* no lo es.
+
+### 7.3 Lo que la medición abarató (Fase D)
+
+Los tres experimentos de fallo ya no necesitan investigación previa, sólo interfaz:
+
+- **D1 "la distancia miente"** — con trustworthiness 0.694 sabemos que ~31 % de los vecinos visuales son falsos. Los pares concretos (adyacentes en pantalla, coseno real bajo) se pueden **extraer del dataset**, no inventar.
+- **D2 antónimos** — el suelo de azar 0.412 es lo que hace legible el resultado: sin él, "caliente/frío = 0.7" no dice nada.
+- **D3 hubs** — los cinco ya están calculados: ids `2315, 2185, 5669, 157, 4291`.
+
+### 7.4 Deuda nueva descubierta al reparar
+
+**R2 y D1 pueden divergir.** `/api/concepts` no lee de D1: lee de un snapshot en R2. Los workflows **añaden** a ese snapshot pero nunca lo reconstruyen desde D1. Al reparar el declump hubo que escribir en las dos fuentes; actualizar sólo D1 no cambiaba nada de lo que el usuario ve. No estaba documentado en ningún sitio y es una trampa para cualquier reparación futura de datos.
+
+### 7.5 Orden recomendado
+
+1. **C5** — reformular la promesa espacial. Cierra la contradicción. Barato.
+2. **C1–C3** — la apertura guiada de tres tiempos (`15` R-6). El cambio de producto con más evidencia detrás.
+3. **G1** — paleta segura para daltonismo. Es una **exposición WCAG 1.4.1 vigente**: el matiz es hoy el único canal de dominio en escena y afecta a ~8 % de los varones. Va antes que D porque es accesibilidad en producción, no enseñanza nueva.
+4. **D1–D3** — los experimentos de fallo, ya baratos.
+5. **E2–E5**, **F**, **H1–H2**.
+
+**Y fuera de orden, en paralelo: A1/A3.** Cada fase que se apile sobre el boot sin haberlo visto moverse se construye sobre algo no verificado.

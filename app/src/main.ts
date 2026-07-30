@@ -804,6 +804,17 @@ async function main() {
   // Reduced-motion (DOCs/21 §5.5): con prefers-reduced-motion no hay
   // autorrotación NUNCA — la cámara sólo se mueve por gesto del usuario.
   const reducedMotionMQ = matchMedia("(prefers-reduced-motion: reduce)");
+  // Ver el gancho __vxStep en scene/engine.ts: avanza el motor a mano
+  // cuando el rAF está congelado. Pero el CRECIMIENTO del boot lo
+  // alimenta el bucle de progreso de abajo, que usa su propio rAF y
+  // también se congela — así que sin exponer el campo, __vxStep dibuja
+  // cuadros de una escena que nunca crece (medido: 900 pasos y seguía
+  // en 1 célula). Con esto se puede empujar el progreso a mano y ver de
+  // verdad la mitosis. Sólo DEV.
+  if (import.meta.env.DEV) {
+    (window as unknown as Record<string, unknown>).__vx = { engine, field, splash };
+  }
+
   engine.start(
     (dt) => {
       applyKeyboardNav(dt);

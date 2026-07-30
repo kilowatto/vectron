@@ -171,6 +171,42 @@ export async function createEngine(canvas: HTMLCanvasElement, overrides?: SceneO
   });
 
   function start(onFrame: (dt: number) => void | boolean, onFps: (fps: number) => void) {
+    // Gancho de depuración SÓLO EN DEV. Motivo real y medido: una
+    // pestaña automatizada por CDP queda en segundo plano y Chrome
+    // congela ahí el requestAnimationFrame, así que NADA animado se
+    // puede verificar — mitosis, cámara, deriva. Durante días eso obligó
+    // a entregar cambios de animación sin haberlos visto, que es
+    // exactamente lo que el protocolo de DOCs/27 §6 prohíbe.
+    //
+    // Con esto el bucle se puede avanzar a mano, cuadro a cuadro y con
+    // un dt fijo, que además lo hace determinista: dos corridas dan la
+    // misma imagen. `import.meta.env.DEV` lo deja fuera del bundle de
+    // producción por completo.
+    if (import.meta.env.DEV) {
+      (window as unknown as Record<string, unknown>).__vxStep = (
+        frames = 1,
+        dt = 1 / 60,
+      ) => {
+        for (let i = 0; i < frames; i++) {
+          controls.update(dt);
+          onFrame(dt);
+          renderPipeline.render();
+        }
+      };
+      // Coste real de render, que es lo que se quiere medir cuando el
+      // rAF no es fiable: N cuadros forzados y el tiempo que cuestan.
+      (window as unknown as Record<string, unknown>).__vxBench = (frames = 120) => {
+        const t0 = performance.now();
+        for (let i = 0; i < frames; i++) {
+          controls.update(1 / 60);
+          onFrame(1 / 60);
+          renderPipeline.render();
+        }
+        const ms = (performance.now() - t0) / frames;
+        return { frames, msPorCuadro: +ms.toFixed(2), fpsEquivalente: +(1000 / ms).toFixed(1) };
+      };
+    }
+
     let last = performance.now();
     let fpsAccum = 0;
     let fpsFrames = 0;
