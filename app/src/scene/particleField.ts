@@ -129,10 +129,21 @@ export const DOMAIN_BUCKETS: { key: string; hue: number; domains: string[] }[] =
   { key: "arte", hue: OKABE_ITO.naranja, domains: ["arte", "arte_y_cultura", "musica"] },
 ];
 
-/** Gris claro para todo lo demás. Que "otros" sea NEUTRO y no un color
- * más es deliberado: un matiz vivo prometería una categoría que no
- * existe — son 236 dominios distintos metidos en un cubo. */
-export const OTHER_HUE = 0xb9c0c7;
+/** Gris para todo lo demás. Que "otros" sea NEUTRO y no un color más es
+ * deliberado: un matiz vivo prometería una categoría que no existe —
+ * son 236 dominios distintos metidos en un cubo.
+ *
+ * 0xb9c0c7 → 0x5a6068. Bug reportado en vivo con captura ("hay muchas
+ * partículas blancas, no tienen color definido"), y era mío: "otros" es
+ * el 43.7 % del corpus, así que un gris CLARO no queda de fondo — domina
+ * la escena y compite con los siete tonos que sí significan algo. El
+ * cubo entero se leía como blanco con puntos de color.
+ *
+ * Un gris oscuro invierte la jerarquía correctamente: lo que tiene
+ * dominio identificable resalta, y la masa sin categoría retrocede a
+ * fondo. Sigue siendo visible —no desaparece, y sería deshonesto que
+ * desapareciera: el 43.7 % del corpus EXISTE— pero deja de gritar. */
+export const OTHER_HUE = 0x5a6068;
 
 const DOMAIN_TO_BUCKET = new Map<string, number>();
 for (const b of DOMAIN_BUCKETS) for (const d of b.domains) DOMAIN_TO_BUCKET.set(d, b.hue);
