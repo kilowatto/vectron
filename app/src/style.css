@@ -588,3 +588,99 @@ body {
   border-color: var(--accent);
   color: #1a0f04;
 }
+
+/* D6 · puente Principiante→Intermedio (DOCs/27, `15` R-18). Aviso, no
+   modal: interrumpir un cambio de nivel con un diálogo castigaría justo
+   el gesto que queremos premiar. */
+.continuity-toast {
+  position: fixed;
+  z-index: 240;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: max(96px, calc(env(safe-area-inset-bottom) + 96px));
+  max-width: min(420px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 13px 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink);
+  background: rgba(14, 19, 26, 0.96);
+  border: 1px solid rgba(217, 138, 52, 0.55);
+  border-radius: 10px;
+  backdrop-filter: blur(8px);
+  animation: continuity-in 0.32s ease both;
+}
+
+.continuity-toast b {
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.continuity-toast.out {
+  animation: continuity-out 0.38s ease both;
+}
+
+@keyframes continuity-in {
+  from { opacity: 0; transform: translate(-50%, 10px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@keyframes continuity-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+/* prefers-reduced-motion: aparece y desaparece sin desplazamiento. El
+   aviso NO se suprime — es contenido, no decoración. */
+@media (prefers-reduced-motion: reduce) {
+  .continuity-toast,
+  .continuity-toast.out {
+    animation: none;
+  }
+  .continuity-toast.out {
+    opacity: 0;
+    transition: opacity 0.2s linear;
+  }
+}
+
+/* D5 · etiquetas ancladas a objetos de la escena (DOCs/27, `15` R-16).
+   position:fixed + transform: el JS escribe sólo `transform`, que el
+   compositor resuelve sin recalcular layout — a 60 fps un `left/top`
+   por cuadro provocaría reflow de toda la página. */
+.vx-anchored {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 16;
+  pointer-events: none; /* nunca roban el clic a la escena */
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  padding: 3px 7px;
+  border-radius: 5px;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  /* El translate del JS posiciona la esquina; este margen negativo la
+     centra sobre el objeto sin pelearse con ese transform. */
+  margin: -10px 0 0 -50%;
+}
+
+.vx-anchored.recall-worst {
+  color: #ffd9c2;
+  background: rgba(213, 94, 0, 0.82);
+}
+
+.vx-anchored.recall-best {
+  color: #0a0e14;
+  background: rgba(240, 228, 66, 0.88);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vx-anchored {
+    transition: none;
+  }
+}

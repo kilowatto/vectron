@@ -55,13 +55,14 @@ import type { VxMathLab } from "./ui/components/mathLab";
 import "./ui/components/mathLab";
 import type { VxDrawer } from "./ui/components/drawer";
 import "./ui/components/drawer";
-import { getStoredLang, setStoredLang, t } from "./i18n";
+import { getStoredLang, setStoredLang, t, type Lang } from "./i18n";
 import { fadeIn, fadeOut, tweenNumber } from "./ui/motion";
 import { tokenizeSimple, tokenizeBPE } from "./tokenizer";
 import { tokenizeBGE } from "./bgeTokenizer";
 import { fetchCosinePairs, type Concept, type PartOfSpeech } from "./data/concepts";
 import { setupTokenMode } from "./scene/tokenMode";
 import { createContextChamber, linearCapacityScale } from "./scene/contextChamber";
+import { createAnchoredLabel } from "./ui/anchoredLabel";
 import {
   createContextController,
   CONTEXT_PROFILES,
@@ -181,6 +182,39 @@ const DEFAULT_MODE: Mode = "principiante";
 // 9 px (DOCs/18 UX-C2: jamás splash infinito). null una vez que el
 // loader terminó y se quitó del DOM.
 let activeBootLoader: VxCellularLoader | null = null;
+
+
+/** D6 · el puente Principiante→Intermedio se muestra UNA vez. */
+const CONTINUITY_KEY = "vectron_continuity_shown";
+function continuityShown(): boolean {
+  try {
+    return localStorage.getItem(CONTINUITY_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+function markContinuityShown(): void {
+  try {
+    localStorage.setItem(CONTINUITY_KEY, "1");
+  } catch {
+    /* sin persistencia: volverá a salir, mejor que fallar */
+  }
+}
+/** Aviso discreto, no modal: interrumpir un cambio de nivel con un
+ * diálogo castigaría justo el gesto que queremos premiar. Se va solo. */
+function showContinuityToast(lang: Lang): void {
+  const el = document.createElement("div");
+  el.className = "continuity-toast";
+  el.setAttribute("role", "status"); // lo anuncia el lector de pantalla
+  el.innerHTML = `<b>${t("continuityTitle", lang)}</b><span>${t("continuityBody", lang)}</span>`;
+  document.body.appendChild(el);
+  // 9 s: suficiente para leer dos frases sin prisa (~40 palabras), y la
+  // salida es por CSS para respetar prefers-reduced-motion.
+  setTimeout(() => {
+    el.classList.add("out");
+    setTimeout(() => el.remove(), 400);
+  }, 9000);
+}
 
 async function main() {
   let lang = getStoredLang();
@@ -329,6 +363,28 @@ async function main() {
   // setContextChamberActive más abajo, después de que exista
   // `intermediateSurface`).
   const contextChamber = createContextChamber(engine.renderer, engine.usingWebGPU ? "high" : "low");
+
+  // D5 · etiquetas ANCLADAS a las gotas (`15` R-16; contigüidad espacial
+  // de Mayer, d = 1.10). El texto de D4 dice "las gotas del MEDIO se ven
+  // más apagadas" desde el dock, a media pantalla de distancia — y
+  // buscar a qué se refiere sale del mismo presupuesto mental que
+  // entenderlo. Con la etiqueta encima de la gota, no hay búsqueda.
+  const recallWorst = createAnchoredLabel(cubePaneEl, { className: "recall-worst" });
+  const recallBest = createAnchoredLabel(cubePaneEl, { className: "recall-best" });
+  function updateRecallLabels(): void {
+    const anchors = contextChamber.recallAnchors();
+    const on = anchors !== null && contextChamber.group.visible;
+    recallWorst.setVisible(on);
+    recallBest.setVisible(on);
+    if (!anchors || !on) return;
+    const lang = getStoredLang();
+    recallWorst.setText(t("recallWorst", lang));
+    recallBest.setText(t("recallBest", lang));
+    recallWorst.setPosition(anchors.worst);
+    recallBest.setPosition(anchors.best);
+    recallWorst.update(engine.camera, canvas);
+    recallBest.update(engine.camera, canvas);
+  }
   contextChamber.group.position.set(9, 0, 0);
   contextChamber.group.visible = false;
   engine.scene.add(contextChamber.group);
@@ -536,9 +592,17 @@ async function main() {
     title.innerHTML = `<b>${t("contextChamberLabel", lang)}</b>`;
     const intro = document.createElement("p");
     intro.textContent = t("contextChamberIntro", lang);
+    // D4 · la salvedad Lost-in-the-Middle (`16` R-7). Va JUNTO a la
+    // cámara y no en una nota al pie: la atenuación de las gotas del
+    // medio no se explica sola, y una atenuación sin explicación se lee
+    // como un fallo de render.
+    const lostMiddle = document.createElement("p");
+    lostMiddle.className = "chamber-caveat";
+    lostMiddle.textContent = t("contextChamberLostMiddle", lang);
     chamberDemoEl.append(
       title,
       intro,
+      lostMiddle,
       chamberUsageEl,
       chamberControlsEl,
       compactRowEl,
@@ -829,6 +893,7 @@ async function main() {
   engine.start(
     (dt) => {
       applyKeyboardNav(dt);
+      updateRecallLabels();
       // Reloj del campo líquido (F2 §5.1: jelly/resortes — 1-2 floats
       // de uniform por cuadro, nunca buffers).
       field.tick(dt);
@@ -1995,8 +2060,24 @@ async function main() {
 
   switcher.addEventListener("vx-level-change", (event) => {
     const { mode } = (event as CustomEvent<LevelChangeDetail>).detail;
+    const from = currentMode;
     setStoredMode(mode);
     void applyMode(mode);
+    // D6 · momento de continuidad Principiante -> Intermedio (`15` R-18).
+    // Bransford, Brown y Cocking (2000) y Qin (2025): revisitar el MISMO
+    // concepto con más profundidad es donde ocurre la transferencia.
+    // Vectron tiene aquí un activo que ningún competidor puede copiar —
+    // es el mismo cubo y los mismos vectores reales en los tres niveles,
+    // así que el puente sale GRATIS: lo que el aprendiz ya entendió ("las
+    // relacionadas se encienden") es literalmente la misma operación que
+    // ahora se llama similitud coseno.
+    //
+    // Sólo en ESE salto y sólo una vez: repetirlo lo convertiría en
+    // ruido, y mostrarlo a quien baja de nivel no tiene sentido.
+    if (from === "principiante" && mode === "intermedio" && !continuityShown()) {
+      markContinuityShown();
+      showContinuityToast(getStoredLang());
+    }
   });
 
   await applyMode(effectiveMode);

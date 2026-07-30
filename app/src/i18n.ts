@@ -270,6 +270,15 @@ const STRINGS = {
     es: "Conversación simulada, turnos y tokens reales: cada turno es una gota. Cuando ya no cabe, FIFO expulsa el turno más viejo — nunca el más nuevo.",
     en: "Simulated conversation, real turns and tokens: each turn is a drop. When it stops fitting, FIFO evicts the oldest turn — never the newest.",
   },
+  // D4 · DOCs/27, 16 R-7. La cita es Liu et al. (TACL 2024): la curva de
+  // recuperación por posición es una U — extremos fiables, medio no.
+  contextChamberLostMiddle: {
+    es: "Fíjate en el brillo: las gotas del MEDIO se ven más apagadas. Estar en la ventana no es lo mismo que ser usado — los modelos recuperan lo del medio de un contexto largo de forma medible menos fiable que lo del principio o el final (Liu et al., TACL 2024).",
+    en: "Watch the brightness: the drops in the MIDDLE look dimmer. Being in the window isn't the same as being used — models retrieve information from the middle of a long context measurably less reliably than from either end (Liu et al., TACL 2024).",
+  },
+  // D5 · etiquetas ancladas a las gotas de la cámara.
+  recallWorst: { es: "menos fiable", en: "less reliable" },
+  recallBest: { es: "más fiable", en: "more reliable" },
   contextChamberSendTurn: { es: "enviar turno de ejemplo", en: "send example turn" },
   contextChamberReset: { es: "vaciar cámara", en: "empty chamber" },
   contextChamberPolicyReject: { es: "rechazar", en: "reject" },
@@ -397,6 +406,16 @@ const STRINGS = {
   },
 
   // --- D1-D3 · laboratorio de fallos (DOCs/27, 15 R-11/R-19, 16 R-14) ---
+  // D6 · continuidad Principiante -> Intermedio (DOCs/27, 15 R-18).
+  // Nombra la MISMA operación que el aprendiz ya entendió, no una nueva.
+  continuityTitle: {
+    es: "Ya sabías esto.",
+    en: "You already knew this.",
+  },
+  continuityBody: {
+    es: "Las luces que se encendían al pedir una palabra eran similitud de coseno. Mismo cubo, mismos vectores reales — ahora además vas a ver el número.",
+    en: "Those lights that came on when you asked for a word were cosine similarity. Same cube, same real vectors — now you get to see the number too.",
+  },
   drawerFailLabel: { es: "¿Qué puede salir mal?", en: "What can go wrong?" },
   failLabIntro: {
     es: "Tres cosas que este cubo podría estar enseñándote mal. Adivina primero — luego mira los datos reales.",

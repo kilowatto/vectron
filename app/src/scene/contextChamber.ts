@@ -57,6 +57,10 @@ export interface ContextChamber3D {
    * razón de capacidad; 1 = tamaño del lab (500). Deja la silueta
    * fantasma del lab visible como referencia cuando scale !== 1. */
   setCapacityScale(scale: number): void;
+  /** D5 · posición MUNDIAL de la gota menos fiable (la del medio) y de
+   * la más fiable, para colgarles una etiqueta anclada. null cuando hay
+   * menos de 3 turnos: sin medio no hay curva U que señalar. */
+  recallAnchors(): { worst: THREE.Vector3; best: THREE.Vector3 } | null;
   update(dt: number): void;
   dispose(): void;
 }
@@ -198,6 +202,12 @@ export function createContextChamber(
   // pequeños con geometría COMPARTIDA es barato de sobra para el MVP;
   // volver a instancing real es candidato de pulido para Phase 6 si el
   // presupuesto de draw calls lo pide.)
+  /** Piso de la curva U de recuperación (ver el bloque D4 en
+   * setSnapshot). 0.35 y no 0: el turno del medio SIGUE en la ventana y
+   * apagarlo del todo enseñaría que se borra, que es otra idea
+   * equivocada. Lo que pierde es fiabilidad, no existencia. */
+  const LOST_MIDDLE_FLOOR = 0.35;
+
   const dropGeometry = new THREE.IcosahedronGeometry(0.045, 0);
   let dropPool: THREE.Mesh[] = [];
 
@@ -239,6 +249,7 @@ export function createContextChamber(
     // ver contextController.ts) — mostramos las más RECIENTES si hay más
     // turnos que gotas visibles, mismo criterio que la cinta del DOM.
     const visible = snapshot.activeTurns.slice(-dropPool.length);
+    liveDrops = visible.map((_, i) => i);
     const liquidTop = surface.position.y;
     const liquidBottom = -VESSEL_HEIGHT / 2;
 
@@ -259,8 +270,47 @@ export function createContextChamber(
       mesh.position.set(x, y, z);
       mesh.scale.setScalar(scale);
       mesh.visible = true;
-      (mesh.material as THREE.MeshBasicMaterial).color.setHex(ROLE_COLOR[turn.role] ?? 0xffffff);
+
+      // D4 · LOST IN THE MIDDLE (`16` R-7; Liu et al., TACL 2024).
+      // Los modelos recuperan información del MEDIO de un contexto largo
+      // de forma medible menos fiable que de los extremos — la curva es
+      // una U. Hasta ahora la cámara mostraba todos los turnos igual de
+      // brillantes, y eso enseñaba justo lo contrario de lo que dice la
+      // literatura: que estar dentro de la ventana basta.
+      //
+      // La atenuación es por POSICIÓN dentro de la ventana, no por edad
+      // ni por tamaño: el primero y el último se ven al 100 %, el del
+      // medio cae al mínimo. Con 1 o 2 turnos no se atenúa nada — una U
+      // necesita un medio para tenerlo.
+      const n = visible.length;
+      let recall = 1;
+      if (n > 2) {
+        const t01 = i / (n - 1); // 0 = más viejo, 1 = más reciente
+        // |2t-1| es la U: 1 en los bordes, 0 en el centro.
+        const edge = Math.abs(2 * t01 - 1);
+        recall = LOST_MIDDLE_FLOOR + (1 - LOST_MIDDLE_FLOOR) * edge;
+      }
+      const base = new THREE.Color(ROLE_COLOR[turn.role] ?? 0xffffff);
+      (mesh.material as THREE.MeshBasicMaterial).color.copy(base).multiplyScalar(recall);
     });
+  }
+
+  /** Índices vivos del pool en el último snapshot, en orden cronológico
+   * — los necesita recallAnchors para saber cuál es "el del medio". */
+  let liveDrops: number[] = [];
+
+  function recallAnchors(): { worst: THREE.Vector3; best: THREE.Vector3 } | null {
+    if (liveDrops.length < 3) return null;
+    const mid = dropPool[liveDrops[Math.floor(liveDrops.length / 2)]];
+    const edge = dropPool[liveDrops[liveDrops.length - 1]];
+    if (!mid || !edge) return null;
+    // Mundial, no local: el grupo se escala con la capacidad
+    // (setCapacityScale), así que la posición local del mesh no sirve
+    // para proyectar a pantalla.
+    return {
+      worst: mid.getWorldPosition(new THREE.Vector3()),
+      best: edge.getWorldPosition(new THREE.Vector3()),
+    };
   }
 
   function setCapacityScale(scale: number) {
@@ -298,5 +348,5 @@ export function createContextChamber(
     envTexture?.dispose();
   }
 
-  return { group, setSnapshot, setQuality, setCapacityScale, update, dispose };
+  return { group, setSnapshot, setQuality, setCapacityScale, recallAnchors, update, dispose };
 }
