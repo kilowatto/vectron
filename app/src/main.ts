@@ -8,6 +8,8 @@ import { setupSceneInteraction } from "./scene/sceneInteraction";
 import { fetchConcepts, checkAndTriggerSync } from "./data/concepts";
 import { getStoredMode, setStoredMode, type Mode } from "./ui/components/modeStorage";
 import "./ui/components/levelSwitcher";
+import { openingAlreadySeen, type VxGuidedOpening } from "./ui/components/guidedOpening";
+import "./ui/components/guidedOpening";
 import type { LevelChangeDetail, VxLevelSwitcher } from "./ui/components/levelSwitcher";
 import "./ui/components/langSwitcher";
 import type { LangChangeDetail } from "./ui/components/langSwitcher";
@@ -931,7 +933,36 @@ async function main() {
   await splash.finish();
   activeBootLoader = null;
 
+  let probeChoice: Mode | null = null;
   const initialMode = bootMode;
+
+  // C1-C3 · apertura guiada (DOCs/27, `15` R-6). Va DESPUÉS del boot y
+  // ANTES de tocar el cubo: la evidencia (Kounios y Beeman 2014) dice
+  // que la atención dirigida internamente precede al insight, así que
+  // primero se piensa y luego se explora — al revés, el cubo se
+  // experimenta como "agradable e infalsable" y no queda nada que
+  // reinterpretar.
+  //
+  // Sólo en Principiante: quien entra en Intermedio o Avanzado ya eligió
+  // un nivel, y darle una lección de "las letras no son el significado"
+  // es reversión por pericia (Kalyuga 2007) — ayuda al novato y estorba
+  // al que ya sabe. Y sólo una vez.
+  if (initialMode === "principiante" && !openingAlreadySeen()) {
+    const opening = document.createElement("vx-guided-opening") as VxGuidedOpening;
+    // C6 · la sonda SUGIERE, nunca cambia sola (R-17 exige override). Si
+    // el aprendiz acepta, se persiste igual que si hubiera usado el
+    // switcher — desde aquí es una elección suya, no una inferencia.
+    opening.addEventListener("vx-probe-accept", (event) => {
+      const { mode } = (event as CustomEvent<{ mode: Mode }>).detail;
+      setStoredMode(mode);
+      probeChoice = mode;
+    });
+    document.body.appendChild(opening);
+    await opening.run();
+  }
+
+  // Si la sonda cambió el nivel, es ESE el que se monta — no bootMode.
+  const effectiveMode: Mode = probeChoice ?? initialMode;
 
   const switcher = document.createElement("vx-level-switcher") as VxLevelSwitcher;
   document.body.appendChild(switcher);
@@ -1747,7 +1778,7 @@ async function main() {
   let composer: VxComposer | null = null;
   let mathLabEl: VxMathLab | null = null;
   let tokenStrip: VxTokenStrip | null = null;
-  let currentMode: Mode = initialMode;
+  let currentMode: Mode = effectiveMode;
   /** Conjunto de enseñanza vigente (R-14). null = sin límite. Lo lee
    * recenterToMode: sin él la cámara apuntaba al centroide de TODOS los
    * conceptos que pasan el filtro gramatical (10 383 en Principiante) en
@@ -1936,7 +1967,7 @@ async function main() {
     void applyMode(mode);
   });
 
-  await applyMode(initialMode);
+  await applyMode(effectiveMode);
   appReady = true;
 }
 

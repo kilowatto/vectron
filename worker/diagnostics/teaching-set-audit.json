@@ -1,0 +1,237 @@
+{
+  "what": "C4 de DOCs/27 — verificación de vecindarios del conjunto de enseñanza (R-14)",
+  "chanceFloor": 0.4120339851619604,
+  "total": 300,
+  "clean": 294,
+  "flagged": 6,
+  "byReason": {
+    "mismo": 3,
+    "plano": 3
+  },
+  "bestForOpening": [
+    {
+      "id": 852,
+      "word": "básquetbol",
+      "domain": "deportes",
+      "top": {
+        "word": "baloncesto",
+        "score": 0.923
+      },
+      "reasons": []
+    },
+    {
+      "id": 1025,
+      "word": "enfermera",
+      "domain": "medicina_y_salud",
+      "top": {
+        "word": "enfermero",
+        "score": 0.918
+      },
+      "reasons": []
+    },
+    {
+      "id": 2267,
+      "word": "el",
+      "domain": "gramatica",
+      "top": {
+        "word": "las",
+        "score": 0.903
+      },
+      "reasons": []
+    },
+    {
+      "id": 2268,
+      "word": "la",
+      "domain": "gramatica",
+      "top": {
+        "word": "las",
+        "score": 0.903
+      },
+      "reasons": []
+    },
+    {
+      "id": 15355,
+      "word": "Tradicional japonés",
+      "domain": "arte_corporal",
+      "top": {
+        "word": "Japonesa tradicional",
+        "score": 0.881
+      },
+      "reasons": []
+    },
+    {
+      "id": 15497,
+      "word": "Nanotubo de carbono",
+      "domain": "tecnologia_nano",
+      "top": {
+        "word": "nanotubos de carbono",
+        "score": 0.861
+      },
+      "reasons": []
+    },
+    {
+      "id": 13659,
+      "word": "Raqueta de tenis",
+      "domain": "deporte",
+      "top": {
+        "word": "raqueta de tenis de mesa",
+        "score": 0.854
+      },
+      "reasons": []
+    },
+    {
+      "id": 13760,
+      "word": "electrocardiógrafo",
+      "domain": "medicina",
+      "top": {
+        "word": "electrocardiograma",
+        "score": 0.849
+      },
+      "reasons": []
+    },
+    {
+      "id": 15356,
+      "word": "Neo tradicional",
+      "domain": "arte_corporal",
+      "top": {
+        "word": "neo-tradicional",
+        "score": 0.835
+      },
+      "reasons": []
+    },
+    {
+      "id": 13670,
+      "word": "modernismo",
+      "domain": "arquitectura",
+      "top": {
+        "word": "Modernista",
+        "score": 0.834
+      },
+      "reasons": []
+    },
+    {
+      "id": 980,
+      "word": "escultura",
+      "domain": "arte_y_cultura",
+      "top": {
+        "word": "esculpido",
+        "score": 0.828
+      },
+      "reasons": []
+    },
+    {
+      "id": 14652,
+      "word": "fertilizante",
+      "domain": "horticultura",
+      "top": {
+        "word": "fertilización",
+        "score": 0.811
+      },
+      "reasons": []
+    },
+    {
+      "id": 17250,
+      "word": "Imán superconductivo",
+      "domain": "tecnologia_energia",
+      "top": {
+        "word": "Campo magnético superconductivo",
+        "score": 0.81
+      },
+      "reasons": []
+    },
+    {
+      "id": 2041,
+      "word": "estoicismo",
+      "domain": "filosofia",
+      "top": {
+        "word": "estoico",
+        "score": 0.809
+      },
+      "reasons": []
+    },
+    {
+      "id": 13709,
+      "word": "Pentágono regular",
+      "domain": "matematica",
+      "top": {
+        "word": "Heptágono regular",
+        "score": 0.809
+      },
+      "reasons": []
+    }
+  ],
+  "flaggedList": [
+    {
+      "id": 9724,
+      "word": "Lunes",
+      "domain": "calendario",
+      "top": {
+        "word": "Domingo",
+        "score": 0.722
+      },
+      "reasons": [
+        "mismo"
+      ]
+    },
+    {
+      "id": 13780,
+      "word": "piedra",
+      "domain": "ingenieria",
+      "top": {
+        "word": "piedra de jardinería",
+        "score": 0.72
+      },
+      "reasons": [
+        "plano"
+      ]
+    },
+    {
+      "id": 1024,
+      "word": "hospital",
+      "domain": "medicina_y_salud",
+      "top": {
+        "word": "quirófano",
+        "score": 0.63
+      },
+      "reasons": [
+        "plano"
+      ]
+    },
+    {
+      "id": 1113,
+      "word": "albert einstein",
+      "domain": "personajes",
+      "top": {
+        "word": "karl marx",
+        "score": 0.574
+      },
+      "reasons": [
+        "mismo"
+      ]
+    },
+    {
+      "id": 9725,
+      "word": "Martes",
+      "domain": "calendario",
+      "top": {
+        "word": "Miércoles",
+        "score": 0.724
+      },
+      "reasons": [
+        "mismo"
+      ]
+    },
+    {
+      "id": 20394,
+      "word": "Pollera",
+      "domain": "textil",
+      "top": {
+        "word": "alicate",
+        "score": 0.499
+      },
+      "reasons": [
+        "plano"
+      ]
+    }
+  ]
+}

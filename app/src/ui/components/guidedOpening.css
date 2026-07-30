@@ -1,0 +1,243 @@
+/* Apertura guiada — C1–C3 de DOCs/27.
+   Deliberadamente SOBRIA. Kounios y Beeman (2014): la atención dirigida
+   internamente precede al insight, así que esta pantalla no compite con
+   el pensamiento del aprendiz — sin partículas, sin bloom, sin
+   movimiento de fondo. El cubo ya está detrás; aquí se piensa. */
+:host {
+  position: fixed;
+  inset: 0;
+  z-index: 260;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  /* Velo casi opaco: la escena detrás distrae justo cuando hay que
+     predecir, que es el único momento en que el aprendiz tiene un
+     modelo propio que arriesgar. */
+  background: rgba(5, 7, 10, 0.93);
+}
+
+.panel {
+  width: min(560px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  text-align: center;
+}
+
+/* Progreso de tres tiempos: saber cuánto falta baja la carga
+   extrínseca (Sweller) — sin él, una pregunta a pantalla completa
+   parece un cuestionario sin fondo. */
+.steps {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+
+.step {
+  width: 26px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(233, 226, 214, 0.16);
+}
+
+.step.on {
+  background: var(--accent);
+}
+
+.kicker {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.ask {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.ask b {
+  color: var(--accent);
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.opt {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: center;
+  padding: 14px 18px;
+  min-height: 48px; /* WCAG 2.5.8 */
+  font-family: var(--font-mono);
+  color: var(--ink);
+  background: rgba(18, 24, 32, 0.9);
+  border: 1px solid rgba(233, 226, 214, 0.18);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.opt:hover:not(:disabled) {
+  border-color: rgba(217, 138, 52, 0.65);
+  background: rgba(24, 32, 42, 0.95);
+}
+
+.opt:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.opt:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.opt.chosen {
+  opacity: 1;
+  border-color: var(--accent);
+}
+
+.opt-word {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.opt-why {
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.opt-next {
+  color: #0a0e14;
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+/* --- Tiempo 2: el resultado real --- */
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 4px;
+}
+
+.res-row {
+  display: grid;
+  grid-template-columns: 8.5em 1fr 3em;
+  align-items: center;
+  gap: 10px;
+}
+
+.res-word {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  text-align: right;
+  color: var(--ink);
+}
+
+.res-bar {
+  height: 9px;
+  border-radius: 5px;
+  background: rgba(233, 226, 214, 0.1);
+  overflow: hidden;
+}
+
+/* La barra arranca en el SUELO DE AZAR, igual que en la tarjeta de
+   concepto: llenarla desde 0 haría que 0.47 pintara casi medio ancho y
+   la lección diría lo contrario de lo que pretende. */
+.res-fill {
+  height: 100%;
+  background: var(--accent);
+}
+
+.res-loser .res-fill {
+  background: rgba(233, 226, 214, 0.3);
+}
+
+.res-winner .res-word {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.res-score {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--dim);
+  text-align: left;
+}
+
+.verdict {
+  margin: 2px 0 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+.verdict b {
+  color: var(--accent);
+}
+
+.chance {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--dim);
+}
+
+.named {
+  margin: 4px 0 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--accent);
+}
+
+.named[hidden],
+.options-end[hidden] {
+  display: none;
+}
+
+/* Salir siempre es posible y siempre es discreto: la apertura está
+   prescrita por la evidencia, pero obligarla la convertiría en peaje. */
+.skip {
+  margin-top: 2px;
+  padding: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: rgba(233, 226, 214, 0.45);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.skip:hover {
+  color: rgba(233, 226, 214, 0.75);
+}
+
+.skip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opt {
+    transition: none;
+  }
+}

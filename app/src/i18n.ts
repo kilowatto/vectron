@@ -335,6 +335,94 @@ const STRINGS = {
     es: "Si los dos renglones no coinciden, es un bug — deberían ser el mismo número siempre (misma base, mismo vector).",
     en: "If the two rows don't match, that's a bug — they should always be the same number (same basis, same vector).",
   },
+  // --- C1-C3 · apertura guiada de Principiante (DOCs/27, 15 R-6) ---
+  // Estructura provocar → contradecir → nombrar. El aprendiz APUESTA
+  // antes de ver nada: sin interpretación previa no hay insight que
+  // producir (Kounios y Beeman 2014, vía 15 §3.3).
+  openingAria: { es: "Lección de apertura", en: "Opening lesson" },
+  openingSkip: { es: "saltar e ir al cubo", en: "skip and go to the cube" },
+  openingContinue: { es: "Continuar", en: "Continue" },
+  openingEnter: { es: "Entrar al cubo", en: "Enter the cube" },
+
+  openingBeat1Kicker: { es: "Antes de empezar · adivina", en: "Before we start · guess" },
+  openingBeat1Ask: {
+    es: "Buscas {seed}. ¿Cuál crees que encuentra la computadora?",
+    en: "You search for {seed}. Which one do you think the computer finds?",
+  },
+  openingOptLexical: {
+    es: "se parece en las LETRAS",
+    en: "similar in LETTERS",
+  },
+  openingOptSemantic: {
+    es: "se parece en el SIGNIFICADO",
+    en: "similar in MEANING",
+  },
+
+  openingBeat2Kicker: { es: "Esto es lo que pasó de verdad", en: "Here's what actually happened" },
+  // Acertar y fallar reciben marcos distintos a propósito: acertar no
+  // debe sentirse como que la lección sobraba, y fallar no debe sentirse
+  // como castigo — es fracaso productivo (Kapur 2008), la parte que
+  // enseña.
+  openingBeat2Right: {
+    es: "Acertaste. {sem} gana, y no comparte ni una letra con la palabra buscada. {lex} se parece muchísimo escrita, y aun así pierde.",
+    en: "You got it. {sem} wins, and it shares not one letter with the searched word. {lex} looks almost the same written, and still loses.",
+  },
+  openingBeat2Wrong: {
+    es: "Casi todo el mundo elige {lex} — comparte cinco letras. Pero gana {sem}, que no comparte ninguna. La computadora no está mirando cómo se escribe.",
+    en: "Almost everyone picks {lex} — it shares five letters. But {sem} wins, sharing none. The computer isn't looking at how it's spelled.",
+  },
+  openingBeat2Chance: {
+    es: "Dos palabras al azar de este cubo dan {chance}. Así que ese parecido de letras casi no supera al ruido.",
+    en: "Two random words from this cube score {chance}. So that letter resemblance barely beats noise.",
+  },
+
+  openingBeat3Kicker: { es: "Dilo tú", en: "You say it" },
+  openingBeat3Ask: {
+    es: "Entonces, ¿qué usa la computadora para decidir qué está cerca?",
+    en: "So, what does the computer use to decide what's close?",
+  },
+  openingRuleLetters: {
+    es: "Cómo se escriben las palabras",
+    en: "How the words are spelled",
+  },
+  openingRuleMeaning: {
+    es: "Lo que las palabras significan",
+    en: "What the words mean",
+  },
+  // Se nombra UNA vez, y sólo después de que el aprendiz enunció la
+  // regla — no antes (15 §3.3, tiempo 3).
+  openingNamed: {
+    es: "Eso se llama similitud semántica. Cada palabra del cubo es una lista de 1024 números que capturan su significado, y la computadora compara esas listas — nunca las letras.",
+    en: "That's called semantic similarity. Every word in the cube is a list of 1,024 numbers capturing its meaning, and the computer compares those lists — never the letters.",
+  },
+
+  // --- C6 · sonda de ubicación (R-17) ---
+  probeKicker: { es: "Una cosa más", en: "One more thing" },
+  probe_q1: {
+    es: "¿Sabes lo que es un token?",
+    en: "Do you know what a token is?",
+  },
+  probe_q2: {
+    es: "¿Has oído hablar de la similitud de coseno?",
+    en: "Have you heard of cosine similarity?",
+  },
+  probe_q3: {
+    es: "¿Sabrías explicar qué hace la atención en un Transformer?",
+    en: "Could you explain what attention does in a Transformer?",
+  },
+  probeYes: { es: "Sí", en: "Yes" },
+  probeNo: { es: "No / no estoy seguro", en: "No / not sure" },
+  probeStay: {
+    es: "Perfecto — {mode} es tu sitio. Siempre puedes subir de nivel arriba a la derecha.",
+    en: "Perfect — {mode} is your place. You can always level up from the top right.",
+  },
+  probeSuggest: {
+    es: "Por lo que respondiste, {mode} te va mejor. Tú decides — y puedes cambiar cuando quieras arriba a la derecha.",
+    en: "From your answers, {mode} suits you better. Your call — and you can switch any time from the top right.",
+  },
+  probeAccept: { es: "Sí, llévame ahí", en: "Yes, take me there" },
+  probeDecline: { es: "Me quedo en Principiante", en: "I'll stay in Beginner" },
+
   // --- Fase B · diagnósticos de proyección (DOCs/16 R-4/R-5, DOCs/27) ---
   // La auditoría técnica marcó como P0 que el producto AFIRMA honestidad
   // ("proyección con pérdida") sin publicar una sola cifra. Estas cadenas
