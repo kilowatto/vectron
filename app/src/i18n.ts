@@ -187,6 +187,9 @@ const STRINGS = {
     es: "Cada luz es una palabra. Las que significan parecido viven cerca.",
     en: "Each light is a word. Words that mean similar things live close together.",
   },
+  // Denominador del contador de boot. {n} se sustituye con el total de
+  // palabras del modo, ya formateado con separador de miles.
+  bootOfWords: { es: "de {n} palabras", en: "of {n} words" },
   bootErrorTitle: { es: "No pudimos arrancar", en: "We couldn't start" },
   bootErrorBody: {
     es: "Falló la red, el dataset o la GPU durante la carga. Revisa tu conexión y reintenta.",

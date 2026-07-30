@@ -16,16 +16,6 @@
   pointer-events: none;
 }
 
-/* Canvas de las células: pantalla completa, DETRÁS del texto (va primero
-   en el DOM del shadow root). El cluster se dibuja en el centro de la
-   pantalla, lejos de la franja de texto superior. */
-.cells {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
 .brand {
   font-family: var(--font-mono);
   font-size: 20px;
@@ -46,13 +36,38 @@
   text-align: center;
 }
 
+/* El conteo de células es el número héroe. tabular-nums es obligatorio:
+   sin él, el ancho cambia con cada dígito y el número "baila" en cada
+   duplicación — justo el movimiento que arruina la lectura del salto. */
+.count {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 40px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+  color: var(--ink);
+}
+
+.of {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--dim);
+}
+
+/* Degradado a secundario: duplicando, el porcentaje pasa 9 de sus 14
+   escalones por debajo del 5%, así que como número grande parecería
+   congelado. Sigue estando —es la fracción honesta célula/palabra— pero
+   en el tamaño que le corresponde. */
 .pct {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  font-size: 28px;
-  font-weight: 600;
+  font-size: 14px;
   letter-spacing: 0.02em;
-  color: var(--ink);
+  color: var(--dim);
+  margin-top: 2px;
 }
 
 .phase {
@@ -84,9 +99,6 @@
   display: block;
 }
 
-:host(.reduced-motion) .cells {
-  display: none;
-}
 
 /* Overlay de error de boot (DOCs/21 §4.3 + hallazgo UX-C2 de DOCs/18:
    NUNCA splash infinito — mensaje visible bilingüe + botón de reintento).

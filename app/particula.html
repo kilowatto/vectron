@@ -10,10 +10,36 @@
     <link rel="stylesheet" href="/src/particula/particula.css" />
   </head>
   <body>
-    <canvas id="particula-canvas"></canvas>
+    <!-- Mismo tratamiento que el canvas del cubo (ver index.html): foco
+         propio para que W/A/S/D y flechas NO sean atajos globales de un
+         solo carácter (WCAG 2.1.4, nivel A, se cumple por la vía "activos
+         sólo con el foco puesto"), para que quien navega por teclado
+         pueda ALCANZAR la escena, y para tener dónde pintar el anillo de
+         foco (2.4.7). El contenido interno es el equivalente accesible
+         que exige el estándar HTML para `canvas`. -->
+    <canvas
+      id="particula-canvas"
+      tabindex="0"
+      role="application"
+      aria-label="Laboratorio de partículas. Usa las flechas para orbitar y acercarte."
+    >
+      <p id="particula-fallback">
+        Laboratorio 3D de partículas. Tu navegador no puede mostrarlo.
+      </p>
+    </canvas>
 
     <div id="particula-hud">
       <span id="particula-count">1 partícula</span>
+    </div>
+
+    <!-- WCAG 2.5.7 (AA): todo lo que hoy sólo se hace arrastrando
+         (orbitar, zoom) necesita alternativa sin arrastre. ≥48 px por el
+         trabajo de campo sobre agarre del teléfono (~7 mm de objetivo al
+         centro contra ~12 mm en las esquinas). -->
+    <div id="particula-scene-controls">
+      <button type="button" id="pt-zoom-out" class="scene-ctl" aria-label="Alejar">−</button>
+      <button type="button" id="pt-reset-view" class="scene-ctl" aria-label="Restablecer vista">⌂</button>
+      <button type="button" id="pt-zoom-in" class="scene-ctl" aria-label="Acercar">+</button>
     </div>
 
     <div id="particula-controls">

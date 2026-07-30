@@ -39,6 +39,89 @@ async function main() {
   engine.controls.target.set(0, 0, 0);
   engine.controls.minDistance = 0.5;
   engine.controls.autoRotate = false;
+  engine.controls.saveState(); // punto al que vuelve el botón ⌂
+
+  // Navegación sin arrastre — la misma que ya tiene el cubo (index.html
+  // + main.ts). El lab no tenía NINGUNA: ni canvas enfocable, ni teclado,
+  // ni botones. Se porta aquí porque el lab es el laboratorio de TODO,
+  // no sólo del look: probar una interacción en el cubo y no poder
+  // probarla aquí es justo lo que hace que las dos superficies se
+  // separen.
+  const ptCanvas = document.querySelector<HTMLCanvasElement>("#particula-canvas")!;
+  function nudgeZoom(factor: number): void {
+    const cam = engine.camera;
+    const target = engine.controls.target;
+    const dir = cam.position.clone().sub(target);
+    const dist = dir.length() * factor;
+    const clamped = Math.min(
+      Math.max(dist, engine.controls.minDistance),
+      engine.controls.maxDistance,
+    );
+    cam.position.copy(target).addScaledVector(dir.normalize(), clamped);
+    engine.controls.update();
+  }
+  document.querySelector("#pt-zoom-in")?.addEventListener("click", () => nudgeZoom(0.8));
+  document.querySelector("#pt-zoom-out")?.addEventListener("click", () => nudgeZoom(1.25));
+  document.querySelector("#pt-reset-view")?.addEventListener("click", () => {
+    engine.controls.reset();
+  });
+
+  // El teclado cuelga del CANVAS, no de window: así los atajos de un
+  // solo carácter sólo están vivos con el foco puesto (WCAG 2.1.4) y no
+  // secuestran la escritura en los campos del panel, que aquí son muchos.
+  //
+  // Modelo IDÉNTICO al del cubo (main.ts applyKeyboardNav): teclas
+  // sostenidas + coordenadas esféricas + velocidad por SEGUNDO, no un
+  // salto por pulsación. Que las dos superficies se muevan igual es el
+  // punto — si el lab navegara distinto, probar aquí no diría nada del
+  // cubo.
+  const ptPressed = new Set<"left" | "right" | "forward" | "back">();
+  const PT_KEYS: Record<string, "left" | "right" | "forward" | "back"> = {
+    ArrowLeft: "left", a: "left", A: "left",
+    ArrowRight: "right", d: "right", D: "right",
+    ArrowUp: "forward", w: "forward", W: "forward",
+    ArrowDown: "back", s: "back", S: "back",
+  };
+  const PT_ORBIT_SPEED = 1.1; // rad/s
+  const PT_DOLLY_SPEED = 1.6; // factor exponencial de distancia/s
+  ptCanvas.addEventListener("keydown", (event) => {
+    if (event.key === "Home") {
+      engine.controls.reset();
+      event.preventDefault();
+      return;
+    }
+    const dir = PT_KEYS[event.key];
+    if (!dir) return;
+    ptPressed.add(dir);
+    event.preventDefault(); // que las flechas no hagan scroll de página
+  });
+  ptCanvas.addEventListener("keyup", (event) => {
+    const dir = PT_KEYS[event.key];
+    if (dir) ptPressed.delete(dir);
+  });
+  // Sin esto, salir de la pestaña con una tecla pulsada deja la cámara
+  // girando sola para siempre (no llega el keyup).
+  ptCanvas.addEventListener("blur", () => ptPressed.clear());
+  window.addEventListener("blur", () => ptPressed.clear());
+
+  function applyParticulaNav(dt: number): void {
+    if (ptPressed.size === 0) return;
+    const controls = engine.controls;
+    const camera = engine.camera;
+    const offset = camera.position.clone().sub(controls.target);
+    const spherical = new THREE.Spherical().setFromVector3(offset);
+    if (ptPressed.has("left")) spherical.theta -= PT_ORBIT_SPEED * dt;
+    if (ptPressed.has("right")) spherical.theta += PT_ORBIT_SPEED * dt;
+    let distScale = 1;
+    if (ptPressed.has("forward")) distScale *= Math.exp(-PT_DOLLY_SPEED * dt);
+    if (ptPressed.has("back")) distScale *= Math.exp(PT_DOLLY_SPEED * dt);
+    spherical.radius = Math.min(
+      Math.max(spherical.radius * distScale, controls.minDistance),
+      controls.maxDistance,
+    );
+    offset.setFromSpherical(spherical);
+    camera.position.copy(controls.target).add(offset);
+  }
 
   // Luz ambiental + direccional suave: MeshPhysicalMaterial necesita
   // luces reales en la escena para que transmisión/clearcoat/fresnel
@@ -80,7 +163,10 @@ async function main() {
   setupUi(state, engine.camera, canvas, config);
 
   engine.start(
-    (dt) => state.tick(dt),
+    (dt) => {
+      applyParticulaNav(dt);
+      state.tick(dt);
+    },
     (fps) => {
       const el = document.querySelector<HTMLSpanElement>("#particula-count");
       if (el) el.dataset.fps = String(fps);

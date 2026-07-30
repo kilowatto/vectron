@@ -7,7 +7,6 @@ import { createQualityGovernor, type QualityLevers } from "./scene/qualityGovern
 import { setupSceneInteraction } from "./scene/sceneInteraction";
 import { fetchConcepts, checkAndTriggerSync } from "./data/concepts";
 import { getStoredMode, setStoredMode, type Mode } from "./ui/components/modeStorage";
-import "./ui/components/levelSelect";
 import "./ui/components/levelSwitcher";
 import type { LevelChangeDetail, VxLevelSwitcher } from "./ui/components/levelSwitcher";
 import "./ui/components/langSwitcher";
@@ -18,7 +17,6 @@ import type { VxComposer, TokensChangeDetail } from "./ui/components/composer";
 import "./ui/components/composer";
 import type { VxTokenStrip } from "./ui/components/tokenStrip";
 import "./ui/components/tokenStrip";
-import type { LevelPickDetail } from "./ui/components/levelSelect";
 import type { VxZoomRail } from "./ui/components/zoomRail";
 import "./ui/components/zoomRail";
 import type { VxChromeLegend, DomainIsolateDetail } from "./ui/components/chromeLegend";
@@ -57,7 +55,7 @@ import { getStoredLang, setStoredLang, t } from "./i18n";
 import { fadeIn, fadeOut, tweenNumber } from "./ui/motion";
 import { tokenizeSimple, tokenizeBPE } from "./tokenizer";
 import { tokenizeBGE } from "./bgeTokenizer";
-import { fetchCosinePairs, type PartOfSpeech } from "./data/concepts";
+import { fetchCosinePairs, type Concept, type PartOfSpeech } from "./data/concepts";
 import { setupTokenMode } from "./scene/tokenMode";
 import { createContextChamber, linearCapacityScale } from "./scene/contextChamber";
 import {
@@ -83,10 +81,67 @@ const MODE_POS: Record<Mode, Set<PartOfSpeech>> = {
  * división/fusión visible (ver particleField.ts). La escalera POS
  * decide QUÉ células cambian; la celularidad decide CÓMO se ve. */
 const MODE_CELLS: Record<Mode, number> = {
-  principiante: 15000,
+  principiante: 300,
   intermedio: 20000,
   avanzado: 25000,
 };
+
+/** Conceptos VISIBLES por nivel — R-14 de la auditoría pedagógica
+ * (`DOCs/15` §4): *"Curar un conjunto de enseñanza fijo de 200–400
+ * conceptos para Principiante y desacoplar el tamaño del corpus del
+ * nivel"*. Principiante mostraba 10 000+ conceptos y la evidencia va en
+ * contra en bloque: Serrell (1997, 108 exposiciones) — las que lograban
+ * uso minucioso tenían MENOS elementos; Munzner (2014) — "los píxeles
+ * son el recurso más escaso"; Sedlmair, Munzner y Tory (2013) — la
+ * separación de clases se DEGRADA con la densidad en proyecciones; y el
+ * principio de coherencia de Mayer (d=0.86) — el material interesante
+ * pero no esencial reduce el aprendizaje de forma fiable.
+ *
+ * OJO: esto revoca la decisión R-3 del usuario (15k/20k/25k) para
+ * Principiante. Se cambia por petición explícita ("lo que dice la
+ * pedagogía") y queda anotado aquí para que el cambio sea rastreable.
+ * null = sin límite. */
+const MODE_CONCEPT_LIMIT: Record<Mode, number | null> = {
+  principiante: 300,
+  intermedio: null,
+  avanzado: null,
+};
+
+/** Elige el conjunto de enseñanza: reparto redondo entre dominios para
+ * que TODOS los colores de la leyenda sigan representados (el matiz es
+ * la codificación de dominio — quedarse sin un dominio rompería la
+ * leyenda), y dentro de cada dominio en orden de id, que es estable
+ * entre recargas. Determinista a propósito: un conjunto que cambia cada
+ * visita haría imposible verificar a mano los vecindarios, que es la
+ * otra mitad de lo que pide R-14. */
+function pickTeachingSet(
+  all: Concept[],
+  allowedPos: Set<PartOfSpeech>,
+  limit: number,
+): Set<number> {
+  const byDomain = new Map<string, number[]>();
+  all.forEach((c, i) => {
+    if (!allowedPos.has(c.partOfSpeech)) return;
+    const bucket = byDomain.get(c.domain);
+    if (bucket) bucket.push(i);
+    else byDomain.set(c.domain, [i]);
+  });
+  const domains = [...byDomain.keys()].sort();
+  const picked = new Set<number>();
+  for (let round = 0; picked.size < limit; round++) {
+    let addedThisRound = false;
+    for (const d of domains) {
+      if (picked.size >= limit) break;
+      const bucket = byDomain.get(d)!;
+      if (round < bucket.length) {
+        picked.add(bucket[round]);
+        addedThisRound = true;
+      }
+    }
+    if (!addedThisRound) break; // se agotaron todos los dominios
+  }
+  return picked;
+}
 
 const stageEl = document.querySelector<HTMLDivElement>("#stage")!;
 const cubePaneEl = document.querySelector<HTMLDivElement>("#cube-pane")!;
@@ -99,18 +154,15 @@ const qualityTag = document.querySelector<HTMLSpanElement>("#quality-tag")!;
 const sidePaneEl = document.querySelector<HTMLDivElement>("#side-pane")!;
 const consolePaneEl = document.querySelector<HTMLDivElement>("#console-pane")!;
 
-/** Muestra <vx-level-select> y resuelve cuando el usuario elige un modo. */
-function pickMode(): Promise<Mode> {
-  return new Promise((resolve) => {
-    const picker = document.createElement("vx-level-select");
-    picker.addEventListener(
-      "vx-level-pick",
-      (event) => resolve((event as CustomEvent<LevelPickDetail>).detail.mode),
-      { once: true },
-    );
-    document.body.appendChild(picker);
-  });
-}
+/** Modo con el que entra quien llega por primera vez. Antes había una
+ * pantalla de tres tarjetas (<vx-level-select>) que obligaba a elegir
+ * ANTES de haber visto nada: una decisión a ciegas sobre un producto
+ * que todavía no conoces, y una puerta extra entre el clic y el cubo.
+ * Ahora se entra directo al nivel de entrada y se cambia cuando quieras
+ * con <vx-level-switcher>, que ya vive dentro de la app y no se fue a
+ * ningún lado. Principiante además es el subconjunto más chico, así que
+ * también es el arranque más rápido. */
+const DEFAULT_MODE: Mode = "principiante";
 
 // Referencia al loader de boot mientras está vivo — si main() revienta
 // a mitad del arranque (red/GPU/dataset), el catch de abajo lo usa para
@@ -178,13 +230,26 @@ async function main() {
   // Intermedio sí, y se leía como que algo se rompía. Si ya hay un
   // modo guardado, el universo de la revelación es DIRECTAMENTE el de
   // ese modo — el boot crece derecho hacia su tamaño final.
-  const bootStoredMode = getStoredMode();
-  const bootAllowedIds = bootStoredMode
-    ? concepts.reduce<number[]>((ids, c, i) => {
-        if (MODE_POS[bootStoredMode].has(c.partOfSpeech)) ids.push(i);
-        return ids;
-      }, [])
-    : undefined;
+  // Sin level-select ya no existe el caso "todavía no sé a qué modo voy":
+  // o hay uno guardado de una visita anterior, o es DEFAULT_MODE. Así que
+  // el universo de la revelación SIEMPRE es el del modo final y el boot
+  // crece derecho hacia su tamaño, sin el "crece mucho y luego se encoge"
+  // que se veía en las grabaciones.
+  const bootMode = getStoredMode() ?? DEFAULT_MODE;
+  // El conjunto de enseñanza (R-14) manda sobre el filtro por categoría:
+  // si el nivel tiene límite, el boot crece SÓLO hacia esos conceptos.
+  const bootLimit = MODE_CONCEPT_LIMIT[bootMode];
+  const bootTeaching =
+    bootLimit === null ? null : pickTeachingSet(concepts, MODE_POS[bootMode], bootLimit);
+  const bootAllowedIds = concepts.reduce<number[]>((ids, c, i) => {
+    if (!MODE_POS[bootMode].has(c.partOfSpeech)) return ids;
+    if (bootTeaching && !bootTeaching.has(i)) return ids;
+    ids.push(i);
+    return ids;
+  }, []);
+  // El denominador del contador del boot: las palabras REALES de este
+  // modo, no el cupo teórico. Lo sabemos apenas aterriza el dataset.
+  splash.setTotal(bootAllowedIds.length);
 
   splash.setProgress(40, t("bootGpu", lang));
   const engine = await createEngine(canvas);
@@ -242,7 +307,8 @@ async function main() {
   // si aún no hay, ver MODE_CELLS). La promesa resuelve cuando la
   // población está completa; el ritmo lo alimenta
   // setBootGrowthProgress más abajo con el progreso REAL de carga.
-  const bootGrowthDone = field.growCellularBoot(bootAllowedIds, MODE_CELLS[bootStoredMode ?? "avanzado"]);
+  field.setTeachingSet(bootTeaching);
+  const bootGrowthDone = field.growCellularBoot(bootAllowedIds, MODE_CELLS[bootMode]);
   countLabel.textContent = "0 embeddings";
 
   // Cámara de Contexto 3D (DOCs/13 §2.7/§6, Phase 2) — vive lejos del
@@ -777,6 +843,45 @@ async function main() {
     tokenizersReady = true;
   });
   const revealTotal = bootAllowedIds?.length ?? concepts.length;
+
+  // Cámara que SIGUE al crecimiento — la misma fórmula de reframe del
+  // lab (particula/state.ts). Es la diferencia que se veía al poner las
+  // dos grabaciones lado a lado: en el lab la primera célula llena la
+  // pantalla porque la cámara está encuadrada sobre lo que existe; aquí
+  // arrancaba ya encuadrada al cubo COMPLETO, así que la célula semilla
+  // era un punto de 6 px perdido en el vacío. No era el shader: era el
+  // encuadre. Se ejecuta por cuadro pero converge suave (lerp 0.045),
+  // así que el retroceso se lee como un plano que se abre, no como
+  // saltos cada medio segundo.
+  const bootCamDir = engine.camera.position.clone().sub(engine.controls.target).normalize();
+  const bootFinalDist = engine.camera.position.distanceTo(engine.controls.target);
+  let bootCamSnapped = false;
+  function frameBootCamera(): void {
+    const b = field.visibleBounds();
+    if (!b) return;
+    // El PRIMER cuadro se engancha de golpe. Con lerp desde el encuadre
+    // final harían falta ~50 cuadros para llegar cerca de la semilla, y
+    // para entonces ya hay cientos de células: se perdería justo el
+    // momento que se quería, la primera gota llenando la pantalla.
+    const k = bootCamSnapped ? 0.045 : 1;
+    bootCamSnapped = true;
+    const fovRad = (engine.camera.fov * Math.PI) / 180;
+    // +0.05 = radio de célula con margen; ×1.5 = el mismo aire que deja
+    // el lab. Nunca más lejos que el encuadre final del cubo: el boot
+    // sólo puede ACERCAR, así que al completarse aterriza exactamente
+    // en la vista de siempre y no hay salto al entrar a la app.
+    const want = Math.min(((b.radius + 0.05) / Math.tan(fovRad / 2)) * 1.5, bootFinalDist);
+    const target = engine.controls.target;
+    target.set(
+      target.x + (b.cx - target.x) * k,
+      target.y + (b.cy - target.y) * k,
+      target.z + (b.cz - target.z) * k,
+    );
+    const cur = engine.camera.position.distanceTo(target);
+    const next = cur + (want - cur) * k;
+    engine.camera.position.copy(target).addScaledVector(bootCamDir, next);
+    engine.controls.update();
+  }
   const progressFeedDone = new Promise<void>((resolve) => {
     const start = performance.now();
     const targetMs = 8000; // objetivo de carga ~8s (F1.3b)
@@ -792,6 +897,12 @@ async function main() {
       splash.setProgress(65 + fraction * 35, t(fraction < 0.6 ? "bootTokenizers" : "bootWarm", lang));
       const shown = Math.round(fraction * revealTotal);
       countLabel.textContent = `${shown.toLocaleString(lang === "en" ? "en-US" : "es-MX")} embeddings`;
+      // El contador del loader lee las células VIVAS del cubo, no la
+      // fracción de carga: las olas de mitosis van por detrás del reloj,
+      // así que usar la fracción pintaba "11,732" con una sola célula en
+      // pantalla. Ahora el número ES lo que hay delante.
+      splash.setCount(field.visibleCellCount());
+      frameBootCamera();
       if (fraction < 1) requestAnimationFrame(step);
       else resolve();
     }
@@ -806,10 +917,10 @@ async function main() {
   engine.attachQualityGovernor(governor);
 
   splash.setProgress(100, t("bootReady", lang));
-  await splash.finish(); // crossfade-out ANTES de level-select — nunca se superponen
+  await splash.finish();
   activeBootLoader = null;
 
-  const initialMode = getStoredMode() ?? (await pickMode());
+  const initialMode = bootMode;
 
   const switcher = document.createElement("vx-level-switcher") as VxLevelSwitcher;
   document.body.appendChild(switcher);
@@ -1363,7 +1474,9 @@ async function main() {
   // offset relativo — un paneo, no un dolly) hacia allá.
   const recenterState = { id: 0 };
   function recenterToMode(allowed: Set<PartOfSpeech>) {
-    const visible = field.concepts.filter((c) => allowed.has(c.partOfSpeech));
+    const visible = field.concepts.filter(
+      (c, i) => allowed.has(c.partOfSpeech) && (currentTeaching === null || currentTeaching.has(i)),
+    );
     if (visible.length === 0) return;
     const centroid = new THREE.Vector3();
     for (const c of visible) centroid.add(new THREE.Vector3(...c.coords));
@@ -1624,6 +1737,12 @@ async function main() {
   let mathLabEl: VxMathLab | null = null;
   let tokenStrip: VxTokenStrip | null = null;
   let currentMode: Mode = initialMode;
+  /** Conjunto de enseñanza vigente (R-14). null = sin límite. Lo lee
+   * recenterToMode: sin él la cámara apuntaba al centroide de TODOS los
+   * conceptos que pasan el filtro gramatical (10 383 en Principiante) en
+   * vez de al de los 300 que de verdad están en pantalla — un centro que
+   * no existe. */
+  let currentTeaching: Set<number> | null = null;
 
   // El fundido de salida/entrada del composer/tokenStrip ahora dura lo
   // mismo que la ola de partículas (hasta 3.4s en cambios grandes, ver
@@ -1717,6 +1836,12 @@ async function main() {
     // estimateMorphDuration calcula esa misma duración SIN animar nada,
     // así que switcher/composer/tokenStrip pueden sincronizarse a ella
     // antes de que la morph real arranque más abajo.
+    // El conjunto de enseñanza se recalcula ANTES de medir la morph: si
+    // no, al salir de Principiante el cálculo usaría el límite viejo y
+    // la transición duraría lo que no es.
+    const limit = MODE_CONCEPT_LIMIT[mode];
+    currentTeaching = limit === null ? null : pickTeachingSet(concepts, allowedPos, limit);
+    field.setTeachingSet(currentTeaching);
     const morphMs = field.estimateMorphDuration(allowedPos, MODE_CELLS[mode]);
     switcher.setTransitionMs(morphMs > 0 ? morphMs : 320);
     switcher.setAttribute("current", mode);

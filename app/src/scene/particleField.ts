@@ -2,19 +2,26 @@ import * as THREE from "three/webgpu";
 import {
   Fn,
   attribute,
+  cameraPosition,
   dot,
+  equirectUV,
   exp,
   float,
   fract,
+  mix,
   mx_noise_vec3,
   normalGeometry,
-  normalView,
+  normalWorld,
+  pmremTexture,
   positionLocal,
-  positionViewDirection,
+  positionWorld,
   pow,
+  reflect,
   sin,
+  smoothstep,
   time,
   uniform,
+  varying,
   vec3,
 } from "three/tsl";
 import type Node from "three/src/nodes/core/Node.js";
@@ -146,6 +153,20 @@ export interface ParticleField {
   /** Alimenta el progreso real de carga (0-1) al boot de crecimiento
    * celular — llamar por cuadro mientras dure el arranque. */
   setBootGrowthProgress: (fraction: number) => void;
+  /** Centro y radio de lo que está VISIBLE ahora. Es lo que necesita la
+   * cámara del boot para encuadrar sobre lo que existe en vez de sobre
+   * el cubo entero — la razón de que en el lab la primera célula llene
+   * la pantalla y aquí fuera un punto perdido en el vacío. */
+  visibleBounds: () => { cx: number; cy: number; cz: number; radius: number } | null;
+  /** Fija el conjunto de enseñanza (R-14): sólo estos conceptos serán
+   * visibles, además del filtro por categoría. null = sin límite. */
+  setTeachingSet: (ids: Set<number> | null) => void;
+  /** Cuántas células hay VIVAS en la escena ahora mismo. Es la verdad de
+   * lo que el usuario tiene delante, no el objetivo al que se dirige:
+   * las olas de mitosis van por detrás de la fracción de carga. El
+   * contador del boot lee de aquí para que número y escena no puedan
+   * discrepar. */
+  visibleCellCount: () => number;
   /** P2: la versión "viva" del filtro anterior — en vez de un corte
    * instantáneo, las partículas que entran nacen por mitosis desde la
    * más cercana (mismo dominio primero) que ya se veía, y las que salen
@@ -249,11 +270,28 @@ const CUBE_LIQUID = {
   envReflect: 0.6,
   envReflBlur: 0.6,
   envRefrBlur: 2.5,
-  iridescenceStrength: 0.65,
+  // Iridiscencia a la MITAD que en el lab (0.7): allí el color es
+  // decoración y puede teñirse libremente; aquí el hue es el dominio
+  // semántico, y un arcoíris fuerte sobre el rim empieza a competir con
+  // esa lectura. Al rim le basta este toque para leerse acuoso.
+  iridescenceStrength: 0.35,
   iridescenceSpeed: 0.05,
-  coreEmissive: 1.6,
-  coreFalloff: 2.2,
-  baseGlow: 0.3,
+  coreEmissive: 1.5,
+  /** NO es el 8.0 del lab, y copiarlo fue un error medido. El falloff
+   * dibuja un hotspot: cuanto más alto, más pequeño y concentrado. En
+   * el lab la célula tiene radio 0.28 con la cámara encima y ocupa
+   * cientos de píxeles, así que un hotspot diminuto se luce. Aquí tiene
+   * radio 0.032 y mide 3-6 PÍXELES: con 8.0 el núcleo cae por debajo
+   * del píxel y no se ve nada — el emisivo medio se desploma a 0.296
+   * contra el 0.441 del look clásico, y eso es exactamente el "las
+   * partículas perdieron el brillo" que se reportó. 2.8 devuelve un
+   * medio de ~0.60, por encima del clásico, conservando el gradiente
+   * del núcleo. Regla que este bloque tuvo que aprender dos veces: las
+   * constantes del lab NO se copian, se re-afinan al tamaño aparente. */
+  coreFalloff: 2.8,
+  /** Sube con el falloff: es el piso que sostiene la célula cuando el
+   * núcleo mira para otro lado. */
+  baseGlow: 0.20,
   breathAmp: 0.09,
   breathSpeed: 1.1,
   wobbleAmp: 0.032,
@@ -510,16 +548,68 @@ export function createParticleField(
     return target;
   }
 
+  /** Muestreado: con decenas de miles de células recorrerlas todas cada
+   * cuadro costaría más que dibujarlas. Un paso fijo de como mucho 1500
+   * muestras da un radio estable — sobra para encuadrar. */
+  function visibleBounds(): { cx: number; cy: number; cz: number; radius: number } | null {
+    let n = 0;
+    let cx = 0;
+    let cy = 0;
+    let cz = 0;
+    const step = Math.max(1, Math.floor(realCount / 1500));
+    for (let i = 0; i < realCount; i += step) {
+      if (scaleArray[i] <= 1e-3) continue;
+      cx += posArray[i * 3];
+      cy += posArray[i * 3 + 1];
+      cz += posArray[i * 3 + 2];
+      n++;
+    }
+    if (n === 0) return null;
+    cx /= n;
+    cy /= n;
+    cz /= n;
+    let maxSq = 0;
+    for (let i = 0; i < realCount; i += step) {
+      if (scaleArray[i] <= 1e-3) continue;
+      const dx = posArray[i * 3] - cx;
+      const dy = posArray[i * 3 + 1] - cy;
+      const dz = posArray[i * 3 + 2] - cz;
+      const d = dx * dx + dy * dy + dz * dz;
+      if (d > maxSq) maxSq = d;
+    }
+    return { cx, cy, cz, radius: Math.sqrt(maxSq) };
+  }
+
   function countRealVisible(): number {
     let n = 0;
     for (let i = 0; i < realCount; i++) if (scaleArray[i] > 1e-3) n++;
     return n;
   }
 
+  /** Conjunto de enseñanza (R-14 de la auditoría pedagógica `15` §4):
+   * cuando está fijado, SÓLO estos conceptos son visibles, además del
+   * filtro por categoría gramatical. Es lo que permite que Principiante
+   * muestre ~300 conceptos curados en vez de los 10 000+ que le tocan
+   * por categoría — la evidencia (Serrell 1997; Munzner 2014; Sedlmair
+   * et al. 2013; principio de coherencia de Mayer, d=0.86) dice que
+   * menos elementos producen un compromiso MÁS minucioso, y que la
+   * separación de clases se degrada con la densidad. null = sin límite
+   * (Intermedio/Avanzado). */
+  let teachingSet: Set<number> | null = null;
+
+  function isTeachable(i: number, c: Concept, allowed: Set<PartOfSpeech>): boolean {
+    if (!allowed.has(c.partOfSpeech)) return false;
+    return teachingSet === null || teachingSet.has(i);
+  }
+
+  function setTeachingSet(ids: Set<number> | null): void {
+    teachingSet = ids;
+  }
+
   function setPartOfSpeechFilter(allowed: Set<PartOfSpeech>, targetTotal?: number): number {
     let visible = 0;
     concepts.forEach((concept, i) => {
-      const show = allowed.has(concept.partOfSpeech);
+      const show = isTeachable(i, concept, allowed);
       if (show) visible++;
       writeInstance(i, concept.coords, show ? baseScaleOf(concept) : 0);
     });
@@ -726,28 +816,92 @@ export function createParticleField(
        * estado final (escala real) queda intacto. `boosted` vive fuera
        * (la semilla también entra). */
       function launchBirths(upTo: number, now: number): void {
-        const batch: { id: number; parentD: number }[] = [];
+        type Triple = readonly [number, number, number];
+        const batch: {
+          id: number;
+          parent: number;
+          parentD: number;
+          parentHome: Triple;
+          childHome: Triple;
+        }[] = [];
         while (born < upTo) {
           const id = queue[born - 1];
           born++;
           const home = homeOf(id);
+          const childHome: Triple = [home[0], home[1], home[2]];
           const parent = pickBootParent(home, domainOfCell(id));
-          batch.push({ id, parentD: distSq(homeOf(parent), home) });
+          const p = homeOf(parent);
+          const parentHome: Triple = [p[0], p[1], p[2]];
+          batch.push({ id, parent, parentD: distSq(p, home), parentHome, childHome });
           visibleCells.push(id);
         }
         batch.sort((a, b) => a.parentD - b.parentD);
-        for (const { id } of batch) {
+        for (const { id, parent, parentHome, childHome } of batch) {
+          // Eje de la mitosis: de la hija HACIA la madre. El shader lo
+          // lee de aJellyAxisAmp.xyz (ver birthAxis en positionNode) y
+          // arranca a la hija pegada al cuerpo de la madre, separándola
+          // con el estiramiento peanut. Normalizado en CPU: el shader
+          // vuelve a normalizar, pero así el caso degenerado (madre e
+          // hija con el mismo hogar) cae en un eje estable y no en 0.
+          const ax = parentHome[0] - childHome[0];
+          const ay = parentHome[1] - childHome[1];
+          const az = parentHome[2] - childHome[2];
+          const len = Math.hypot(ax, ay, az) || 1;
+          const o = id * 4;
+          jellyAxisAmpAttr[o] = ax / len;
+          jellyAxisAmpAttr[o + 1] = ay / len;
+          jellyAxisAmpAttr[o + 2] = az / len;
+          // Distancia real a la madre, acotada: pickBootParent elige la
+          // visible más cercana, pero en las primeras olas "la más
+          // cercana" puede estar al otro lado del cubo, y sin tope la
+          // hija cruzaría la escena como un cometa en vez de brotar.
+          jellyAxisAmpAttr[o + 3] = Math.min(len, 0.55);
           const trueScale = baseScaleOfCell(id);
           const boost = 1 + 4 * Math.max(0, 1 - born / 150);
           if (boost > 1.001) boosted.push({ id, trueScale });
-          items.add({
-            id,
-            startAt: now + Math.random() * 120,
-            startEpoch: -1,
-            duration: 280 + Math.random() * 140,
-            toScale: trueScale * boost,
-          });
+          // Las PRIMERAS divisiones son las únicas que se pueden seguir
+          // una por una — la de 1→2 es la promesa entera del arranque —
+          // y a 280 ms pasaban desapercibidas. Se estiran hasta ~900 ms
+          // y se acortan a medida que hay más células, donde ya nadie
+          // sigue una mitosis concreta. El escalonado de arranque
+          // también se abre al principio para que no salgan a la vez.
+          const early = Math.max(0, 1 - born / 24);
+          const startAt = now + Math.random() * (120 + early * 260);
+          const duration = (280 + Math.random() * 140) * (1 + early * 1.6);
+          items.add({ id, startAt, startEpoch: -1, duration, toScale: trueScale * boost });
+
+          // LA MADRE TAMBIÉN SE ANIMA. Ésta es la mitad que faltaba y la
+          // razón real de que nunca se viera una división: el cubo sólo
+          // animaba a la hija, así que la madre se quedaba quieta y lo
+          // que se veía era "aparece una bola al lado", jamás "una
+          // célula se parte". El lab anima las DOS (state.ts: recA y
+          // recB, ambas DIVIDE con eje hacia el origen común).
+          //
+          // Aquí la madre no puede viajar como en el lab —su posición es
+          // una coordenada PCA real, es el dato— así que se le da el
+          // estiramiento peanut hacia la hija con desplazamiento CERO
+          // (aJellyAxisAmp.w = 0): se alarga hacia donde brota la hija y
+          // se relaja. Ese gesto es el que lee como mitosis.
+          if (parent !== id) {
+            const po = parent * 4;
+            jellyAxisAmpAttr[po] = -ax / len;
+            jellyAxisAmpAttr[po + 1] = -ay / len;
+            jellyAxisAmpAttr[po + 2] = -az / len;
+            jellyAxisAmpAttr[po + 3] = 0; // la madre estira, no se mueve
+            items.add({
+              id: parent,
+              startAt,
+              startEpoch: -1,
+              duration,
+              toScale: baseScaleOfCell(parent),
+            });
+          }
         }
+        // Sin esto el eje/distancia de mitosis que acabamos de escribir
+        // NUNCA llega a la GPU: markInstancesDirty sólo sube homeScale,
+        // así que el shader leía ceros, la amplitud del nacimiento salía
+        // 0 y la hija aparecía clavada en su hogar — de la nada.
+        jellyAxisAmpAttribute.needsUpdate = true;
       }
 
       function flushAll(): void {
@@ -1086,12 +1240,12 @@ export function createParticleField(
     const EPS = 1e-3;
     let changing = 0;
     concepts.forEach((c, i) => {
-      const shouldShow = allowed.has(c.partOfSpeech);
+      const shouldShow = isTeachable(i, c, allowed);
       const target = shouldShow ? baseScaleOf(c) : 0;
       if (Math.abs(scaleArray[i] - target) >= EPS) changing++;
     });
     if (targetTotal !== undefined) {
-      const realTarget = concepts.filter((c) => allowed.has(c.partOfSpeech)).length;
+      const realTarget = concepts.filter((c, i) => isTeachable(i, c, allowed)).length;
       const scaled = scaledTarget(targetTotal)!;
       const carrierTarget = Math.max(0, Math.min(CAPACITY - realCount, scaled - realTarget));
       changing += Math.abs(carrierTarget - carrierVisibleCount);
@@ -1125,7 +1279,7 @@ export function createParticleField(
     const leaving: number[] = [];
     const stableVisible: number[] = []; // únicas anclas válidas: ya completamente visibles
     concepts.forEach((c, i) => {
-      const shouldShow = allowed.has(c.partOfSpeech);
+      const shouldShow = isTeachable(i, c, allowed);
       const target = shouldShow ? baseScaleOf(c) : 0;
       const current = scaleArray[i];
       if (Math.abs(current - target) < EPS) {
@@ -1340,10 +1494,19 @@ export function createParticleField(
   const instanceColor = aColorGain.rgb;
   const aGain = aColorGain.a;
   const instancePhase = aBodyPhase.a;
+  /** Albedo oscurecido de la célula (bodyColorOf) — la masa mate bajo el
+   * brillo. Ya viajaba en el buffer; el look clásico no lo usaba. */
+  const aBody = aBodyPhase.xyz;
   const aSpringVec = aSpring.xyz;
   const aJellyT0 = aSpring.w;
 
   const L = CUBE_LIQUID;
+  // Direcciones fijas del look líquido: luz principal (especular/SSS) y
+  // hotspot del núcleo. Uniformes y no constantes para poder afinarlas
+  // en vivo sin recompilar el shader.
+  const uLightDir = uniform(new THREE.Vector3(...L.lightDir).normalize());
+  const uCoreDir = uniform(new THREE.Vector3(...L.coreDir).normalize());
+
   // prefers-reduced-motion congela deriva y wobble (MUST del plan); el
   // pulse/breath de brillo se conserva (es shimmer de relevancia, no
   // movimiento espacial).
@@ -1400,7 +1563,17 @@ export function createParticleField(
     const w2 = float(1).sub(aAnim.x.sub(2).abs().min(1));
     const w3 = float(1).sub(aAnim.x.sub(3).abs().min(1));
     const animIdle = float(1).sub(w2.add(w3).min(1));
-    const animScale = w2.add(w3.mul(oneAnimT.max(0))).add(animIdle);
+    // La hija CRECE mientras se separa (0.35 → 1). Antes nacía a tamaño
+    // completo y sólo se desplazaba: una bola entera que se corre de
+    // sitio no se lee como una célula partiéndose. Creciendo desde el
+    // cuerpo de la madre sí — es el mismo gesto que la mitosis del lab.
+    // Sólo la HIJA crece de 0.35 a 1; la madre se queda a tamaño real y
+    // sólo se estira. Se distinguen por la amplitud de desplazamiento:
+    // la hija viaja (w > 0), la madre no (w = 0). Sin esta separación la
+    // madre encogía al 35% en cada división, que es peor que no animarla.
+    const isDaughter = aJellyAxisAmp.w.mul(1000).clamp(0, 1);
+    const birthScale = mix(float(1), float(0.35).add(animT.mul(0.65)), isDaughter);
+    const animScale = w2.mul(birthScale).add(w3.mul(oneAnimT.max(0))).add(animIdle);
     // El eje de la transición ya no viaja en atributo (aAnimAxis era el
     // vector hogar↔ancla y no cabía en el presupuesto de 8 buffers): se
     // deriva por hash determinista sin/fract del hogar + tipo de
@@ -1411,8 +1584,29 @@ export function createParticleField(
     const animAxisHash = fract(
       sin(aHome.mul(127.1).add(vec3(aAnim.x.mul(311.7), aAnim.x.add(1).mul(74.7), aAnim.x.mul(269.5).add(19.19)))).mul(43758.5453),
     ).mul(2.0).sub(1.0);
-    const animAxisN = animAxisHash.div(animAxisHash.length().max(0.0001));
-    const animAxis = animAxisN.mul(0.12);
+    // En una DIVISIÓN (tipo 2) el eje no puede ser al azar: es la línea
+    // madre→hija. Con el eje por hash la hija aparecía a tamaño completo
+    // en una dirección arbitraria y se deslizaba a su sitio — se leía
+    // como "aparece una bola nueva", no como una célula partiéndose, que
+    // es justo lo que se reportó ("no hace la división celular entre la
+    // 1 hacia la 2"). El eje real viaja en aJellyAxisAmp.xyz, que está
+    // libre durante el nacimiento (el jelly sólo se dispara al cambiar
+    // de nivel, y su amplitud .w se deja en 0 para esa célula), así que
+    // no cuesta un séptimo buffer instanciado — el presupuesto de
+    // WebGPU sigue clavado en 8.
+    const birthAxis = aJellyAxisAmp.xyz;
+    const animAxisRaw = animAxisHash.mul(w3).add(birthAxis.mul(w2));
+    const animAxisN = animAxisRaw.div(animAxisRaw.length().max(0.0001));
+    // La amplitud del nacimiento es la DISTANCIA REAL madre→hija, no un
+    // 0.12 fijo. Con la amplitud fija la hija arrancaba a 12 centésimas
+    // de su propio hogar en dirección a la madre: si la madre estaba más
+    // lejos, la hija seguía naciendo en mitad de la nada — el "aparecen
+    // de la nada las partículas" que se reportó. Con la distancia real
+    // arranca PEGADA a la madre y viaja hasta su sitio. Viaja en
+    // aJellyAxisAmp.w, que es seguro porque el jelly está apagado
+    // mientras aSpring.w (su t0) siga en -1e9: exp(-decay·enorme) = 0.
+    const animAmp = w2.mul(aJellyAxisAmp.w).add(w3.mul(0.12));
+    const animAxis = animAxisN.mul(animAmp);
     const homeOffset = animAxis.mul(w2.mul(oneAnimT).add(w3.mul(animT)));
     const animStretch = sinPiT.mul(w2.add(w3)).mul(aAnim.z);
     const animDeform = animAxisN.mul(dot(positionLocal, animAxisN)).mul(animStretch);
@@ -1448,26 +1642,71 @@ export function createParticleField(
   // (el costo grande a 25k) y no reflejaba la visión del usuario. El
   // material/vertex (wobble, jelly, resortes, curl noise) NO cambia.
   material.colorNode = Fn(() => {
-    const rim = pow(
-      float(1.0).sub(dot(normalView, positionViewDirection).abs()),
-      float(2.2),
-    );
-    const pulse = float(0.75).add(float(0.16).mul(sin(time.mul(1.6).add(instancePhase))));
+    const n = normalWorld.normalize();
+    const v = cameraPosition.sub(positionWorld).normalize();
+    const ndv = dot(n, v).abs().clamp(0, 1);
+    const fresnel = pow(float(1.0).sub(ndv), float(L.fresnelPower));
+
+    // Cuerpo: albedo oscurecido + ambiente + wrap backlight (SSS falso).
+    const wrap = dot(n, uLightDir).mul(0.5).add(0.5);
+    const body = aBody.mul(float(L.ambient).add(wrap.mul(float(L.sssStrength))));
+
+    // Transmisión SIN muestra de textura — y ésta es la diferencia
+    // deliberada con el lab. En el lab se muestrea el PMREM por la
+    // normal refractada; aquí eso costaba la SEGUNDA muestra por
+    // fragmento (la queja de coste a 25k del rechazo anterior) y, peor,
+    // metía el blanco brillante del RoomEnvironment justo en el CENTRO
+    // de la célula, que es lo que lavaba los tonos de dominio. Aquí el
+    // color ES el dato (hue = dominio semántico), no decoración como en
+    // el lab, así que la luz que "atraviesa" sale teñida sólo por el
+    // color propio: misma lectura de ventana acuosa, cero desaturación,
+    // una muestra menos.
+    const transmit = instanceColor.mul(float(L.transmit)).mul(pow(ndv, float(1.5)));
+
+    // ÚNICA muestra PMREM, confinada al rim por el fresnel: espejo en el
+    // borde, ventana en el centro — como una gota real.
+    const reflection = pmremTexture(options.envMap, equirectUV(reflect(v.negate(), n)), float(L.envReflBlur))
+      .mul(fresnel)
+      .mul(float(L.envReflect));
+
+    // Iridiscencia angular cian→magenta→dorado, confinada al rim para
+    // no lavar el núcleo.
+    const iridT = fract(float(1.0).sub(ndv).add(time.mul(L.iridescenceSpeed)));
+    const iridescence = mix(
+      mix(vec3(0.15, 0.85, 0.95), vec3(0.9, 0.25, 0.85), smoothstep(float(0.0), float(0.5), iridT)),
+      vec3(1.0, 0.78, 0.28),
+      smoothstep(float(0.5), float(1.0), iridT),
+    )
+      .mul(fresnel)
+      .mul(float(L.iridescenceStrength));
+
+    // Especular duro y chico: el punto de luz de una superficie húmeda.
+    const halfDir = uLightDir.add(v).normalize();
+    const specular = pow(dot(n, halfDir).max(0.0), float(L.specularPower)).mul(float(L.specularStrength));
+
+    // Núcleo bioluminiscente desplazado del centro. coreFalloff 8.0 (no
+    // 2.2) es EL arreglo: con 2.2 el núcleo bañaba todo el hemisferio y
+    // la célula se leía como un borrón encendido — exactamente el "se
+    // ven raro" que hundió el port anterior (git a0194bc). Con 8.0 el
+    // hotspot se concentra y vuelve a parecer una gota con un punto de
+    // luz dentro.
+    const objN = varying(normalGeometry, "vCubeObjN").normalize();
+    const coreMask = pow(dot(objN, uCoreDir).mul(0.5).add(0.5).clamp(0, 1), float(L.coreFalloff));
     const breath = sin(time.mul(L.breathSpeed).add(instancePhase)).mul(L.breathAmp).add(1.0);
+    const pulse = float(0.75).add(float(0.16).mul(sin(time.mul(1.6).add(instancePhase))));
     // En fusión el brillo se apaga con el progreso (la célula "muere"
     // dentro de la que se la come — no un corte seco).
     const wFuse = float(1).sub(aAnim.x.sub(3).abs().min(1));
     const emissiveAnim = float(1).sub(wFuse.mul(aAnim.y));
-    // Piso 0.18 + rim 0.58: los valores del cubo de luz clásico (ver
-    // git 162a7aa^). aGain = focus·(1+highlight·1.2) pre-multiplicado
-    // en CPU — idéntico al .mul(instanceFocus).mul(highlightBoost)
-    // anterior, un buffer menos.
-    const glow = instanceColor
-      .mul(float(0.18).add(rim.mul(0.58)))
-      .mul(pulse)
+    const emissive = instanceColor
+      .mul(float(L.baseGlow).add(coreMask.mul(L.coreEmissive)))
       .mul(breath)
+      .mul(pulse)
       .mul(emissiveAnim);
-    return vec3(glow).mul(aGain);
+
+    // aGain = focus·(1+highlight·1.2), pre-multiplicada en CPU: la
+    // búsqueda y el hover siguen funcionando igual sobre el look nuevo.
+    return vec3(body.add(transmit).add(reflection).add(iridescence).add(vec3(specular)).add(emissive)).mul(aGain);
   })();
 
   markInstancesDirty();
@@ -1734,6 +1973,9 @@ export function createParticleField(
     revealProgressively,
     growCellularBoot,
     setBootGrowthProgress,
+    visibleCellCount: countRealVisible,
+    setTeachingSet,
+    visibleBounds,
     morphToPartOfSpeechFilter,
     estimateMorphDuration,
     setSimilarityLines,
