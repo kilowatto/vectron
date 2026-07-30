@@ -220,7 +220,21 @@ export function setupSceneInteraction(options: SceneInteractionOptions): SceneIn
     hoveredId = instanceId;
     field.setPointerHighlight(instanceId);
     if (instanceId !== null) {
-      card.showHover(field.concepts[instanceId], event.clientX, event.clientY);
+      // D-3 capa 1 (`26`): la etiqueta va PEGADA A LA PARTÍCULA, no al
+      // cursor. Parece un detalle y no lo es — Gabbard et al. (2005) y
+      // la contigüidad espacial de Mayer dicen que el texto tiene que
+      // tocar aquello de lo que habla. Anclado al cursor, el nombre
+      // flota junto al puntero y el usuario todavía tiene que decidir a
+      // cuál de las partículas cercanas se refiere; anclado a la
+      // partícula, no hay ambigüedad posible.
+      const hc = field.concepts[instanceId].coords;
+      const p = new THREE.Vector3(hc[0], hc[1], hc[2])
+        .applyMatrix4(field.mesh.matrixWorld)
+        .project(camera);
+      const rect = canvas.getBoundingClientRect();
+      const px = rect.left + ((p.x + 1) / 2) * rect.width;
+      const py = rect.top + ((1 - p.y) / 2) * rect.height;
+      card.showHover(field.concepts[instanceId], px, py);
       canvas.style.cursor = "pointer";
     } else {
       card.hideHover();

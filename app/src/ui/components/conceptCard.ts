@@ -163,8 +163,13 @@ export class VxConceptCard extends HTMLElement {
   showHover(concept: Concept, x: number, y: number): void {
     if (this.#visibility === "pinned") return;
     this.className = "hover";
-    this.style.left = `${x + 18}px`;
-    this.style.top = `${y + 18}px`;
+    // Centrada horizontalmente sobre la partícula y ARRIBA de ella: si
+    // se pusiera abajo-derecha (como cuando seguía al cursor) taparía
+    // justo las partículas vecinas, que es lo que el usuario está
+    // mirando cuando pasa el ratón por una zona densa. El transform va
+    // en el CSS de .hover para no pelearse con este left/top.
+    this.style.left = `${Math.round(x)}px`;
+    this.style.top = `${Math.round(y)}px`;
     this.#shadow.innerHTML = cardBody(concept, false, this.#lang);
     if (this.#visibility === "none") fadeIn(this, { duration: 220, rise: 6 });
     this.#visibility = "hover";
@@ -259,13 +264,22 @@ export class VxConceptCard extends HTMLElement {
         </div>`;
       })
       .join("");
+    // Corrección 4 de `26` D-4. El deslizador YA existía, pero sin
+    // encuadre era un control de cantidad. Con la línea .k-lesson pasa a
+    // ser la mejor demostración didáctica del producto: el grafo NO
+    // EXISTE hasta que eliges k. Un embedding es un espacio MÉTRICO
+    // —toda palabra tiene una distancia a toda otra palabra— y la red
+    // de líneas que se ve no es un hecho del modelo, es el corte que el
+    // usuario acaba de elegir. Mover el deslizador es ver esa estructura
+    // aparecer y desaparecer con la propia mano.
     return `
       <div class="neighbors">
         <div class="neighbors-head">
           <span>${t("cardNeighborsHeadDetailed", lang)}</span>
           <span class="topk-value">${topK}</span>
         </div>
-        <input type="range" min="1" max="20" step="1" value="${topK}" />
+        <input type="range" min="1" max="20" step="1" value="${topK}" aria-label="${t("kSliderAria", lang)}" />
+        <p class="k-lesson">${t("kSliderLesson", lang)}</p>
         ${rows || `<div class="neighbor-empty">${t("cardNeighborsCalculating", lang)}</div>`}
         <p class="lines-declared">${t("linesDeclared", lang)
           .replace("{k}", String(neighbors.length))

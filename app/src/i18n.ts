@@ -123,6 +123,11 @@ const STRINGS = {
   // él son lo que de verdad son: el resultado de UNA consulta con UN k
   // elegido. Un embedding es un espacio métrico, no un grafo; el grafo
   // no existe hasta que eliges k.
+  kSliderAria: { es: "Cuántos vecinos mostrar", en: "How many neighbours to show" },
+  kSliderLesson: {
+    es: "Muévelo: la red aparece y desaparece con tu mano. No es una estructura del modelo — es el corte que TÚ elegiste. Todo concepto tiene una distancia a todos los demás; el grafo no existe hasta que fijas un k.",
+    en: "Move it: the network appears and disappears with your hand. It isn't a structure in the model — it's the cut YOU chose. Every concept has a distance to every other; the graph doesn't exist until you fix a k.",
+  },
   linesDeclared: {
     es: "las {k} más cercanas de {total}, por similitud coseno en ℝ¹⁰²⁴",
     en: "the {k} closest of {total}, by cosine similarity in ℝ¹⁰²⁴",

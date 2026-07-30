@@ -15,6 +15,24 @@
   opacity: 0;
 }
 
+/* D-3 capa 1 (`26`): al pasar el cursor, la etiqueta va ANCLADA a la
+   partícula — centrada sobre ella y por ENCIMA. El translate se hace
+   aquí y no en JS para que el left/top escrito por showHover apunte
+   limpiamente al punto proyectado.
+
+   Placa OPACA, no contorno ni sombra: Gabbard et al. (2005) midieron que
+   los estilos robustos sobre fondo variable son los que llevan su propio
+   fondo — y aquí el fondo son 20 000 partículas de colores, el peor caso
+   posible para un texto sin placa. Por eso el alfa sube de 0.88 a 0.96 y
+   se suma un borde de acento: sobre un clúster denso, 0.88 dejaba pasar
+   suficiente color como para que la palabra costara leerse. */
+:host(.hover) {
+  transform: translate(-50%, calc(-100% - 14px));
+  background: rgba(8, 11, 15, 0.96);
+  border-color: rgba(217, 138, 52, 0.45);
+  max-width: 220px;
+}
+
 /* Fijada en la esquina superior derecha, NO centrada: centrada tapaba
    justo el clúster donde se hace clic, y esa misma zona intercepta el
    drag de OrbitControls (pointer-events:auto sólo en el box de la
@@ -278,4 +296,20 @@
   font-size: 10px;
   line-height: 1.5;
   color: rgba(217, 138, 52, 0.85);
+}
+
+/* Corrección 4 de `26` D-4 — la lección del deslizador. En Principiante
+   NO se muestra (ni el deslizador ni esto): D-4 lo excluye de ese nivel
+   por carga innecesaria, y ahí la lección es la apertura guiada. */
+.k-lesson {
+  margin: 5px 0 2px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  color: rgba(233, 226, 214, 0.62);
+}
+
+:host([simple]) .k-lesson,
+:host([simple]) input[type="range"] {
+  display: none;
 }

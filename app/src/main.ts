@@ -371,6 +371,51 @@ async function main() {
   // entenderlo. Con la etiqueta encima de la gota, no hay búsqueda.
   const recallWorst = createAnchoredLabel(cubePaneEl, { className: "recall-worst" });
   const recallBest = createAnchoredLabel(cubePaneEl, { className: "recall-best" });
+  // D-3 capa 2 (`26`): LÍNEA GUÍA entre la tarjeta fijada y su
+  // partícula. La tarjeta vive en la esquina superior derecha (para no
+  // tapar el clúster ni bloquear el arrastre), y esa decisión —correcta
+  // por navegación— rompe la contigüidad espacial que Mayer mide en
+  // 22/22 pruebas con d=1.10. La línea la devuelve sin mover la tarjeta:
+  // el vínculo se ve, el cubo sigue libre.
+  const guideSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  guideSvg.setAttribute("class", "card-guide");
+  guideSvg.setAttribute("aria-hidden", "true"); // decorativo: el vínculo ya está en el DOM
+  const guideLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  guideSvg.appendChild(guideLine);
+  cubePaneEl.appendChild(guideSvg);
+  let guideTarget: THREE.Vector3 | null = null;
+  function setGuideTarget(p: THREE.Vector3 | null): void {
+    guideTarget = p;
+    if (!p) guideSvg.style.opacity = "0";
+  }
+  function updateGuideLine(): void {
+    if (!guideTarget) return;
+    const card = document.querySelector("vx-concept-card");
+    if (!card || !card.classList.contains("pinned")) {
+      guideSvg.style.opacity = "0";
+      return;
+    }
+    const v = guideTarget.clone().project(engine.camera);
+    if (v.z < -1 || v.z > 1) {
+      guideSvg.style.opacity = "0";
+      return;
+    }
+    const rect = canvas.getBoundingClientRect();
+    const px = ((v.x + 1) / 2) * rect.width;
+    const py = ((1 - v.y) / 2) * rect.height;
+    const cr = card.getBoundingClientRect();
+    // Al borde IZQUIERDO-inferior de la tarjeta, no a su centro: una
+    // línea que entra por debajo del panel se ve cortada y sugiere que
+    // pasa por detrás.
+    const cx = cr.left - rect.left;
+    const cy = cr.top - rect.top + cr.height * 0.5;
+    guideLine.setAttribute("x1", String(px));
+    guideLine.setAttribute("y1", String(py));
+    guideLine.setAttribute("x2", String(cx));
+    guideLine.setAttribute("y2", String(cy));
+    guideSvg.style.opacity = "1";
+  }
+
   function updateRecallLabels(): void {
     const anchors = contextChamber.recallAnchors();
     const on = anchors !== null && contextChamber.group.visible;
@@ -930,6 +975,7 @@ async function main() {
     (dt) => {
       applyKeyboardNav(dt);
       updateRecallLabels();
+      updateGuideLine();
       // Reloj del campo líquido (F2 §5.1: jelly/resortes — 1-2 floats
       // de uniform por cuadro, nunca buffers).
       field.tick(dt);
@@ -1735,7 +1781,10 @@ async function main() {
     field,
     card,
     defaultTopK: 6,
-    onFocusPoint: flyTo,
+    onFocusPoint: (p: THREE.Vector3 | null) => {
+      setGuideTarget(p);
+      flyTo(p);
+    },
   });
 
   // HUD: base por modo + sufijo de tokens vivos (modo token, Avanzado).
@@ -1759,7 +1808,10 @@ async function main() {
       // cambia (mismo momento en que ya cambia el conteo del HUD).
       mathLabEl?.setLiveTokens(tokenMode.getLiveTokens());
     },
-    onFocusPoint: flyTo,
+    onFocusPoint: (p: THREE.Vector3 | null) => {
+      setGuideTarget(p);
+      flyTo(p);
+    },
   });
 
   // Índice palabra/frase -> instancias del InstancedMesh, para resaltar

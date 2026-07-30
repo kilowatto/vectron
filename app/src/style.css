@@ -684,3 +684,32 @@ body {
     transition: none;
   }
 }
+
+/* D-3 capa 2 · línea guía tarjeta ↔ partícula (DOCs/26). Recupera la
+   contigüidad espacial (Mayer: 22/22 pruebas, d=1.10) sin mover la
+   tarjeta de la esquina, que está ahí por una razón de navegación.
+   pointer-events:none es obligatorio: un SVG a pantalla completa sobre
+   el canvas se comería todos los arrastres de OrbitControls. */
+.card-guide {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 15; /* sobre el canvas, bajo la tarjeta (20) */
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  overflow: visible;
+}
+
+.card-guide line {
+  stroke: rgba(217, 138, 52, 0.5);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-guide {
+    transition: none;
+  }
+}
