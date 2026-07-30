@@ -37,6 +37,12 @@ export class VxAttentionArcs extends HTMLElement {
     if (this.shadowRoot) return;
     const lang = getStoredLang();
     const root = attachShadow(this, css);
+    // E4 (`16` R-15). Los arcos ya se declaraban "ilustrativos, no pesos
+    // reales", lo que cubre la honestidad sobre ESTOS arcos. Faltaba la
+    // salvedad más profunda: que incluso con pesos REALES seguiría
+    // siendo discutible qué explican. Sin ella, la mejora futura a
+    // trazas reales se leería como que pasan a ser una explicación — y
+    // la literatura dice que se vuelven más reales, no más explicativas.
     root.innerHTML = `
       <div class="head">
         <span class="label">${t("attentionArcsLabel", lang)}</span>
@@ -44,6 +50,7 @@ export class VxAttentionArcs extends HTMLElement {
       </div>
       <canvas></canvas>
       <div class="empty">${t("attentionArcsEmpty", lang)}</div>
+      <p class="interp-note">${t("attentionInterpDebate", lang)}</p>
     `;
     this.#canvas = root.querySelector("canvas")!;
     this.#ctx = this.#canvas.getContext("2d")!;

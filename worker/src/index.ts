@@ -3,6 +3,7 @@ import { SEED_CONCEPTS } from "./data/seedConcepts";
 export { SyncConceptsWorkflow } from "./syncWorkflow";
 export { GenerateConceptsWorkflow } from "./genConceptsWorkflow";
 export { AutoGrowWorkflow } from "./autoGrowWorkflow";
+export { BilingualWorkflow } from "./bilingualWorkflow";
 
 export interface Env {
   AI: Ai;
@@ -13,6 +14,7 @@ export interface Env {
   SYNC_WORKFLOW: Workflow;
   GENERATE_WORKFLOW: Workflow;
   AUTO_GROW_WORKFLOW: Workflow;
+  BILINGUAL_WORKFLOW: Workflow;
   GITHUB_OWNER: string;
   GITHUB_REPO: string;
   GITHUB_BRANCH: string;
@@ -564,6 +566,27 @@ export default {
 
     if (url.pathname === "/api/sync-status") {
       return handleSyncStatus(env, request);
+    }
+
+    // Relleno bilingüe (E5). POST y no GET a propósito: muta el índice
+    // de Vectorize, así que no debe poder dispararse desde una barra de
+    // direcciones ni desde un prefetch del navegador.
+    if (url.pathname === "/api/bilingual-trigger" && request.method === "POST") {
+      const from = Number(new URL(request.url).searchParams.get("fromId") ?? 0);
+      const instance = await env.BILINGUAL_WORKFLOW.create({ params: { fromId: from } });
+      return Response.json(
+        { ok: true, instanceId: instance.id, fromId: from },
+        { headers: corsHeaders(request) },
+      );
+    }
+
+    if (url.pathname === "/api/bilingual-status") {
+      const id = new URL(request.url).searchParams.get("id");
+      if (!id) {
+        return Response.json({ ok: false, error: "falta ?id=" }, { status: 400, headers: corsHeaders(request) });
+      }
+      const inst = await env.BILINGUAL_WORKFLOW.get(id);
+      return Response.json({ ok: true, status: await inst.status() }, { headers: corsHeaders(request) });
     }
 
     if (url.pathname === "/api/sync-trigger" && request.method === "POST") {

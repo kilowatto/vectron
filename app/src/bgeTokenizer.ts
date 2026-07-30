@@ -45,8 +45,14 @@ function loadVocab(): Promise<Map<string, number>> {
   return vocabPromise;
 }
 
-/** Normalización BERT-uncased: minúsculas + quitar marcas diacríticas. */
-function normalize(text: string): string {
+/** Normalización BERT-uncased: minúsculas + quitar marcas diacríticas.
+ *
+ * Se EXPORTA (E3 de `DOCs/27`, `16` R-10) para poder enseñar el efecto,
+ * no sólo sufrirlo. Hasta ahora el borrado de acentos vivía como un
+ * comentario de código, y la auditoría lo marca como crítico para el
+ * español: "Café" y "cafe" llegan al modelo como la MISMA cadena, y un
+ * hispanohablante tiene derecho a ver eso, no a descubrirlo. */
+export function normalize(text: string): string {
   return text
     .toLowerCase()
     .normalize("NFD")

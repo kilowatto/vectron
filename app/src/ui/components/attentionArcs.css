@@ -61,3 +61,13 @@ canvas {
   padding: 24px 0;
   text-align: center;
 }
+
+/* E4 · el debate de interpretabilidad (DOCs/16 R-15). Discreto pero
+   permanente: es una salvedad conceptual, no una alerta. */
+.interp-note {
+  margin: 8px 0 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.55;
+  color: rgba(233, 226, 214, 0.55);
+}

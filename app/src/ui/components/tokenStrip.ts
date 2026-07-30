@@ -1,4 +1,4 @@
-import { tokenizeBGE } from "../../bgeTokenizer";
+import { tokenizeBGE, normalize } from "../../bgeTokenizer";
 import { attachShadow } from "./shadow";
 import { getStoredLang, t } from "../../i18n";
 import type { Token } from "../../tokenizer";
@@ -30,6 +30,7 @@ export class VxTokenStrip extends HTMLElement {
   #bgeLabelEl!: HTMLDivElement;
   #bgeToggleBtn!: HTMLButtonElement;
   #bgeToggleLabelEl!: HTMLSpanElement;
+  #accentNoteEl!: HTMLDivElement;
   #bgeDetailEl!: HTMLDivElement;
   #hideIds = false;
   #compare = false;
@@ -58,6 +59,7 @@ export class VxTokenStrip extends HTMLElement {
         <div class="bge-detail">
           <div class="rowlabel bge-label"></div>
           <div class="tokens bge"></div>
+          <div class="accent-note" hidden></div>
           <div class="disclaimer"></div>
         </div>
       </div>
@@ -69,6 +71,7 @@ export class VxTokenStrip extends HTMLElement {
     this.#bgeLabelEl = root.querySelector(".bge-label")!;
     this.#bgeToggleBtn = root.querySelector(".bge-toggle")!;
     this.#bgeToggleLabelEl = root.querySelector(".bge-toggle-label")!;
+    this.#accentNoteEl = root.querySelector(".accent-note")!;
     this.#bgeDetailEl = root.querySelector(".bge-detail")!;
     root.querySelector(".disclaimer")!.textContent = t("tokenDisclaimer", getStoredLang());
 
@@ -124,6 +127,22 @@ export class VxTokenStrip extends HTMLElement {
 
     this.#bgeToggleLabelEl.textContent = `${t("tokenCompareToggle", lang)} · ${bgeTokens.length}`;
     this.#renderChips(this.#bgeTokensEl, bgeTokens);
+
+    // E3 (`16` R-10) · EL BORRADO DE ACENTOS, EN VIVO.
+    // `do_lower_case: true` en el tokenizer de BGE significa que "Café"
+    // y "cafe" llegan al modelo como la MISMA cadena. Eso vivía sólo en
+    // un comentario de código, y la auditoría lo marca como crítico
+    // para el español: no es un detalle de implementación, es que el
+    // modelo no puede distinguir dos palabras que un hispanohablante sí
+    // distingue. Se muestra sólo cuando de verdad pasa —con el texto
+    // del usuario, no con un ejemplo— porque una advertencia que
+    // aparece siempre se vuelve invisible.
+    const norm = normalize(text);
+    const changed = norm !== text;
+    this.#accentNoteEl.hidden = !changed;
+    if (changed) {
+      this.#accentNoteEl.innerHTML = `${t("tokenAccentStripped", lang)} <b>${text.slice(0, 40)}</b> → <b>${norm.slice(0, 40)}</b>`;
+    }
   }
 }
 

@@ -43,6 +43,13 @@ name = "vectron-auto-grow"
 binding = "AUTO_GROW_WORKFLOW"
 class_name = "AutoGrowWorkflow"
 
+# Relleno bilingüe (E5 de DOCs/27). Una sola pasada: embebe la forma
+# ESPAÑOLA de cada concepto y la sube como segundo vector `id:es`.
+[[workflows]]
+name = "vectron-bilingual"
+binding = "BILINGUAL_WORKFLOW"
+class_name = "BilingualWorkflow"
+
 [[routes]]
 pattern = "vectron.kilowatto.com"
 custom_domain = true

@@ -80,6 +80,11 @@ const STRINGS = {
     es: "Cortes de referencia del WordPiece real de BGE (bge-m3 usa otro tokenizador, no implementado aquí). Cada fragmento se embebe aislado — su posición es una aproximación; el modelo real lee todo en contexto.",
     en: "Reference cuts from BGE's real WordPiece tokenizer (bge-m3 uses a different one, not implemented here). Each fragment is embedded in isolation — its position is an approximation; the real model reads everything in context.",
   },
+  // E3 (DOCs/27, 16 R-10): el borrado de acentos, visible.
+  tokenAccentStripped: {
+    es: "El tokenizador quita mayúsculas y acentos antes de mirar tu texto — para el modelo, esto es lo mismo:",
+    en: "The tokenizer strips case and accents before looking at your text — to the model, these are identical:",
+  },
   tokenPhraseLabel: { es: "frase completa", en: "full phrase" },
   tokenCompareToggle: {
     es: "comparar con el tokenizador WordPiece de BGE (referencia)",
@@ -647,6 +652,13 @@ const STRINGS = {
   nextTokenDeclared: { es: "vocabulario de ejemplo, declarado", en: "demo vocabulary, declared" },
   nextTokenTemp: { es: "temperatura", en: "temperature" },
   attentionArcsLabel: { es: "D · cómo se miran los tokens", en: "D · how tokens attend" },
+  // E4 · DOCs/27, 16 R-15. Va donde se INTRODUCEN los arcos, no en una
+  // nota al pie: quien ve el dibujo por primera vez es quien está
+  // formando la idea de que "esto es lo que el modelo mira".
+  attentionInterpDebate: {
+    es: "Y aunque fueran pesos reales: si la atención muestra lo que un modelo \"usa\" es una pregunta abierta y disputada en la literatura (Jain y Wallace 2019; Wiegreffe y Pinter 2019; Serrano y Smith 2019). Cambiarlos por trazas reales los haría más reales, no más explicativos.",
+    en: "And even with real weights: whether attention shows what a model \"uses\" is an open, disputed question in the literature (Jain & Wallace 2019; Wiegreffe & Pinter 2019; Serrano & Smith 2019). Swapping in real traces would make them more real, not more explanatory.",
+  },
   attentionArcsDeclared: { es: "pesos ilustrativos, declarados", en: "illustrative weights, declared" },
   attentionArcsEmpty: { es: "escribe algo arriba para ver los arcos", en: "type something above to see the arcs" },
   ragLabel: { es: "F · RAG: pregunta → chunks → respuesta", en: "F · RAG: question → chunks → answer" },

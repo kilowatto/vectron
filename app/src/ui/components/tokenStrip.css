@@ -218,3 +218,27 @@
     min-height: 44px;
   }
 }
+
+/* E3 · borrado de acentos en vivo (DOCs/16 R-10). Sólo aparece cuando de
+   verdad ocurre con el texto del usuario: una advertencia permanente se
+   vuelve invisible, y ésta importa demasiado para el español como para
+   dejarla convertirse en decoración. */
+.accent-note {
+  margin-top: 6px;
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.55;
+  color: rgba(233, 226, 214, 0.7);
+  background: rgba(213, 94, 0, 0.14);
+  border-left: 2px solid rgba(213, 94, 0, 0.7);
+  border-radius: 0 4px 4px 0;
+}
+
+.accent-note b {
+  color: var(--ink);
+}
+
+.accent-note[hidden] {
+  display: none;
+}
