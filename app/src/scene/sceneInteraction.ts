@@ -80,9 +80,21 @@ export function setupSceneInteraction(options: SceneInteractionOptions): SceneIn
     }
     const lineObj = field.setSimilarityLines(instanceId, neighborInstanceIds);
     // Resortes semánticos (F2 §5.1): los vecinos reales se atraen
-    // suavemente hacia el fijado con rest-length ∝ coseno — junto con
-    // las líneas eléctricas, el claim local "los vecinos viven cerca"
-    // se refuerza sin mover nada más.
+    // suavemente hacia el fijado con rest-length ∝ coseno.
+    //
+    // La justificación anterior decía que esto "refuerza el claim de que
+    // los vecinos viven cerca". Eso estaba al revés y hay que dejarlo
+    // corregido aquí para que nadie lo vuelva a derivar: los vecinos NO
+    // viven cerca — medido, ~31 % de lo que se ve cerca no lo está
+    // (trustworthiness 0.694, worker/diagnostics/). Si el resorte
+    // "reforzara" esa lectura estaría fabricando la afirmación falsa.
+    //
+    // Lo que el resorte hace bien es lo contrario: los vecinos se
+    // acercan SÓLO cuando fijas un concepto, es decir, cuando se ejecuta
+    // la consulta. Eso vuelve visible que la cercanía se CALCULA en las
+    // 1024 dimensiones, no que estuviera ahí en la geometría. Es el
+    // resultado de la búsqueda hecho movimiento — por eso la tarjeta lo
+    // etiqueta "metáfora, no mecanismo" y no "así es el espacio".
     field.setSprings(
       views.map((v, i) => ({ instanceId: neighborInstanceIds[i], score: v.score })),
       instanceId,

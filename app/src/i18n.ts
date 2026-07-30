@@ -191,8 +191,21 @@ const STRINGS = {
   // --- F1.3: vx-cellular-loader (DOCs/21 §4.3) ---
   // Línea de orientación (advance organizer): estática, bajo la marca.
   bootTagline: {
-    es: "Cada luz es una palabra. Las que significan parecido viven cerca.",
-    en: "Each light is a word. Words that mean similar things live close together.",
+    // C5 de DOCs/27 §7.2. Antes decía "las que significan parecido viven
+    // cerca" — la afirmación que `15` §3.4 y `16` R-3 declaran
+    // indefendible, y que la Fase B convirtió en una CONTRADICCIÓN
+    // interna: el Math Lab publica que ~31 % de lo que se ve cerca NO lo
+    // está (trustworthiness 0.694 medida sobre los 20 473 conceptos).
+    // Y estaba mal repartida: la frase falsa la leía todo el mundo en la
+    // primera pantalla; la corrección sólo llegaba a quien entrara a
+    // Avanzado y abriera una pestaña.
+    //
+    // La promesa honesta se ata a la CONSULTA y al destello, no a la
+    // geometría: "pide una palabra y las relacionadas se encienden" es
+    // enteramente cierto — el destello sale de una búsqueda en las 1024
+    // dimensiones completas, no de la distancia en pantalla.
+    es: "Cada luz es una palabra. Pide una y las relacionadas se encienden.",
+    en: "Each light is a word. Ask for one and the related ones light up.",
   },
   // Denominador del contador de boot. {n} se sustituye con el total de
   // palabras del modo, ya formateado con separador de miles.
