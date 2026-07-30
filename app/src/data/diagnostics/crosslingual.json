@@ -2,83 +2,17 @@
   "what": "E5 · alineación translingüe ES->EN (DOCs/16 R-2, protocolo LAReQA)",
   "design": "El índice está embebido SÓLO en inglés (seed.ts:115). Se consulta con la palabra ESPAÑOLA y se comprueba si el mismo concepto sale primero. Sólo se usan conceptos cuyas formas es/en DIFIEREN: si coinciden, acertar probaría coincidencia de cadena, no alineación translingüe.",
   "queries": 150,
-  "duplicateCredited": 7,
+  "duplicateCredited": 2,
   "duplicateNote": "Aciertos donde el id devuelto difiere del pedido pero la palabra inglesa es la misma: conceptos DUPLICADOS en el corpus. Se cuentan como acierto porque el significado es correcto; se publica la cifra porque es un problema real de datos que esta prueba destapó.",
-  "accuracyAt1": 0.5067,
-  "accuracyAt5": 0.64,
-  "mrr": 0.5722,
+  "accuracyAt1": 0.9933,
+  "accuracyAt5": 1,
+  "mrr": 0.9967,
   "examplesOfFailure": [
     {
-      "es": "regresión",
-      "en": "regression",
-      "rank": 3,
-      "gotInstead": "regressive"
-    },
-    {
-      "es": "musgo",
-      "en": "moss",
-      "rank": 3,
-      "gotInstead": "Mus"
-    },
-    {
-      "es": "morir",
-      "en": "die",
+      "es": "considerar",
+      "en": "consider",
       "rank": 2,
-      "gotInstead": "dead"
-    },
-    {
-      "es": "trébol",
-      "en": "clover",
-      "rank": null,
-      "gotInstead": "trembling"
-    },
-    {
-      "es": "cubeta",
-      "en": "bucket",
-      "rank": null,
-      "gotInstead": "cubic"
-    },
-    {
-      "es": "un",
-      "en": "a",
-      "rank": null,
-      "gotInstead": "united nations"
-    },
-    {
-      "es": "exigir",
-      "en": "demand",
-      "rank": 7,
-      "gotInstead": "demanding"
-    },
-    {
-      "es": "necesitar",
-      "en": "need",
-      "rank": 2,
-      "gotInstead": "to need"
-    },
-    {
-      "es": "vagabundear",
-      "en": "to wander, to roam",
-      "rank": null,
-      "gotInstead": "wandering"
-    },
-    {
-      "es": "depurar",
-      "en": "to debug",
-      "rank": null,
-      "gotInstead": "depurative"
-    },
-    {
-      "es": "presupuestar",
-      "en": "to budget",
-      "rank": 2,
-      "gotInstead": "budgetary"
-    },
-    {
-      "es": "desinfectar",
-      "en": "to disinfect",
-      "rank": 2,
-      "gotInstead": "disinfection"
+      "gotInstead": "to consider"
     }
   ]
 }

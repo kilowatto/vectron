@@ -100,6 +100,49 @@ async function handleHealth(env: Env, request: Request): Promise<Response> {
   );
 }
 
+/** Id de CONCEPTO a partir de un id de vector.
+ *
+ * Desde el relleno bilingüe cada concepto tiene dos vectores: el inglés
+ * bajo su id de siempre (`"647"`) y el español bajo `"647:es"`. Motivo,
+ * medido: consultar en español contra un índice sólo-inglés acertaba el
+ * 50.7 %, y consultar en el idioma embebido acierta el 100 %
+ * (`worker/diagnostics/crosslingual.json`).
+ *
+ * Devuelve null —no NaN— si el id no es parseable. Bug REAL que tumbó
+ * producción: el código anterior hacía `Number(m.id)` directo, y
+ * `Number("647:es")` da NaN, que `JSON.stringify` serializa como `null`.
+ * `/api/similar` empezó a devolver vecinos con `id: null` y el cliente
+ * no podía resolverlos. Un id que no se entiende tiene que DESAPARECER
+ * de los resultados, no viajar roto hasta la interfaz. */
+function conceptIdOf(vectorId: string): number | null {
+  const cut = vectorId.indexOf(":");
+  const n = Number(cut === -1 ? vectorId : vectorId.slice(0, cut));
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Colapsa los dos vectores de un concepto en UNA fila, con la mejor
+ * puntuación de las dos. Sin esto, una búsqueda podría devolver la misma
+ * palabra dos veces —por su forma española y por la inglesa— y gastar
+ * dos de los k huecos del usuario en lo mismo. */
+function dedupeByConcept(
+  matches: { id: string; score: number }[],
+  topK: number,
+  excludeConceptId?: number,
+): { id: number; score: number }[] {
+  const best = new Map<number, number>();
+  for (const m of matches) {
+    const cid = conceptIdOf(m.id);
+    if (cid === null) continue; // ilegible: fuera, nunca se emite roto
+    if (excludeConceptId !== undefined && cid === excludeConceptId) continue;
+    const prev = best.get(cid);
+    if (prev === undefined || m.score > prev) best.set(cid, m.score);
+  }
+  return [...best.entries()]
+    .map(([id, score]) => ({ id, score }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topK);
+}
+
 async function handleConcepts(env: Env, request: Request): Promise<Response> {
   const object = await env.DATASET.get("concepts.json");
   if (!object) {
@@ -148,15 +191,20 @@ async function handleSimilar(env: Env, request: Request): Promise<Response> {
     );
   }
 
+  // Se piden 2·topK+2: desde el relleno bilingüe cada concepto tiene DOS
+  // vectores (inglés bajo su id, español bajo `id:es`), así que hasta la
+  // mitad de las coincidencias pueden ser el mismo concepto y pedir
+  // topK+1 dejaría la lista corta tras colapsar.
   const result = await env.VECTORIZE.query(stored[0].values, {
-    topK: topK + 1, // incluye el propio nodo, se filtra abajo
+    topK: topK * 2 + 2,
     returnMetadata: "none",
   });
 
-  const neighbors = result.matches
-    .filter((m) => m.id !== id)
-    .slice(0, topK)
-    .map((m) => ({ id: Number(m.id), score: m.score }));
+  const neighbors = dedupeByConcept(
+    result.matches.map((m) => ({ id: String(m.id), score: m.score })),
+    topK,
+    Number(id), // fuera el propio concepto, venga por la forma que venga
+  );
 
   return Response.json(
     { ok: true, id: Number(id), neighbors },
@@ -289,6 +337,7 @@ async function handleCosine(env: Env, request: Request): Promise<Response> {
  * que no existe en el índice) — misma búsqueda de Vectorize que
  * /api/similar pero partiendo del vector crudo. */
 async function handleSimilarByVector(env: Env, request: Request): Promise<Response> {
+  const url = new URL(request.url);
   let body: { vector?: unknown; topK?: unknown };
   try {
     body = await request.json();
@@ -313,14 +362,17 @@ async function handleSimilarByVector(env: Env, request: Request): Promise<Respon
   const topK = Math.min(Math.max(Number(body.topK ?? 6), 1), 20);
 
   const result = await env.VECTORIZE.query(vector as number[], {
-    topK,
+    topK: topK * 2 + 2, // ver dedupeByConcept
     returnMetadata: "none",
   });
 
   return Response.json(
     {
       ok: true,
-      neighbors: result.matches.map((m) => ({ id: Number(m.id), score: m.score })),
+      neighbors: dedupeByConcept(
+        result.matches.map((m) => ({ id: String(m.id), score: m.score })),
+        topK,
+      ),
     },
     { headers: corsHeaders(request) },
   );
