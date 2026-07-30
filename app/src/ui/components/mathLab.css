@@ -194,3 +194,56 @@
   font-style: italic;
   line-height: 1.4;
 }
+
+/* --- Libro de cifras medidas (Fase B · DOCs/16 R-4/R-5) --------------
+   Va DESPUÉS del cálculo paso a paso, no antes: primero se ve cómo se
+   comprime, y sólo entonces cuánto costó. Al revés se leería como una
+   advertencia genérica en vez de como el precio de lo que se acaba de
+   ver hacer. */
+.diagnostics {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(233, 226, 214, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.diag-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.diag-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(233, 226, 214, 0.62);
+}
+
+/* tabular-nums para que las cifras no bailen al cambiar de token. */
+.diag-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.diag-unit {
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(233, 226, 214, 0.5);
+}
+
+.diag-help {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: rgba(233, 226, 214, 0.55);
+}

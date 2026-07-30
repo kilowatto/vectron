@@ -1,0 +1,16 @@
+{
+  "what": "Fidelidad de las coordenadas SERVIDAS (lo que se ve), no de la PCA teórica",
+  "sample": 1500,
+  "ofPool": 20473,
+  "trustworthiness": {
+    "k5": 0.6943201966041108,
+    "k10": 0.6940239362299315,
+    "k20": 0.6897701032097086
+  },
+  "continuity": {
+    "k5": 0.7890445933869527,
+    "k10": 0.7753071965869541,
+    "k20": 0.7571651355336282
+  },
+  "note": "Las coordenadas servidas pasan por reescalado por percentil por eje, recorte al borde y relajación de separación (declump) DESPUÉS de la PCA. Por eso estas cifras, no las de diagnostics.json, son las que describen lo que el usuario tiene delante."
+}

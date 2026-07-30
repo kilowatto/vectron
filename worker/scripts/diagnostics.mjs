@@ -14,6 +14,13 @@ import { createInterface } from "node:readline";
 
 const OUT = "worker/scripts/out";        // insumos (ignorados por git: 187 MB)
 const RESULTS = "worker/diagnostics";   // resultados (versionados — el plan pide cifras rastreables)
+// Se escribe TAMBIÉN dentro de la app. Si las cifras vivieran sólo en
+// worker/ habría que copiarlas a mano cada vez que se recalculan, y una
+// copia a mano se desincroniza — justo el fallo que este repo ya tuvo
+// con las 17 constantes de look que nadie cableó. Escribir en los dos
+// sitios de una vez hace imposible que la interfaz muestre una cifra
+// vieja.
+const APP_RESULTS = "app/src/data/diagnostics";
 const D = 1024;
 
 // ---------- carga ----------
@@ -277,6 +284,7 @@ const out = {
   },
 };
 writeFileSync(`${RESULTS}/diagnostics.json`, JSON.stringify(out, null, 2));
+writeFileSync(`${APP_RESULTS}/diagnostics.json`, JSON.stringify(out, null, 2));
 
 // ---------- informe legible ----------
 const pct = (x) => (x * 100).toFixed(2) + "%";

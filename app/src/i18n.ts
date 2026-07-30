@@ -322,6 +322,58 @@ const STRINGS = {
     es: "Si los dos renglones no coinciden, es un bug — deberían ser el mismo número siempre (misma base, mismo vector).",
     en: "If the two rows don't match, that's a bug — they should always be the same number (same basis, same vector).",
   },
+  // --- Fase B · diagnósticos de proyección (DOCs/16 R-4/R-5, DOCs/27) ---
+  // La auditoría técnica marcó como P0 que el producto AFIRMA honestidad
+  // ("proyección con pérdida") sin publicar una sola cifra. Estas cadenas
+  // son las que convierten la etiqueta en número.
+  diagResidualLabel: {
+    es: "error de reconstrucción",
+    en: "reconstruction error",
+  },
+  diagResidualHelp: {
+    es: "Lo que se PIERDE al comprimir: distancia entre el vector original de 1024 dimensiones y el que se puede reconstruir desde estas 3 coordenadas. Si fuera 0, la proyección no perdería nada.",
+    en: "What is LOST in compression: distance between the original 1024-dimensional vector and the one reconstructible from these 3 coordinates. If it were 0, the projection would lose nothing.",
+  },
+  diagVarianceLabel: {
+    es: "varianza retenida (CP1-3)",
+    en: "retained variance (PC1-3)",
+  },
+  diagVarianceHelp: {
+    es: "Estos 3 ejes conservan {pct} de la variación del espacio original. No hay tres direcciones dominantes: hacen falta cientos de componentes para el resto.",
+    en: "These 3 axes retain {pct} of the original space's variation. There are no three dominant directions: hundreds of components are needed for the rest.",
+  },
+  diagTrustLabel: {
+    es: "vecinos inventados",
+    en: "invented neighbours",
+  },
+  diagTrustHelp: {
+    es: "Alrededor del {pct} de lo que se ve cerca en pantalla NO está cerca en las 1024 dimensiones reales. Medido (trustworthiness {trust} a k=10) sobre los {n} conceptos del cubo.",
+    en: "Around {pct} of what looks close on screen is NOT close in the real 1024 dimensions. Measured (trustworthiness {trust} at k=10) over the cube's {n} concepts.",
+  },
+  diagCosineScaleLabel: {
+    es: "el 0 no existe aquí",
+    en: "zero doesn't exist here",
+  },
+  diagCosineScaleHelp: {
+    es: "Dos conceptos SIN relación dan {mean} de coseno, no 0. Así que {example} no es \"muy parecido\": está apenas por encima del azar. El ORDEN de los vecinos sí es informativo; ningún umbral fijo lo es.",
+    en: "Two UNRELATED concepts give a cosine of {mean}, not 0. So {example} isn't \"very similar\": it's barely above chance. The ORDER of neighbours is informative; no fixed threshold is.",
+  },
+  diagMeasuredOn: {
+    es: "medido sobre {n} conceptos reales · {date}",
+    en: "measured over {n} real concepts · {date}",
+  },
+  diagHubnessLabel: {
+    es: "concentración de vecinos",
+    en: "neighbour concentration",
+  },
+  diagHubnessHelp: {
+    es: "En muchas dimensiones unos pocos conceptos aparecen en desproporcionadamente muchas listas de vecinos — se llama hubness. Aquí el más extremo sale en {top} listas frente a una media de {mean} (asimetría {skew}). No es un bug del cubo: es geometría de alta dimensión.",
+    en: "In many dimensions a few concepts appear in disproportionately many neighbour lists — this is called hubness. Here the most extreme one appears in {top} lists against a mean of {mean} (skewness {skew}). It isn't a cube bug: it's high-dimensional geometry.",
+  },
+  diagNeighborsCaveat: {
+    es: "orden real en ℝ¹⁰²⁴ — la cercanía en pantalla es otra cosa",
+    en: "real ordering in ℝ¹⁰²⁴ — on-screen closeness is a different thing",
+  },
   pipelineDockText: { es: "1 · Texto", en: "1 · Text" },
   pipelineDockTokens: { es: "2 · Tokens + IDs", en: "2 · Tokens + IDs" },
   // DOCs/10-intermedio-licenciatura.md: currículo de licenciatura, no

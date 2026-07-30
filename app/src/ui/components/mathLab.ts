@@ -1,5 +1,8 @@
 import { getStoredLang, t, type Lang } from "../../i18n";
 import { cosineLocal, fetchPcaBasis, type PcaBasis } from "../../data/concepts";
+import spectrum from "../../data/diagnostics/spectrum.json";
+import fidelity from "../../data/diagnostics/onscreen-fidelity.json";
+import diagnostics from "../../data/diagnostics/diagnostics.json";
 import { attachShadow } from "./shadow";
 import css from "./mathLab.css?inline";
 
@@ -184,6 +187,35 @@ export class VxMathLab extends HTMLElement {
     );
     const axisLabel = ["x", "y", "z"];
 
+    // B2 · NORMA DEL ERROR RESIDUAL. `DOCs/03` §4.2 ya la especificaba y
+    // esta pestaña la había descartado; la auditoría técnica la pide de
+    // vuelta (`DOCs/16` R-4). Es la cifra que convierte "proyección con
+    // pérdida" de etiqueta en número: se reconstruye el vector desde SUS
+    // 3 coordenadas y se mide lo que no sobrevivió.
+    //
+    // Se usan los dots CRUDOS (no los escalados al cubo) porque la
+    // reconstrucción vive en el espacio de la PCA, no en el del cubo:
+    // reconstruir con los escalados mediría el reescalado además del
+    // error, y serían dos cosas mezcladas en un número.
+    let residualSq = 0;
+    let originalSq = 0;
+    for (let i = 0; i < tok.vector.length; i++) {
+      const centered = tok.vector[i] - basis.mean[i];
+      let recon = 0;
+      for (let c = 0; c < basis.components.length; c++) recon += rawDots[c] * basis.components[c][i];
+      const err = centered - recon;
+      residualSq += err * err;
+      originalSq += centered * centered;
+    }
+    const residual = Math.sqrt(residualSq);
+    const residualPct = originalSq > 0 ? (residual / Math.sqrt(originalSq)) * 100 : 0;
+
+    const fmtPct = (x: number) => `${(x * 100).toFixed(1)}%`;
+    const varPct = fmtPct(spectrum.cumulative[2]);
+    const trust = fidelity.trustworthiness.k10;
+    const inventedPct = fmtPct(1 - trust);
+    const cosMean = diagnostics.cosineScale.mean.toFixed(2);
+
     this.#panelEl.innerHTML = `
       <p class="intro">${t("mathLabPcaIntro", lang)}</p>
       <div class="pickers">
@@ -202,6 +234,50 @@ export class VxMathLab extends HTMLElement {
         <div class="vec-row"><span class="vec-label">${t("mathLabPcaReal", lang)}</span><span class="vec-preview">[${tok.coords.map((v) => v.toFixed(3)).join(", ")}]</span></div>
       </div>
       <p class="footnote">${t("mathLabPcaFootnote", lang)}</p>
+
+      <!-- Libro de cifras medidas. No son constantes escritas a mano:
+           salen de worker/scripts/*.mjs sobre los embeddings reales y se
+           escriben a la vez en worker/diagnostics/ y aquí, para que la
+           interfaz no pueda mostrar un número viejo. -->
+      <div class="diagnostics">
+        <div class="diag-row">
+          <span class="diag-label">${t("diagResidualLabel", lang)}</span>
+          <span class="diag-value">${residual.toFixed(4)} <span class="diag-unit">(${residualPct.toFixed(1)}%)</span></span>
+        </div>
+        <p class="diag-help">${t("diagResidualHelp", lang)}</p>
+
+        <div class="diag-row">
+          <span class="diag-label">${t("diagVarianceLabel", lang)}</span>
+          <span class="diag-value">${varPct}</span>
+        </div>
+        <p class="diag-help">${t("diagVarianceHelp", lang).replace("{pct}", varPct)}</p>
+
+        <div class="diag-row">
+          <span class="diag-label">${t("diagTrustLabel", lang)}</span>
+          <span class="diag-value">~${inventedPct}</span>
+        </div>
+        <p class="diag-help">${t("diagTrustHelp", lang)
+          .replace("{pct}", inventedPct)
+          .replace("{trust}", trust.toFixed(3))
+          .replace("{n}", diagnostics.dataset.vectors.toLocaleString(lang === "en" ? "en-US" : "es-MX"))}</p>
+
+        <div class="diag-row">
+          <span class="diag-label">${t("diagHubnessLabel", lang)}</span>
+          <span class="diag-value">${diagnostics.hubness.skewness.toFixed(2)}</span>
+        </div>
+        <p class="diag-help">${t("diagHubnessHelp", lang)
+          .replace("{top}", String(diagnostics.hubness.topHubs[0].count))
+          .replace("{mean}", diagnostics.hubness.kOccurrenceMean.toFixed(0))
+          .replace("{skew}", diagnostics.hubness.skewness.toFixed(2))}</p>
+
+        <div class="diag-row">
+          <span class="diag-label">${t("diagCosineScaleLabel", lang)}</span>
+          <span class="diag-value">${cosMean}</span>
+        </div>
+        <p class="diag-help">${t("diagCosineScaleHelp", lang)
+          .replace("{mean}", cosMean)
+          .replace("{example}", "0.6")}</p>
+      </div>
     `;
     this.#panelEl.querySelector(".sel-pca")!.addEventListener("change", (e) => {
       this.#selPca = Number((e.target as HTMLSelectElement).value);

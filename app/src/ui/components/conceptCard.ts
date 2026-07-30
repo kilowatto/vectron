@@ -4,6 +4,7 @@ import { fadeIn, fadeOut } from "../motion";
 import { attachShadow } from "./shadow";
 import { getStoredLang, t, type Lang, type StringKey } from "../../i18n";
 import css from "./conceptCard.css?inline";
+import diagnostics from "../../data/diagnostics/diagnostics.json";
 
 /** Exportado para <vx-color-key> (P4) — mismo mapeo dominio->etiqueta,
  * una sola fuente de verdad en vez de duplicarlo. */
@@ -237,9 +238,20 @@ export class VxConceptCard extends HTMLElement {
           <p class="neighbor-plain">${words || t("cardNeighborsSearching", lang)}</p>
         </div>`;
     }
+    // SUELO DE AZAR. Dos conceptos SIN relación no dan coseno 0: dan
+    // ~0.41, medido sobre 10 000 pares aleatorios del corpus real
+    // (worker/diagnostics/diagnostics.json, `DOCs/16` R-5a). Con la
+    // barra llenándose desde 0, un 0.6 pintaba el 60% del ancho y se
+    // leía como "muy parecido" cuando está apenas por encima del azar.
+    // Reescalada desde el suelo, la barra mide lo que de verdad
+    // significa: cuánto SUPERA a un par cualquiera. El número crudo se
+    // sigue mostrando al lado, sin tocar — la barra interpreta, la cifra
+    // informa.
+    const chance = diagnostics.cosineScale.mean;
     const rows = neighbors
       .map((n) => {
-        const pct = Math.round(Math.max(n.score, 0) * 100);
+        const above = (n.score - chance) / (1 - chance);
+        const pct = Math.round(Math.min(Math.max(above, 0), 1) * 100);
         return `<div class="neighbor">
           <span class="nword">${wordPair(n.concept, lang).primary}</span>
           <div class="nbar"><div class="nbar-fill" style="width:${pct}%"></div></div>
@@ -255,6 +267,9 @@ export class VxConceptCard extends HTMLElement {
         </div>
         <input type="range" min="1" max="20" step="1" value="${topK}" />
         ${rows || `<div class="neighbor-empty">${t("cardNeighborsCalculating", lang)}</div>`}
+        <p class="scale-caveat">${t("diagCosineScaleHelp", lang)
+          .replace("{mean}", chance.toFixed(2))
+          .replace("{example}", "0.6")}</p>
         <div class="metaphor">${t("cardMetaphorLabel", lang)}</div>
       </div>`;
   }

@@ -253,3 +253,17 @@
   line-height: 1.6;
   color: var(--ink);
 }
+
+/* Advertencia de escala del coseno (DOCs/16 R-5a). Va junto a los
+   números, no en un tooltip ni en una ayuda aparte: la auditoría pide
+   declararlo "junto a los cosenos del hover", y una advertencia que hay
+   que ir a buscar no corrige la lectura de nadie. */
+.scale-caveat {
+  margin: 8px 0 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  color: rgba(233, 226, 214, 0.5);
+  border-top: 1px solid rgba(233, 226, 214, 0.1);
+  padding-top: 7px;
+}
