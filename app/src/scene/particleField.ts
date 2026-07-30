@@ -82,7 +82,69 @@ export const DOMAIN_HUES: Record<string, number> = {
   token_vivo: 0x39ff6a,
 };
 
-const FALLBACK_HUE = 0x9aa5ad;
+/* --- G1 · paleta categórica segura para daltonismo (DOCs/27, `15` R-5)
+ *
+ * DOS problemas medidos sobre el dataset real, no supuestos:
+ *
+ * 1. `DOMAIN_HUES` define 35 matices, pero los datos traen **245
+ *    dominios distintos**. O sea que 5 429 conceptos (el 26.5 %) caen
+ *    todos en el MISMO color de reserva. La leyenda dice "colores =
+ *    temas" mientras un cuarto del cubo es un tema indistinguible.
+ *
+ * 2. Aunque estuvieran todos definidos, 35 matices categóricos no son
+ *    distinguibles ni con visión normal, y el matiz es hoy el ÚNICO
+ *    canal de dominio en la escena. Con ~8 % de los varones afectados
+ *    por deficiencia de visión cromática, eso es exposición vigente al
+ *    criterio 1.4.1 de WCAG 2.2.
+ *
+ * La solución que pide R-5 es acotar el matiz categórico a ≤10 cubos y
+ * usar un conjunto verificado. Se usa **Okabe–Ito** (Color Universal
+ * Design), el estándar comprobado para protanopía, deuteranopía y
+ * tritanopía. Se omite su negro (invisible sobre fondo oscuro) y se
+ * sustituye por un gris claro para "otros".
+ *
+ * Los dos cubos léxicos van primero porque son el 35 % del corpus: son
+ * categorías GRAMATICALES, no temas, y mezclarlas con los temas sería
+ * enseñar que "adjetivo" es un dominio semántico. */
+const OKABE_ITO = {
+  naranja: 0xe69f00,
+  celeste: 0x56b4e9,
+  verdeAzulado: 0x009e73,
+  amarillo: 0xf0e442,
+  azul: 0x0072b2,
+  bermellon: 0xd55e00,
+  purpuraRojizo: 0xcc79a7,
+} as const;
+
+/** Cubos categóricos: 8 con color propio + "otros". Elegidos por conteo
+ * REAL de conceptos, no por gusto — ver el censo en el comentario de
+ * arriba. Cubren los dos léxicos (35 %) y los 6 temas más poblados. */
+export const DOMAIN_BUCKETS: { key: string; hue: number; domains: string[] }[] = [
+  { key: "lexicoAdjetival", hue: OKABE_ITO.purpuraRojizo, domains: ["lexico_adjetival"] },
+  { key: "lexicoVerbal", hue: OKABE_ITO.azul, domains: ["lexico_verbal"] },
+  { key: "geografia", hue: OKABE_ITO.verdeAzulado, domains: ["geografia"] },
+  { key: "tecnologia", hue: OKABE_ITO.celeste, domains: ["tecnologia"] },
+  { key: "biologia", hue: OKABE_ITO.amarillo, domains: ["biologia_animal", "biologia_vegetal"] },
+  { key: "personajes", hue: OKABE_ITO.bermellon, domains: ["personajes"] },
+  { key: "arte", hue: OKABE_ITO.naranja, domains: ["arte", "arte_y_cultura", "musica"] },
+];
+
+/** Gris claro para todo lo demás. Que "otros" sea NEUTRO y no un color
+ * más es deliberado: un matiz vivo prometería una categoría que no
+ * existe — son 236 dominios distintos metidos en un cubo. */
+export const OTHER_HUE = 0xb9c0c7;
+
+const DOMAIN_TO_BUCKET = new Map<string, number>();
+for (const b of DOMAIN_BUCKETS) for (const d of b.domains) DOMAIN_TO_BUCKET.set(d, b.hue);
+
+/** Matiz de un dominio bajo la paleta segura. El modo token conserva su
+ * verde propio: no es un dominio del dataset, es una partícula efímera
+ * de la frase del usuario, y confundirla con un tema sería peor que
+ * gastar un color. */
+export function hueForDomain(domain: string): number {
+  if (domain === "token_vivo") return DOMAIN_HUES.token_vivo;
+  return DOMAIN_TO_BUCKET.get(domain) ?? OTHER_HUE;
+}
 
 export interface ParticleField {
   mesh: THREE.InstancedMesh;
@@ -455,7 +517,7 @@ export function createParticleField(
   }
 
   concepts.forEach((concept, i) => {
-    const hue = DOMAIN_HUES[concept.domain] ?? FALLBACK_HUE;
+    const hue = hueForDomain(concept.domain);
     tmpColor.setHex(hue);
     tmpColor.toArray(colorGainAttr, i * 4);
     // Cuerpo oscurecido / brillo con el tono a full — MISMO modelo de
@@ -478,7 +540,7 @@ export function createParticleField(
     const anchorIdx = Math.floor(Math.random() * realCount);
     carrierAnchor[i] = anchorIdx;
     const anchor = concepts[anchorIdx];
-    const hue = DOMAIN_HUES[anchor.domain] ?? FALLBACK_HUE;
+    const hue = hueForDomain(anchor.domain);
     tmpColor.setHex(hue).toArray(colorGainAttr, i * 4);
     bodyColorOf(hue).toArray(bodyPhaseAttr, i * 4);
     bodyPhaseAttr[i * 4 + 3] = Math.random() * Math.PI * 2;

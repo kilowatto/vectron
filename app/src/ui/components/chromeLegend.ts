@@ -1,6 +1,6 @@
 import { attachShadow } from "./shadow";
 import { getStoredLang, t, type Lang } from "../../i18n";
-import { DOMAIN_HUES } from "../../scene/particleField";
+import { hueForDomain } from "../../scene/particleField";
 import { DOMAIN_LABEL_KEYS } from "./conceptCard";
 import type { Mode } from "./modeStorage";
 import css from "./chromeLegend.css?inline";
@@ -124,9 +124,15 @@ export class VxChromeLegend extends HTMLElement {
     this.#render();
   }
 
+  // La leyenda TIENE que usar la misma función que la escena. Antes leía
+  // DOMAIN_HUES directamente y caía a un gris propio cuando el dominio
+  // no estaba definido — o sea, pintaba un color que la partícula no
+  // tenía. Con hueForDomain (paleta Okabe-Ito acotada, ver
+  // particleField.ts) el punto de la leyenda y la partícula son
+  // siempre el mismo color, incluido "otros".
   #swatch(domain: string, size: number): string {
-    const hue = DOMAIN_HUES[domain];
-    const hex = typeof hue === "number" ? `#${hue.toString(16).padStart(6, "0")}` : "#9aa5ad";
+    const hue = hueForDomain(domain);
+    const hex = `#${hue.toString(16).padStart(6, "0")}`;
     return `<span class="dot" style="width:${size}px;height:${size}px;background:${hex}"></span>`;
   }
 

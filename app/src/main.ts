@@ -74,7 +74,14 @@ import {
 const MODE_POS: Record<Mode, Set<PartOfSpeech>> = {
   principiante: new Set(["sustantivo", "funcion"]),
   intermedio: new Set(["sustantivo", "funcion", "adjetivo"]),
-  avanzado: new Set(["sustantivo", "funcion", "adjetivo", "verbo"]),
+  // `adverbio` añadido 2026-07-30. Censo del dataset: 20 473 conceptos,
+  // de los que 74 son adverbios que NO estaban en ningún modo — es
+  // decir, existían embebidos, proyectados e indexados en Vectorize, y
+  // contaban para la meta del cron, pero el usuario no podía verlos
+  // nunca. No era una reserva para un nivel superior: era invisibilidad
+  // total. Es el caso extremo de lo que advierte `15` §3.7(c) sobre
+  // reservar categorías gramaticales por nivel.
+  avanzado: new Set(["sustantivo", "funcion", "adjetivo", "verbo", "adverbio"]),
 };
 
 /** Población celular visible por nivel (F2 §5.2 — decisión de
