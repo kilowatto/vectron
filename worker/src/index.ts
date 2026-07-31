@@ -281,6 +281,63 @@ async function handleEmbed(env: Env, request: Request): Promise<Response> {
 /** Similitud de coseno real entre pares de conceptos del dataset — para
  * el hover de las líneas de frase (las naranjas ya traen su score de
  * /api/similar). Lee los vectores de Vectorize y calcula aquí. */
+/** GET /api/crosslingual?id=647 — coseno entre las DOS formas del mismo
+ * concepto: su vector español (`647:es`) y su vector inglés (`647`).
+ *
+ * Es "el premio" de `DOCs/16` R-1. La recomendación decía que embeber
+ * ambas formas no sólo arregla el bilingüismo sino que **convierte la
+ * corrección en la mejor demo translingüe del producto**: con los dos
+ * vectores en el índice, la alineación entre idiomas deja de ser una
+ * afirmación y pasa a ser un número que el usuario puede pedir palabra
+ * por palabra.
+ *
+ * El contexto que le da sentido está medido: consultar en español
+ * contra el índice sólo-inglés acertaba el 50.7 %; con las dos formas
+ * embebidas, el 99.3 % (`worker/diagnostics/crosslingual.json`). Este
+ * endpoint enseña POR QUÉ — dos cadenas de texto distintas, en idiomas
+ * distintos, que el modelo coloca casi en el mismo punto. */
+async function handleCrosslingual(env: Env, request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const raw = url.searchParams.get("id");
+  if (!raw || !/^[0-9]+$/.test(raw)) {
+    return Response.json(
+      { ok: false, error: "falta ?id=<entero>" },
+      { status: 400, headers: corsHeaders(request) },
+    );
+  }
+  const stored = await env.VECTORIZE.getByIds([raw, `${raw}:es`]);
+  const byId = new Map(stored.map((v) => [v.id, v.values]));
+  const en = byId.get(raw);
+  const es = byId.get(`${raw}:es`);
+  if (!en || !es) {
+    return Response.json(
+      {
+        ok: false,
+        // Se distingue el caso: si falta el español es que el relleno
+        // bilingüe no cubrió ese id, y eso es información útil, no un
+        // error genérico.
+        error: !es ? "sin vector español para ese concepto" : "concepto no encontrado",
+        hasEn: !!en,
+        hasEs: !!es,
+      },
+      { status: 404, headers: corsHeaders(request) },
+    );
+  }
+  let dot = 0;
+  let na = 0;
+  let nb = 0;
+  for (let i = 0; i < en.length; i++) {
+    dot += en[i] * es[i];
+    na += en[i] * en[i];
+    nb += es[i] * es[i];
+  }
+  const cosine = dot / (Math.sqrt(na) * Math.sqrt(nb) || 1);
+  return Response.json(
+    { ok: true, id: Number(raw), cosine, dims: en.length },
+    { headers: corsHeaders(request) },
+  );
+}
+
 async function handleCosine(env: Env, request: Request): Promise<Response> {
   let body: { pairs?: unknown };
   try {
@@ -337,7 +394,6 @@ async function handleCosine(env: Env, request: Request): Promise<Response> {
  * que no existe en el índice) — misma búsqueda de Vectorize que
  * /api/similar pero partiendo del vector crudo. */
 async function handleSimilarByVector(env: Env, request: Request): Promise<Response> {
-  const url = new URL(request.url);
   let body: { vector?: unknown; topK?: unknown };
   try {
     body = await request.json();
@@ -610,6 +666,10 @@ export default {
 
     if (url.pathname === "/api/cosine" && request.method === "POST") {
       return handleCosine(env, request);
+    }
+
+    if (url.pathname === "/api/crosslingual") {
+      return handleCrosslingual(env, request);
     }
 
     if (url.pathname === "/api/similar-by-vector" && request.method === "POST") {

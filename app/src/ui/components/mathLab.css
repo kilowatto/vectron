@@ -247,3 +247,59 @@
   line-height: 1.5;
   color: rgba(233, 226, 214, 0.55);
 }
+
+/* --- Pestaña Bilingüe · EL PREMIO de 16 R-1 -------------------------
+   Las barras arrancan en el suelo de azar (0.412), igual que en el resto
+   del producto. Aquí importa el doble: un 0.75 desde cero pintaría tres
+   cuartos del ancho y parecería "bastante parecido"; desde el suelo
+   muestra lo que de verdad es — alineación translingüe muy por encima
+   del ruido. */
+.bl-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.bl-row {
+  display: grid;
+  grid-template-columns: 12.5em 1fr 3em;
+  align-items: center;
+  gap: 10px;
+}
+
+.bl-words {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* La flecha en acento: es el punto entero — dos cadenas distintas que
+   el modelo considera lo mismo. */
+.bl-arrow {
+  color: var(--accent);
+  padding: 0 2px;
+}
+
+.bl-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(233, 226, 214, 0.1);
+  overflow: hidden;
+}
+
+.bl-fill {
+  height: 100%;
+  background: var(--accent);
+}
+
+.bl-score {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--dim);
+  text-align: right;
+}

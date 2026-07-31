@@ -355,6 +355,22 @@ const STRINGS = {
     es: "A y B se muestran truncados a 6 de 1024 dimensiones para que quepan en pantalla — el cálculo usa el vector completo.",
     en: "A and B are shown truncated to 6 of 1024 dimensions to fit on screen — the calculation uses the full vector.",
   },
+  // EL PREMIO de 16 R-1 · pestaña bilingüe del Math Lab.
+  mathLabTabBilingual: { es: "Bilingüe", en: "Bilingual" },
+  mathLabBilingualIntro: {
+    es: "Cada concepto vive DOS veces en el índice: una vez embebido desde su palabra en español y otra desde la inglesa. Estas parejas no comparten casi ninguna letra — y aun así el modelo las coloca casi en el mismo punto de ℝ¹⁰²⁴. Esto es alineación translingüe, medida ahora mismo contra el índice real.",
+    en: "Every concept lives TWICE in the index: once embedded from its Spanish word, once from its English one. These pairs share almost no letters — and the model still places them at nearly the same point in ℝ¹⁰²⁴. That's cross-lingual alignment, measured right now against the live index.",
+  },
+  mathLabBilingualChance: {
+    es: "Las barras arrancan en {chance}, que es lo que dan dos palabras SIN relación. Todo lo que ves por encima es alineación de verdad, no ruido.",
+    en: "Bars start at {chance}, which is what two UNRELATED words score. Everything above that is real alignment, not noise.",
+  },
+  mathLabBilingualBefore: { es: "antes · buscar en español", en: "before · searching in Spanish" },
+  mathLabBilingualAfter: { es: "ahora · buscar en español", en: "now · searching in Spanish" },
+  mathLabBilingualHow: {
+    es: "Medido con el protocolo LAReQA sobre {n} consultas: se embebe la palabra ESPAÑOLA y se comprueba si el concepto correcto sale primero. Antes el índice sólo tenía la forma inglesa y fallaba la mitad de las veces; se embebieron las dos y el hueco se cerró.",
+    en: "Measured with the LAReQA protocol over {n} queries: the SPANISH word is embedded and we check whether the right concept comes first. The index used to hold only the English form and failed half the time; both forms were embedded and the gap closed.",
+  },
   mathLabTabPca: { es: "PCA", en: "PCA" },
   mathLabPcaLoading: { es: "cargando la base PCA real…", en: "loading the real PCA basis…" },
   mathLabPcaIntro: {

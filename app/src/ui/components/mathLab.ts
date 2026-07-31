@@ -3,10 +3,16 @@ import { cosineLocal, fetchPcaBasis, type PcaBasis } from "../../data/concepts";
 import spectrum from "../../data/diagnostics/spectrum.json";
 import fidelity from "../../data/diagnostics/onscreen-fidelity.json";
 import diagnostics from "../../data/diagnostics/diagnostics.json";
+import crosslingual from "../../data/diagnostics/crosslingual.json";
 import { attachShadow } from "./shadow";
 import css from "./mathLab.css?inline";
 
-const TABS = ["Attention", "Softmax", "Cosine", "PCA", "Sampling"] as const;
+// "Bilingual" es EL PREMIO de `16` R-1: embeber ambas formas no sólo
+// arregló el bilingüismo (50.7 % -> 99.3 % de acierto), sino que dejó en
+// el índice dos vectores por concepto cuya distancia se puede pedir. La
+// alineación translingüe deja de ser una afirmación y pasa a ser un
+// número que el usuario comprueba palabra por palabra.
+const TABS = ["Attention", "Softmax", "Cosine", "PCA", "Bilingual", "Sampling"] as const;
 type Tab = (typeof TABS)[number];
 
 export interface MathLabToken {
@@ -39,6 +45,8 @@ export class VxMathLab extends HTMLElement {
   #selA = 0;
   #selB = 1;
   #selPca = 0;
+  /** Evita que una respuesta lenta pinte sobre otra pestaña ya abierta. */
+  #bilingualSeq = 0;
   #pcaBasis: PcaBasis | null = null;
   #tabsEl!: HTMLDivElement;
   #panelEl!: HTMLDivElement;
@@ -76,7 +84,13 @@ export class VxMathLab extends HTMLElement {
     this.#tabsEl.innerHTML = TABS.map(
       (tab) =>
         `<button type="button" class="tab${tab === this.#activeTab ? " active" : ""}" data-tab="${tab}">${
-          tab === "Cosine" ? t("mathLabTabCosine", lang) : tab === "PCA" ? t("mathLabTabPca", lang) : tab
+          tab === "Cosine"
+            ? t("mathLabTabCosine", lang)
+            : tab === "PCA"
+              ? t("mathLabTabPca", lang)
+              : tab === "Bilingual"
+                ? t("mathLabTabBilingual", lang)
+                : tab
         }</button>`,
     ).join("");
     this.#tabsEl.querySelectorAll<HTMLButtonElement>(".tab").forEach((btn) => {
@@ -93,6 +107,8 @@ export class VxMathLab extends HTMLElement {
       this.#renderCosinePanel();
     } else if (this.#activeTab === "PCA") {
       this.#renderPcaPanel();
+    } else if (this.#activeTab === "Bilingual") {
+      void this.#renderBilingualPanel();
     } else {
       this.#renderPlaceholder();
     }
@@ -283,6 +299,80 @@ export class VxMathLab extends HTMLElement {
       this.#selPca = Number((e.target as HTMLSelectElement).value);
       this.#renderPcaPanel();
     });
+  }
+
+  /** EL PREMIO (`16` R-1). Pide al servidor el coseno entre los DOS
+   * vectores del mismo concepto —su forma española y su forma inglesa—
+   * que ahora conviven en el índice tras el relleno bilingüe.
+   *
+   * Es la demo que la auditoría prometía: dos cadenas de texto que no
+   * comparten ni una letra, en idiomas distintos, y el modelo las coloca
+   * casi en el mismo punto de un espacio de 1024 dimensiones. Con el
+   * suelo de azar medido en 0.412, un 0.96 se lee solo. */
+  async #renderBilingualPanel(): Promise<void> {
+    const lang: Lang = getStoredLang();
+    const chance = diagnostics.cosineScale.mean;
+    const seq = ++this.#bilingualSeq;
+
+    // Semillas del propio corpus, elegidas porque sus formas NO comparten
+    // letras: si compartieran raíz, un coseno alto podría explicarse por
+    // el parecido de cadena y la demo no probaría nada translingüe.
+    const SEEDS = [
+      { id: 1956, es: "electricista", en: "electrician" },
+      { id: 647, es: "batería", en: "battery" },
+      { id: 152, es: "ingeniero", en: "engineer" },
+      { id: 104, es: "madera", en: "wood" },
+    ];
+
+    const rows = await Promise.all(
+      SEEDS.map(async (sd) => {
+        try {
+          const r = await fetch(`/api/crosslingual?id=${sd.id}`);
+          const j = await r.json();
+          return { ...sd, cosine: j.ok ? (j.cosine as number) : null };
+        } catch {
+          return { ...sd, cosine: null };
+        }
+      }),
+    );
+    if (seq !== this.#bilingualSeq) return; // otra pestaña ya se pintó
+
+    const bar = (c: number) => {
+      const above = Math.max(0, Math.min(1, (c - chance) / (1 - chance)));
+      return `<div class="bl-bar"><div class="bl-fill" style="width:${Math.round(above * 100)}%"></div></div>`;
+    };
+
+    this.#panelEl.innerHTML = `
+      <p class="intro">${t("mathLabBilingualIntro", lang)}</p>
+      <div class="bl-rows">
+        ${rows
+          .map((r) =>
+            r.cosine === null
+              ? ""
+              : `<div class="bl-row">
+                   <span class="bl-words">${r.es} <span class="bl-arrow">↔</span> ${r.en}</span>
+                   ${bar(r.cosine)}
+                   <span class="bl-score">${r.cosine.toFixed(3)}</span>
+                 </div>`,
+          )
+          .join("")}
+      </div>
+      <p class="footnote">${t("mathLabBilingualChance", lang).replace("{chance}", chance.toFixed(2))}</p>
+      <div class="diagnostics">
+        <div class="diag-row">
+          <span class="diag-label">${t("mathLabBilingualBefore", lang)}</span>
+          <span class="diag-value">50.7%</span>
+        </div>
+        <div class="diag-row">
+          <span class="diag-label">${t("mathLabBilingualAfter", lang)}</span>
+          <span class="diag-value">${(crosslingual.accuracyAt1 * 100).toFixed(1)}%</span>
+        </div>
+        <p class="diag-help">${t("mathLabBilingualHow", lang).replace(
+          "{n}",
+          String(crosslingual.queries),
+        )}</p>
+      </div>
+    `;
   }
 }
 
